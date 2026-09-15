@@ -14,7 +14,7 @@ y no modifica las configuraciones personales del usuario:
 | Claude Code | `.mcp.json` en la raíz del workspace | verificado; `30-tools/harnesses/claude-code.md` |
 | OpenCode | configuración MCP del proyecto | exportador verificado; revisar la ruta antes de activar |
 | Codex | servidor MCP local configurado en el cliente | exportador verificado; revisar la ruta antes de activar |
-| Antigravity/Cursor | configuración MCP local | probar después |
+| Antigravity/Cursor | configuración MCP local | usar el adaptador `generic` si aceptan `mcpServers` estándar; revisar la ruta antes de activar |
 
 El ejecutable y los argumentos deben ser los mismos. Solo cambia el envoltorio de configuración.
 
@@ -24,6 +24,7 @@ Ejemplos desde la raíz del workspace:
 .\30-tools\scripts\Export-HarnessAdapter.ps1 -Harness claude-code -Profile read -OutputPath .\70-runs\harness\claude-read.json
 .\30-tools\scripts\Export-HarnessAdapter.ps1 -Harness codex -Profile read -OutputPath .\70-runs\harness\codex-read.toml
 .\30-tools\scripts\Export-HarnessAdapter.ps1 -Harness opencode -Profile read -OutputPath .\70-runs\harness\opencode-read.json
+.\30-tools\scripts\Export-HarnessAdapter.ps1 -Harness generic -Profile read -OutputPath .\70-runs\harness\generic-read.json
 ```
 
 Para perfiles `write`, `create` o `full` hay que añadir `-AcknowledgeWriteProfile`. El resultado

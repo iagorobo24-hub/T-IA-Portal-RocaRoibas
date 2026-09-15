@@ -31,11 +31,17 @@ try {
     if ($openCode.mcp.'tia-create'.type -ne 'local') { throw 'OpenCode adapter must use local MCP.' }
     if (@($openCode.mcp.'tia-create'.command) -notcontains '--profile') { throw 'OpenCode command must pin lite profile.' }
 
+    $genericPath = Join-Path $tempRoot 'generic.json'
+    & $scriptPath -WorkspaceRoot $WorkspaceRoot -Harness generic -Profile read -OutputPath $genericPath
+    $generic = Get-Content -Raw -LiteralPath $genericPath | ConvertFrom-Json
+    if ($null -eq $generic.mcpServers.'tia-inspect') { throw 'Generic MCP adapter lacks tia-inspect.' }
+    if (@($generic.mcpServers.'tia-inspect'.args) -contains '--allow-write') { throw 'Generic read adapter is writable.' }
+
     $writePath = Join-Path $tempRoot 'write.json'
     & pwsh -NoProfile -NonInteractive -File $scriptPath -WorkspaceRoot $WorkspaceRoot -Harness claude-code -Profile write -OutputPath $writePath 2>$null
     if ($LASTEXITCODE -eq 0) { throw 'Write adapter was generated without acknowledgement.' }
 
-    Write-Output 'PASS: Claude Code, Codex and OpenCode adapter formats are deterministic'
+    Write-Output 'PASS: Claude Code, Codex, OpenCode and generic MCP adapter formats are deterministic'
 }
 finally {
     if (Test-Path -LiteralPath $tempRoot) { Remove-Item -LiteralPath $tempRoot -Recurse -Force }

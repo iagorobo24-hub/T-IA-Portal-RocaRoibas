@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$WorkspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path,
-    [ValidateSet('claude-code', 'codex', 'opencode')]
+    [ValidateSet('claude-code', 'codex', 'opencode', 'generic')]
     [string]$Harness,
     [ValidateSet('read', 'write', 'create', 'full')]
     [string]$Profile = 'read',
@@ -78,6 +78,7 @@ $outputDirectory = Split-Path -Parent $OutputPath
 New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
 switch ($Harness) {
     'claude-code' { (ConvertTo-JsonObject | ConvertTo-Json -Depth 10) | Set-Content -LiteralPath $OutputPath -Encoding UTF8 }
+    'generic' { (ConvertTo-JsonObject | ConvertTo-Json -Depth 10) | Set-Content -LiteralPath $OutputPath -Encoding UTF8 }
     'opencode' { (ConvertTo-OpenCodeObject | ConvertTo-Json -Depth 10) | Set-Content -LiteralPath $OutputPath -Encoding UTF8 }
     'codex' { ConvertTo-CodexToml | Set-Content -LiteralPath $OutputPath -Encoding UTF8 }
 }

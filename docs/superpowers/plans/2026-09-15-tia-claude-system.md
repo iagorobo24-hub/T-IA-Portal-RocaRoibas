@@ -340,8 +340,9 @@ intentionally independent from the green local workspace checks.
   and OpenCode local-MCP formats.
 - [x] Generate read-only configs first.
 - [x] Generate write configs only when explicitly selected.
-- [x] Run deterministic adapter tests for Claude Code, Codex and OpenCode. They export fragments
-  but do not mutate personal harness configuration; Antigravity remains an unverified adapter.
+- [x] Run deterministic adapter tests for Claude Code, Codex, OpenCode and a generic standard
+  `mcpServers` JSON adapter. They export fragments but do not mutate personal harness
+  configuration; the concrete Antigravity/Cursor UI integration remains unverified.
 
 ## Phase 6: Repository and release discipline
 
