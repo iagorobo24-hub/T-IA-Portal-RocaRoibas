@@ -304,6 +304,10 @@
   retain the real PLCSIM behavioral acceptance as an environment-dependent gate.
 - [x] Make virtual PLC startup/cleanup an explicit runner phase and verify deterministic cleanup
   with a managed adapter fixture; keep the real native adapter path opt-in via `-StartVirtualPlc`.
+- [x] Add a documented native stdin protocol for virtual PLC I/O (`read/write-bit`,
+  `read/write-byte`, `read-area-size`) so behavioral tests can stimulate sensors and observe outputs.
+- [x] Add `-IoPlanPath` execution with per-step response expectations and document the acceptance
+  recipe R17; keep functional expectations project-specific until the real runtime run.
 - [ ] Register a disposable virtual CPU, download only to that virtual target, observe a sequence
   transition, and write verified behavioral evidence.
 - [x] Record the current blocker and keep behavioral simulation unverified rather than marking it successful from compilation alone.

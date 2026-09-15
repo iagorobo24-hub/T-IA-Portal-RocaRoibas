@@ -25,6 +25,7 @@ $definitions = @(
     @{ name = 'mcp-tool-sequence'; path = '30-tools/tests/Test-McpToolSequence.ps1' },
     @{ name = 'mcp-session-lease'; path = '30-tools/tests/Test-McpSessionLease.ps1' },
     @{ name = 'plcsim-api-probe'; path = '30-tools/tests/Test-PlcSimRuntimeApiProbe.ps1' },
+    @{ name = 'plcsim-command-protocol'; path = '30-tools/tests/Test-PlcSimCommandProtocol.ps1' },
     @{ name = 'plcsim-native-adapter'; path = '30-tools/tests/Test-PlcSimNativeAdapter.ps1' },
     @{ name = 'agent-demo-scaffold'; path = '30-tools/tests/Test-AgentDemoScaffoldEvidence.ps1' },
     @{ name = 'write-e2e-evidence'; path = '30-tools/tests/Test-TiaWriteE2E.ps1' },

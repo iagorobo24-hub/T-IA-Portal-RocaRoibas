@@ -26,6 +26,7 @@ param(
     [int]$PlcSimTimeoutMs = 60000,
     [string]$McpExecutablePath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path '30-tools\mcp\tia-create\bin\v20\TiaMcpServer.exe'),
     [string]$McpArguments = '--tia-major-version 20 --profile full --allow-write',
+    [string]$IoPlanPath,
     [int]$TimeoutSeconds = 900,
     [switch]$Run,
     [switch]$StartVirtualPlc,
@@ -108,6 +109,42 @@ function Start-VirtualPlcProcess {
         throw "El adaptador PLCSIM no está listo: $line"
     }
     [pscustomobject]@{ process = $process; ready = $ready; stderrTask = $stderrTask }
+}
+
+function Invoke-IoPlan([Diagnostics.Process]$Process, [string]$Path) {
+    if ($null -eq $Process) { throw 'IoPlanPath requiere -StartVirtualPlc para disponer del proceso nativo.' }
+    $plan = Read-Json $Path
+    $steps = @($plan.steps)
+    if ($steps.Count -eq 0) { throw "El plan de E/S no contiene steps: $Path" }
+    $results = [System.Collections.Generic.List[object]]::new()
+    for ($index = 0; $index -lt $steps.Count; $index++) {
+        $step = $steps[$index]
+        $command = [string]$step.command
+        if ([string]::IsNullOrWhiteSpace($command)) { throw "El step $index no tiene command." }
+        $Process.StandardInput.WriteLine($command)
+        $Process.StandardInput.Flush()
+        $read = $Process.StandardOutput.ReadLineAsync()
+        if (-not $read.Wait($PlcSimTimeoutMs)) { throw "Timeout esperando respuesta del step $index ($command)." }
+        $line = $read.Result
+        try { $response = $line | ConvertFrom-Json } catch { throw "Respuesta JSON inválida en step ${index}: ${line}" }
+        if ([string]$response.status -ne 'ok') { throw "El step $index falló: $line" }
+        if ($step.expect) {
+            foreach ($expected in $step.expect.PSObject.Properties) {
+                $actualProperty = $response.PSObject.Properties[$expected.Name]
+                if ($null -eq $actualProperty -or [string]$actualProperty.Value -ne [string]$expected.Value) {
+                    throw "El step $index no cumple expect.$($expected.Name): esperado '$($expected.Value)', recibido '$($actualProperty.Value)'."
+                }
+            }
+        }
+        $results.Add([ordered]@{ index = $index; command = $command; response = $response })
+    }
+    [ordered]@{
+        schemaVersion = 1
+        name = [string]$plan.name
+        planPath = [IO.Path]::GetFullPath($Path)
+        verified = $true
+        steps = @($results)
+    }
 }
 
 $readiness = Read-Json $ReadinessPath
@@ -220,13 +257,17 @@ try {
     $download = if (Test-Path -LiteralPath $downloadSequencePath) { Read-Json $downloadSequencePath } else { $null }
     $report.calls += @($download.calls)
     if (-not $download.success) { throw "Download sequence failed; inspect calls in the report." }
+    if (-not [string]::IsNullOrWhiteSpace($IoPlanPath)) {
+        $report.phase = 'BEHAVIOR'
+        $report.behavior = Invoke-IoPlan $virtualProcess $IoPlanPath
+    }
     $report.status = 'VERIFIED'
-    $report.phase = 'DOWNLOAD_AND_ONLINE_CHECK'
+    if (-not $report.behavior) { $report.phase = 'DOWNLOAD_AND_ONLINE_CHECK' }
     $report.nextActions = @('Registrar el comportamiento observable de la planta y, si procede, iniciar una aceptación HMI separada.')
 }
 catch {
     $report.status = 'FAILED'
-    if ($report.phase -ne 'VIRTUAL_PLC_START') {
+    if (@('VIRTUAL_PLC_START', 'BEHAVIOR', 'VIRTUAL_PLC_CLEANUP') -notcontains [string]$report.phase) {
         $report.phase = if ($report.mutationAttempted) { 'DOWNLOAD_AND_ONLINE_CHECK' } else { 'PREFLIGHT' }
     }
     $report.blockers = @($_.Exception.Message)
