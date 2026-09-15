@@ -8,6 +8,7 @@ Herramientas de consola para operar TIA Portal por Openness sin depender de un c
 | [`Invoke-TiaMcp.ps1`](Invoke-TiaMcp.ps1) | Cliente MCP mínimo por stdio. La base de todo lo demás |
 | [`Invoke-McpToolsSmoke.ps1`](Invoke-McpToolsSmoke.ps1) | Comprueba transporte stdio y roster de herramientas sin tocar TIA |
 | [`Invoke-McpToolCall.ps1`](Invoke-McpToolCall.ps1) | Ejecuta una llamada MCP aislada para fixtures y pruebas |
+| [`Invoke-McpToolSequence.ps1`](Invoke-McpToolSequence.ps1) | Ejecuta una secuencia ordenada sobre una única sesión MCP |
 | [`Invoke-AgentDemoScaffold.ps1`](Invoke-AgentDemoScaffold.ps1) | Dry-run y scaffold controlado del proyecto PLC de aceptación |
 | [`Export-HarnessAdapter.ps1`](Export-HarnessAdapter.ps1) | Exporta perfiles a Claude Code, Codex u OpenCode sin tocar sus configuraciones |
 | [`Migrate-Examples.ps1`](Migrate-Examples.ps1) | Migra, compila e inventaría los proyectos de `50-examples` |
@@ -48,6 +49,28 @@ invocación.
 | `-TiaMajor` | 20 por defecto |
 
 Devuelve objetos con `Tool`, `IsError`, `Seconds`, `Text` (el JSON de respuesta) y `Raw`.
+
+## `Invoke-McpToolSequence.ps1`
+
+Usa una única sesión MCP para una secuencia genérica, incluso con servidores distintos de
+`tia-inspect`. Es el adaptador adecuado para flujos con estado como `Bootstrap → Connect →
+Attach/Open → leer → Close/Disconnect`.
+
+```powershell
+.\Invoke-McpToolSequence.ps1 `
+  -ExecutablePath "..\mcp\tia-create\bin\v20\TiaMcpServer.exe" `
+  -Arguments "--tia-major-version 20 --profile lite" `
+  -Calls @(
+    @{ name = 'Bootstrap' },
+    @{ name = 'Connect' },
+    @{ name = 'GetState' },
+    @{ name = 'Disconnect' }
+  )
+```
+
+La prueba permanente `Test-McpToolSequence.ps1` verifica el protocolo y que todas las llamadas
+quedan registradas en el mismo informe. El helper no concede permisos de escritura: los decide
+el perfil del ejecutable.
 
 ---
 

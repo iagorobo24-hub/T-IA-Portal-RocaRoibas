@@ -46,6 +46,69 @@ function Get-VisibleTiaProcesses {
     })
 }
 
+function Get-TiaSessionSafety([object[]]$VisibleTia) {
+    if ($VisibleTia.Count -eq 0) {
+        return [ordered]@{ safe = $true; status = 'no-visible-tia'; visiblePids = @(); probe = $null }
+    }
+
+    $sequenceScript = Join-Path $WorkspaceRoot '30-tools\scripts\Invoke-McpToolSequence.ps1'
+    $createExe = Join-Path $WorkspaceRoot '30-tools\mcp\tia-create\bin\v20\TiaMcpServer.exe'
+    $pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
+    if (-not $pwsh) { $pwsh = (Get-Command powershell -ErrorAction SilentlyContinue).Source }
+    if (-not (Test-Path -LiteralPath $sequenceScript -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $createExe -PathType Leaf) -or -not $pwsh) {
+        return [ordered]@{
+            safe = $false; status = 'visible-tia-session-probe-unavailable'
+            visiblePids = @($VisibleTia.id); probe = $null
+        }
+    }
+
+    $probePath = Join-Path ([IO.Path]::GetTempPath()) ('tia-claude-readiness-' + [guid]::NewGuid().ToString('N') + '.json')
+    $calls = @(
+        @{ name = 'Bootstrap' },
+        @{ name = 'Connect' },
+        @{ name = 'ListPortalProcessProjects' },
+        @{ name = 'GetState' },
+        @{ name = 'Disconnect' }
+    )
+    try {
+        $callsJson = $calls | ConvertTo-Json -Depth 10 -Compress
+        & $pwsh -NoProfile -NonInteractive -File $sequenceScript `
+            -ExecutablePath $createExe `
+            -Arguments '--tia-major-version 20 --profile lite' `
+            -CallsJson $callsJson `
+            -OutputPath $probePath `
+            -TimeoutSeconds 120 | Out-Null
+        $probe = if (Test-Path -LiteralPath $probePath -PathType Leaf) { Read-Json $probePath } else { $null }
+        $listCall = if ($probe) { @($probe.calls | Where-Object name -eq 'ListPortalProcessProjects') | Select-Object -Last 1 } else { $null }
+        $listText = if ($listCall) { [string]$listCall.text } else { '' }
+        $listPayload = try { $listText | ConvertFrom-Json } catch { $null }
+        $listLines = if ($listPayload -and $listPayload.items) { @($listPayload.items) -join "`n" } else { $listText }
+        $unknown = @($VisibleTia | Where-Object { $listLines -notmatch "PID=$($_.id) attach: OK" })
+        $projectsOpen = @($VisibleTia | Where-Object {
+            $listLines -match "PID=$($_.id) attach: OK" -and $listLines -notmatch "PID=$($_.id) projects=<empty>"
+        })
+        $safe = ($probe -and $probe.success -and $unknown.Count -eq 0 -and $projectsOpen.Count -eq 0)
+        return [ordered]@{
+            safe = $safe
+            status = if ($safe) { 'visible-tia-without-open-project' } elseif ($projectsOpen.Count -gt 0) { 'visible-tia-project-open' } else { 'visible-tia-project-unknown' }
+            visiblePids = @($VisibleTia.id)
+            projectPids = @($projectsOpen | ForEach-Object { $_.id })
+            unknownPids = @($unknown | ForEach-Object { $_.id })
+            probe = $probe
+        }
+    }
+    catch {
+        return [ordered]@{
+            safe = $false; status = 'visible-tia-session-probe-failed'
+            visiblePids = @($VisibleTia.id); probe = $null; error = $_.Exception.Message
+        }
+    }
+    finally {
+        if (Test-Path -LiteralPath $probePath) { Remove-Item -LiteralPath $probePath -Force }
+    }
+}
+
 $environmentPath = Join-Path $WorkspaceRoot '70-runs\environment\latest.json'
 $environment = Read-Json $environmentPath
 $tia20 = $environment -and $environment.tiaMajor -eq 20 -and @($environment.installedTia | Where-Object {
@@ -75,6 +138,7 @@ if (Test-Path -LiteralPath $plcBehaviorEvidence -PathType Leaf) {
 }
 
 $visibleTia = if ($SkipLiveProcessCheck) { @() } else { Get-VisibleTiaProcesses }
+$tiaSessionSafety = Get-TiaSessionSafety $visibleTia
 $blockers = [System.Collections.Generic.List[string]]::new()
 $nextActions = [System.Collections.Generic.List[string]]::new()
 if (-not $tia20) { $blockers.Add('TIA Portal/Openness V20 no está verificado') }
@@ -88,9 +152,14 @@ if (-not $plcBehaviorVerified) {
     $blockers.Add('El comportamiento PLC en runtime no está demostrado')
     $nextActions.Add('Ejecutar la aceptación Sorting Plant con una instancia virtual y registrar una transición observable')
 }
-if ($visibleTia.Count -gt 0) {
-    $blockers.Add('Hay una instancia visible de TIA Portal abierta; el flujo de aplicación debe esperar')
-    $nextActions.Add('Cerrar la instancia visible o confirmar que es el proyecto objetivo antes de continuar')
+if (-not $tiaSessionSafety.safe) {
+    if ($tiaSessionSafety.status -eq 'visible-tia-project-open') {
+        $blockers.Add('Hay un proyecto abierto en una instancia visible de TIA Portal; el flujo de aplicación debe esperar')
+        $nextActions.Add('Cerrar el proyecto visible o confirmar que es el proyecto objetivo antes de continuar')
+    } else {
+        $blockers.Add('No se pudo demostrar que las instancias visibles de TIA Portal están sin proyecto')
+        $nextActions.Add('Repetir la consulta de sesión o cerrar la instancia visible antes de continuar')
+    }
 }
 if ($scaffold -and $scaffold.applied -eq $true -and $scaffold.postApply) {
     $nextActions.Add('Usar la evidencia postApply del scaffold como proyecto PLC mínimo de referencia')
@@ -114,7 +183,7 @@ $result = [ordered]@{
         plcToolchainReady = $plcReady
         hmiRuntimeAdvancedV20Ready = $hmiV20Ready
         plcBehaviorVerified = $plcBehaviorVerified
-        tiaInstanceSafeForApply = ($visibleTia.Count -eq 0)
+        tiaInstanceSafeForApply = [bool]$tiaSessionSafety.safe
     }
     installed = [ordered]@{
         tiaV20 = $tia20
@@ -128,6 +197,7 @@ $result = [ordered]@{
         environment = $environmentPath
         scaffold = if ($scaffoldEvidence) { $scaffoldEvidence[0].FullName } else { $null }
         sortingPlantBehavior = if (Test-Path -LiteralPath $plcBehaviorEvidence -PathType Leaf) { $plcBehaviorEvidence } else { $null }
+        tiaSessionSafety = $tiaSessionSafety
     }
 }
 

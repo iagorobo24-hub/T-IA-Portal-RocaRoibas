@@ -128,6 +128,19 @@ lógica**. El SCL no tiene este problema.
 ⚠️ **Sin confirmar en esta máquina.** Hay que probarlo con un bloque LAD real. Es una de las
 primeras cosas a verificar cuando Openness funcione.
 
+### ⚠️ Exportación masiva de LAD y SCL mezclados
+
+✅ **Verificado en V20 durante la aceptación del scaffold.** `ExportBlocksAsDocuments` puede
+rechazar un conjunto que contenga bloques con lenguajes de programación mezclados, devolviendo
+un error explícito sobre la imposibilidad de exportar/importar bloques de distintos lenguajes en
+la misma operación. No se debe interpretar ese fallo como que el bloque no existe ni como que el
+proyecto está dañado.
+
+El fallback determinista es exportar el bloque individual con `tia-inspect.ExportBlock` a XML
+SimaticML y conservar el error de la exportación masiva en el informe. Para una exportación
+textual diffeable, separar los bloques por lenguaje y validar cada grupo; el XML individual es
+un respaldo de inspección, no sustituye al `.s7dcl/.s7res` de V20.
+
 ### ⚠️ Nombre de tipo único en todo el PLC
 
 📄 Un nombre de tipo de datos PLC es único **en todo el PLC**, no dentro de su grupo. Importar un

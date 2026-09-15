@@ -40,13 +40,24 @@ function Copy-WorkspaceItem([string]$RelativePath, [string]$DestinationRoot) {
 $coreItems = @(
     'AGENTS.md', 'CLAUDE.md', 'README.md', '.gitattributes', '.gitignore',
     '00-meta', '10-kb', '20-standards', '60-library',
-    '30-tools/scripts', '30-tools/tests', '30-tools/harnesses', '30-tools/mcp/servers.json',
+    '30-tools/scripts', '30-tools/tests', '30-tools/plcsim', '30-tools/harnesses', '30-tools/mcp/servers.json',
     '30-tools/mcp/tia-inspect/README.md',
     '30-tools/mcp/tia-inspect/build.ps1', '30-tools/mcp/tia-inspect/patches',
     '30-tools/mcp/tia-inspect/bin/v20',
     '30-tools/mcp/tia-create/README.md', '30-tools/mcp/tia-create/bin/v20'
 )
 foreach ($item in $coreItems) { Copy-WorkspaceItem $item $coreRoot }
+
+# Build outputs are local scratch, never part of the source package. The probe
+# source and project file remain portable; Siemens runtime DLLs are intentionally
+# not copied because they are vendor-installed components.
+$plcsimPackageRoot = Join-Path $coreRoot '30-tools\plcsim'
+foreach ($generatedDirectory in @('bin', 'obj')) {
+    $generatedPath = Join-Path $plcsimPackageRoot $generatedDirectory
+    if (Test-Path -LiteralPath $generatedPath -PathType Container) {
+        Remove-Item -LiteralPath $generatedPath -Recurse -Force
+    }
+}
 
 # The split core is self-installing when copied to a USB or another folder.
 $coreInstall = Join-Path $coreRoot 'install'

@@ -22,20 +22,14 @@ $OutputRoot = [IO.Path]::GetFullPath($OutputRoot)
 if (-not $ProjectDirectory) { $ProjectDirectory = Join-Path $WorkspaceRoot ('90-tmp\agent-demo-scaffold-v20-' + (Get-Date -Format 'yyyyMMdd-HHmmss')) }
 $ProjectDirectory = [IO.Path]::GetFullPath($ProjectDirectory)
 if ($Apply -and (Test-Path -LiteralPath $ProjectDirectory)) { throw "Apply destination already exists: $ProjectDirectory" }
-if ($Apply) {
-    $guiTia = @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
-        $_.ProcessName -like 'Siemens.Automation.Portal*' -and $_.MainWindowHandle -ne 0
-    })
-    if ($guiTia.Count -gt 0) {
-        throw "Apply blocked: TIA Portal has a visible user instance open (PID(s): $($guiTia.Id -join ', ')). Close it or use the target project through Attach; this new-project runner will not replace it."
-    }
-}
 
 $templatePath = Join-Path $WorkspaceRoot '50-examples\agent-demo\specs\scaffold.json'
 $sourcePath = Join-Path $WorkspaceRoot '50-examples\agent-demo\sources\FB_AgentDemo.scl'
 $exe = Join-Path $WorkspaceRoot '30-tools\mcp\tia-create\bin\v20\TiaMcpServer.exe'
 $callScript = Join-Path $WorkspaceRoot '30-tools\scripts\Invoke-McpToolCall.ps1'
-foreach ($path in @($templatePath, $sourcePath, $exe, $callScript)) {
+$sequenceScript = Join-Path $WorkspaceRoot '30-tools\scripts\Invoke-McpToolSequence.ps1'
+$invoke = Join-Path $WorkspaceRoot '30-tools\scripts\Invoke-TiaMcp.ps1'
+foreach ($path in @($templatePath, $sourcePath, $exe, $callScript, $sequenceScript, $invoke)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing scaffold input: $path" }
 }
 
@@ -67,6 +61,57 @@ function Invoke-ScaffoldCall([bool]$DryRun, [string]$ReportPath) {
     [pscustomobject]@{ dryRun = $DryRun; exitCode = $exitCode; reportPath = $ReportPath; output = $output; report = $parsed }
 }
 
+function Get-SessionGuard([string]$ReportDirectory) {
+    $guiTia = @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.ProcessName -like 'Siemens.Automation.Portal*' -and $_.MainWindowHandle -ne 0
+    })
+    if ($guiTia.Count -eq 0) {
+        return [ordered]@{ allowed = $true; status = 'no-visible-tia'; visiblePids = @(); probe = $null }
+    }
+
+    $probePath = Join-Path $ReportDirectory 'session-guard.json'
+    $calls = @(
+        @{ name = 'Bootstrap' },
+        @{ name = 'Connect' },
+        @{ name = 'ListPortalProcessProjects' },
+        @{ name = 'GetState' },
+        @{ name = 'Disconnect' }
+    )
+    $callsJson = $calls | ConvertTo-Json -Depth 10 -Compress
+    $callArgs = @(
+        '-NoProfile', '-NonInteractive', '-File', $sequenceScript,
+        '-ExecutablePath', $exe,
+        '-Arguments', '--tia-major-version 20 --profile lite',
+        '-CallsJson', $callsJson,
+        '-OutputPath', $probePath,
+        '-TimeoutSeconds', '120'
+    )
+    $probeOutput = (& $pwsh @callArgs 2>&1 | Out-String).Trim()
+    $probe = if (Test-Path -LiteralPath $probePath -PathType Leaf) { Get-Content -Raw -LiteralPath $probePath | ConvertFrom-Json } else { $null }
+    $listCall = if ($probe) { @($probe.calls | Where-Object name -eq 'ListPortalProcessProjects') | Select-Object -Last 1 } else { $null }
+    $listText = if ($listCall) { [string]$listCall.text } else { '' }
+    $listPayload = try { $listText | ConvertFrom-Json } catch { $null }
+    $listLines = if ($listPayload -and $listPayload.items) { @($listPayload.items) -join "`n" } else { $listText }
+    $unknown = [System.Collections.Generic.List[int]]::new()
+    $projectsOpen = [System.Collections.Generic.List[int]]::new()
+    foreach ($process in $guiTia) {
+        $pidText = [string]$process.Id
+        if ($listLines -notmatch "PID=$pidText attach: OK") { $unknown.Add($process.Id); continue }
+        if ($listLines -notmatch "PID=$pidText projects=<empty>") { $projectsOpen.Add($process.Id) }
+    }
+    $allowed = ($probe -and $probe.success -and $unknown.Count -eq 0 -and $projectsOpen.Count -eq 0)
+    $status = if ($allowed) { 'visible-tia-without-open-project' } elseif ($projectsOpen.Count -gt 0) { 'visible-tia-project-open' } else { 'visible-tia-project-unknown' }
+    [ordered]@{
+        allowed = $allowed
+        status = $status
+        visiblePids = @($guiTia.Id)
+        projectPids = @($projectsOpen)
+        unknownPids = @($unknown)
+        probe = $probe
+        probeOutput = $probeOutput
+    }
+}
+
 function Get-ToolResult([object[]]$Results, [string]$ToolName) {
     return $Results | Where-Object { $_.Tool -eq $ToolName } | Select-Object -Last 1
 }
@@ -88,6 +133,7 @@ function Invoke-PostApplyVerification([string]$ReportDirectory) {
         scaffoldCompile = $null
         inspection = $null
         export = $null
+        blockExport = $null
         standards = $null
     }
     $project = Get-ChildItem -LiteralPath $ProjectDirectory -Recurse -File -Filter '*.ap20' -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -121,6 +167,9 @@ function Invoke-PostApplyVerification([string]$ReportDirectory) {
     }
 
     $exportDirectory = Join-Path $ReportDirectory 'export'
+    $targetBlockName = [IO.Path]::GetFileNameWithoutExtension($sourcePath)
+    $blockExportDirectory = Join-Path $ReportDirectory 'export-blocks'
+    New-Item -ItemType Directory -Path $blockExportDirectory -Force | Out-Null
     $inspectionResults = & $invoke -TiaMajor 20 -TimeoutSeconds 900 -ContinueOnError -Calls @(
         @{ name = 'Connect' },
         @{ name = 'GetProjectTree' },
@@ -128,15 +177,19 @@ function Invoke-PostApplyVerification([string]$ReportDirectory) {
         @{ name = 'GetPlcSummary'; args = @{ softwarePath = [string]$spec.plcName } },
         @{ name = 'GetBlocks'; args = @{ softwarePath = [string]$spec.plcName; regexName = 'AgentDemo' } },
         @{ name = 'ExportPlcAsSourceTree'; args = @{ softwarePath = [string]$spec.plcName; exportPath = $exportDirectory } },
+        @{ name = 'ExportBlock'; args = @{ softwarePath = [string]$spec.plcName; blockPath = $targetBlockName; exportPath = $blockExportDirectory; preservePath = $false } },
         @{ name = 'CloseProject' },
         @{ name = 'Disconnect' }
     )
     Assert-Results $inspectionResults 'Post-apply inspection/export'
     $tree = Read-ToolJson (Get-ToolResult $inspectionResults 'GetProjectTree') 'GetProjectTree'
     $softwareTree = Read-ToolJson (Get-ToolResult $inspectionResults 'GetSoftwareTree') 'GetSoftwareTree'
+    if ([string]$softwareTree.tree -notmatch [regex]::Escape($targetBlockName)) { throw "GetSoftwareTree did not confirm the scaffold block path: $targetBlockName" }
     $summary = Read-ToolJson (Get-ToolResult $inspectionResults 'GetPlcSummary') 'GetPlcSummary'
     $blocksPayload = Read-ToolJson (Get-ToolResult $inspectionResults 'GetBlocks') 'GetBlocks'
     $export = Read-ToolJson (Get-ToolResult $inspectionResults 'ExportPlcAsSourceTree') 'ExportPlcAsSourceTree'
+    $blockExport = Read-ToolJson (Get-ToolResult $inspectionResults 'ExportBlock') 'ExportBlock'
+    $blockXmlFiles = @(Get-ChildItem -LiteralPath $blockExportDirectory -Recurse -File -Filter '*.xml' -ErrorAction SilentlyContinue)
     $blocks = @($blocksPayload.items | ForEach-Object {
         [ordered]@{ path = [string]$_.path; name = [string]$_.name; typeName = [string]$_.typeName; programmingLanguage = [string]$_.programmingLanguage; isConsistent = [bool]$_.isConsistent; isKnowHowProtected = [bool]$_.isKnowHowProtected; comment = [bool](-not [string]::IsNullOrWhiteSpace([string]$_.headerName)) }
     })
@@ -151,7 +204,8 @@ function Invoke-PostApplyVerification([string]$ReportDirectory) {
     $standardsOutput = (& $pwsh -NoProfile -NonInteractive -File (Join-Path $WorkspaceRoot '30-tools\scripts\Check-TiaStandards.ps1') -InventoryPath $inventoryPath -ExportPath $exportDirectory -OutputPath $standardsPath 2>&1 | Out-String).Trim()
     $standardsExit = $LASTEXITCODE
     $post.inspection = [ordered]@{ success = ($blocks.Count -gt 0 -and [string]$summary.name -eq [string]$spec.plcName); blocks = $blocks.Count; tree = $tree.tree }
-    $post.export = [ordered]@{ success = ($standardsExit -eq 0 -and $null -ne $export); path = $exportDirectory; response = $export }
+    $post.blockExport = [ordered]@{ success = ($null -ne $blockExport -and $blockXmlFiles.Count -gt 0); path = $blockExportDirectory; files = @($blockXmlFiles.FullName); response = $blockExport }
+    $post.export = [ordered]@{ success = ($standardsExit -eq 0 -and $null -ne $export -and $post.blockExport.success); path = $exportDirectory; response = $export }
     $post.standards = [ordered]@{ success = ($standardsExit -eq 0); path = $standardsPath; output = $standardsOutput }
     $post.success = ($post.inspection.success -and $post.export.success -and $post.standards.success)
     if (-not $post.success) { throw "Post-apply verification failed; see $ReportDirectory." }
@@ -166,12 +220,17 @@ elseif (-not $Apply) {
     $final = [ordered]@{ schemaVersion = 1; success = $true; applied = $false; effectiveSpec = $effectiveSpecPath; dryRun = $dryRunResult; message = 'Dry-run passed; use -Apply to create the disposable project.' }
 }
 else {
-    $applyResult = Invoke-ScaffoldCall $false (Join-Path $OutputRoot 'apply.json')
-    $postApply = $null
-    if ($applyResult.exitCode -eq 0 -and $applyResult.report.success) {
-        $postApply = Invoke-PostApplyVerification $OutputRoot
+    $sessionGuard = Get-SessionGuard $OutputRoot
+    if (-not $sessionGuard.allowed) {
+        $final = [ordered]@{ schemaVersion = 1; success = $false; applied = $false; effectiveSpec = $effectiveSpecPath; dryRun = $dryRunResult; sessionGuard = $sessionGuard; message = 'Apply blocked: a visible TIA project could not be proven absent.' }
+    } else {
+        $applyResult = Invoke-ScaffoldCall $false (Join-Path $OutputRoot 'apply.json')
+        $postApply = $null
+        if ($applyResult.exitCode -eq 0 -and $applyResult.report.success) {
+            $postApply = Invoke-PostApplyVerification $OutputRoot
+        }
+        $final = [ordered]@{ schemaVersion = 1; success = ($applyResult.exitCode -eq 0 -and $applyResult.report.success -and $null -ne $postApply -and $postApply.success); applied = $true; effectiveSpec = $effectiveSpecPath; dryRun = $dryRunResult; sessionGuard = $sessionGuard; apply = $applyResult; postApply = $postApply; projectDirectory = $ProjectDirectory }
     }
-    $final = [ordered]@{ schemaVersion = 1; success = ($applyResult.exitCode -eq 0 -and $applyResult.report.success -and $null -ne $postApply -and $postApply.success); applied = $true; effectiveSpec = $effectiveSpecPath; dryRun = $dryRunResult; apply = $applyResult; postApply = $postApply; projectDirectory = $ProjectDirectory }
 }
 $finalPath = Join-Path $OutputRoot 'scaffold-report.json'
 $final | ConvertTo-Json -Depth 40 | Set-Content -LiteralPath $finalPath -Encoding UTF8
