@@ -144,6 +144,12 @@ no se lanzan dos sesiones concurrentes contra TIA.
 9.  Commit        con mensaje que diga QUÉ cambió funcionalmente, no "update"
 ```
 
+La aplicación de una propuesta SCL solo se realiza mediante
+`30-tools/scripts/Invoke-TiaSclProposalApply.ps1 -Apply`. El modo predeterminado es un preview
+local sin conexión a TIA. El runner registra backup, rutas exactas, importación, compilación,
+guardado, exportación y lectura posterior; si la compilación no queda en 0 errores y 0 advertencias,
+no guarda.
+
 Los pasos 8 y 9 **no son opcionales**. Un `.ap20` es binario: sin el export en `src/` nadie —
 tú incluido, dentro de tres meses — puede ver qué tocó el agente.
 

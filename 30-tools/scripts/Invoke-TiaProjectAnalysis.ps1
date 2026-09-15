@@ -97,7 +97,7 @@ function Get-RelativePath([string]$Path, [string]$Base) {
 }
 
 $sourceFiles = @(Get-ChildItem -LiteralPath $SourceRoot -Recurse -File |
-    Where-Object { $_.Extension -in @('.s7dcl', '.s7res', '.xml') } | Sort-Object FullName)
+    Where-Object { $_.Extension -in @('.s7dcl', '.scl', '.s7res', '.xml') } | Sort-Object FullName)
 $sourceRows = [System.Collections.Generic.List[object]]::new()
 $declarations = [System.Collections.Generic.List[object]]::new()
 $calls = [System.Collections.Generic.List[object]]::new()
@@ -215,7 +215,7 @@ function Get-Counts([object[]]$Items, [string]$Property) {
 
 $blockingCount = @($findings | Where-Object { $_.severity -eq 'BLOCKING' }).Count
 $warningCount = @($findings | Where-Object { $_.severity -eq 'WARNING' }).Count
-$sclCount = @($sourceFiles | Where-Object { $_.Extension -eq '.s7dcl' }).Count
+$sclCount = @($sourceFiles | Where-Object { $_.Extension -in @('.s7dcl', '.scl') }).Count
 $xmlCount = @($sourceFiles | Where-Object { $_.Extension -eq '.xml' }).Count
 $resCount = @($sourceFiles | Where-Object { $_.Extension -eq '.s7res' }).Count
 $nextActions = [System.Collections.Generic.List[string]]::new()

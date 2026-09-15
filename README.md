@@ -22,6 +22,7 @@ ingeniería.
 | M1b — `tia-create` | ✅ **V20 2.7.2 compilado y smoke-test MCP: 55 herramientas lite** |
 | Pruebas en PLCSIM/HMI | 🟡 **API PLCSIM V6 inicializada; comportamiento y HMI V20 pendientes** |
 | **P1 — dossier semántico** | ✅ **análisis SCL/XML de solo lectura, cobertura, referencias y hallazgos** |
+| **P1 — propuesta/aplicación** | 🟡 **propuesta SCL y runner con preview/gates; falta validación real sin TIA visible** |
 
 ## ✅ Funciona
 
@@ -81,9 +82,10 @@ Markdown sin volver a abrir ni modificar TIA:
   -Objective "Entender el proyecto antes de proponer cambios"
 ```
 
-El dossier enlaza bloques con sus fuentes `.s7dcl` o XML, cuenta lenguajes y tipos, detecta
-referencias de llamadas y separa hallazgos bloqueantes de avisos. La siguiente tarea de P1 será
-generar propuestas SCL revisables, todavía separadas de cualquier aplicación en TIA.
+El dossier enlaza bloques con sus fuentes `.s7dcl`, `.scl` o XML, cuenta lenguajes y tipos, detecta
+referencias de llamadas y separa hallazgos bloqueantes de avisos. Las propuestas SCL se generan
+como copias trazables; su aplicación posterior exige proyecto exacto, backup, preview, compilación
+limpia, guardado, exportación y readback.
 
 ## Empieza por aquí
 

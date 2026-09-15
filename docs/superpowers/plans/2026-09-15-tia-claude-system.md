@@ -430,6 +430,34 @@ intentionally independent from the green local workspace checks.
 - [x] Enforce the `read` profile and keep snapshot workflows free of TIA mutation; live MCP lease enforcement remains required for the future apply workflow.
 - [x] Add a disposable end-to-end workflow test before enabling real project application.
 
+## Phase 8: Write-gated semantic proposal application
+
+### Task 8.1: Apply one reviewed SCL proposal through the existing MCP lease
+
+**Files:**
+- Create: `30-tools/scripts/Invoke-TiaSclProposalApply.ps1`
+- Create: `30-tools/tests/Test-TiaSclProposalApply.ps1`
+- Modify: `30-tools/scripts/Run-WorkspaceChecks.ps1`
+- Modify: `30-tools/scripts/README.md`
+- Modify: `AGENTS.md`
+
+**Interfaces:**
+- Consumes: `proposal.json` en estado `PROPOSED`, una fuente `.scl` o `.s7dcl` y el `.ap20`
+  exacto indicado en la propuesta.
+- Produces: `apply-report.json` con backup, guardias, rutas reales, preview, importación,
+  compilación, guardado, exportación y lectura posterior.
+- `.s7dcl`: `PreviewImport` + `ImportFromDocuments`.
+- `.scl`: staging bajo `Program blocks/<grupo>` + `ImportSources`; la compilación es el gate
+  determinista posterior porque Openness no ofrece el mismo `PreviewImport` para fuentes externas.
+
+- [x] Escribir pruebas de rechazo por proyecto distinto y preview local sin TIA.
+- [x] Añadir prueba de selección de la ruta `.scl`/`ImportSources`.
+- [x] Implementar backup, guardia de instancia visible, lease MCP, lectura de paths y bloque,
+  importación, compile 0/0, save, export y readback.
+- [ ] Ejecutar una aplicación real sobre un fixture V20 desechable con TIA sin ventana visible.
+- [ ] Registrar el informe real y actualizar la aceptación solo después de verificar el hash y
+  la compilación del proyecto.
+
 ## Final acceptance gate
 
 The system is complete only when all of the following are evidenced:

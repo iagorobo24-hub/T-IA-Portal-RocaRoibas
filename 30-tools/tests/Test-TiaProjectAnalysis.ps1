@@ -31,6 +31,12 @@ BEGIN
 END_ORGANIZATION_BLOCK
 '@ | Set-Content -LiteralPath (Join-Path $sourceRoot 'Program blocks\Main.s7dcl') -Encoding UTF8
     @'
+FUNCTION_BLOCK "FB_Valve"
+BEGIN
+   #Open := #Command;
+END_FUNCTION_BLOCK
+'@ | Set-Content -LiteralPath (Join-Path $sourceRoot 'Program blocks\FB_Valve.scl') -Encoding UTF8
+    @'
 {
   "schemaVersion": 1,
   "readOnly": true,
@@ -61,8 +67,9 @@ END_ORGANIZATION_BLOCK
     if ($report.project.plcCount -ne 1) { throw 'Expected one PLC in the dossier.' }
     if ($report.project.blockCount -ne 2) { throw 'Expected two blocks in the dossier.' }
     if ($report.project.languages.SCL -ne 2) { throw 'Expected two SCL blocks in the dossier.' }
-    if ($report.sources.declarations.Count -ne 2) { throw 'Expected two source declarations.' }
+    if ($report.sources.declarations.Count -ne 3) { throw 'Expected three source declarations across exported and external SCL sources.' }
     if ($report.sources.xml -ne 1) { throw 'Expected one XML block export.' }
+    if ($report.sources.scl -ne 2) { throw 'Expected two SCL source files.' }
     if ($report.references.calls[0].target -ne 'FB_Motor') { throw 'Expected the Main to reference FB_Motor.' }
     if ($report.summary.blockingFindings -ne 0) { throw 'The clean fixture must have no blocking findings.' }
     if (-not (Test-Path -LiteralPath ([IO.Path]::ChangeExtension($outputPath, '.md')) -PathType Leaf)) { throw 'Analysis Markdown was not created.' }
@@ -76,6 +83,7 @@ END_ORGANIZATION_BLOCK
     $blockedReport = Get-Content -Raw -LiteralPath $blockedOutputPath | ConvertFrom-Json
     if ($blockedReport.summary.blockingFindings -ne 1) { throw 'Expected one know-how protection blocking finding.' }
     Write-Output 'PASS: project analysis blocks protected objects when requested'
+    $global:LASTEXITCODE = 0
 }
 catch {
     throw
