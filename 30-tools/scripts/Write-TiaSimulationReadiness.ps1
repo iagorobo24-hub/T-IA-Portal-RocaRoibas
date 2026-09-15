@@ -28,13 +28,17 @@ function Get-InstalledPlcSim([object]$Environment) {
 
     $classic = 'C:\Program Files\Siemens\Automation\PLCSIM_V19\S7PLCSIMV19.exe'
     $advanced = 'C:\Program Files (x86)\Siemens\Automation\PLCSIMADV\bin\Siemens.Simatic.PlcSim.Advanced.UserInterface.exe'
+    $adapterConfigurator = 'C:\Program Files (x86)\Siemens\Automation\PLCSIMADV\bin\Siemens.Simatic.PlcSim.Advanced.AdapterConfigurator.exe'
     $advancedFile = if (Test-Path -LiteralPath $advanced -PathType Leaf) { Get-Item -LiteralPath $advanced } else { $null }
+    $adapterConfiguratorFile = if (Test-Path -LiteralPath $adapterConfigurator -PathType Leaf) { Get-Item -LiteralPath $adapterConfigurator } else { $null }
     [ordered]@{
         classicInstalled = Test-Path -LiteralPath $classic -PathType Leaf
         classicPath = if (Test-Path -LiteralPath $classic -PathType Leaf) { $classic } else { $null }
         advancedInstalled = ($null -ne $advancedFile)
         advancedPath = if ($advancedFile) { $advancedFile.FullName } else { $null }
         advancedVersion = if ($advancedFile) { $advancedFile.VersionInfo.ProductVersion } else { $null }
+        adapterConfiguratorInstalled = ($null -ne $adapterConfiguratorFile)
+        adapterConfiguratorPath = if ($adapterConfiguratorFile) { $adapterConfiguratorFile.FullName } else { $null }
     }
 }
 
@@ -171,7 +175,12 @@ if (-not $inspect) { $blockers.Add('tia-inspect no está disponible') }
 if (-not $plcsim.advancedInstalled) { $blockers.Add('PLCSIM Advanced no está instalado') }
 if (-not $plcsimVirtualAdapter.ready) {
     $blockers.Add('El adaptador virtual Siemens PLCSIM no está operativo')
-    $nextActions.Add('Activar/configurar el adaptador Siemens PLCSIM Virtual Ethernet Adapter con el configurador de PLCSIM y privilegios de administrador')
+    $configuratorPath = [string]$plcsim.adapterConfiguratorPath
+    if ([string]::IsNullOrWhiteSpace($configuratorPath)) {
+        $nextActions.Add('Activar/configurar el adaptador Siemens PLCSIM Virtual Ethernet Adapter con el configurador de PLCSIM y privilegios de administrador')
+    } else {
+        $nextActions.Add("Abrir el configurador oficial de PLCSIM como administrador: $configuratorPath; activar/configurar Siemens PLCSIM Virtual Ethernet Adapter y repetir el preflight")
+    }
 }
 if (-not $hmiV20Ready) {
     $blockers.Add('WinCC Runtime Advanced V20 compatible no está verificado')

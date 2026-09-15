@@ -30,3 +30,6 @@ Estados:
 
 En esta máquina el resultado esperado es `READY_WITH_BLOCKERS`: PLCSIM Advanced V6.0 está
 instalado, pero Runtime Advanced V20 compatible y la prueba conductual aún no están verificados.
+El preflight también localiza el configurador oficial de adaptadores, si está instalado; no lo
+abre ni activa la interfaz automáticamente porque esa acción cambia la configuración de red y
+requiere privilegios de administrador.
