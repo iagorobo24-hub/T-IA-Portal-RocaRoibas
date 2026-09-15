@@ -17,6 +17,7 @@ $definitions = @(
     @{ name = 'hmi-knowledge'; path = '30-tools/tests/Test-HmiKnowledgeState.ps1' },
     @{ name = 'server-manifest'; path = '30-tools/tests/Test-ServerManifest.ps1' },
     @{ name = 'harness-config'; path = '30-tools/tests/Test-HarnessConfigDocs.ps1' },
+    @{ name = 'public-boundary'; path = '30-tools/tests/Test-PublicBoundary.ps1' },
     @{ name = 'tia-create-availability'; path = '30-tools/tests/Test-TiaCreateAvailability.ps1' },
     @{ name = 'write-e2e-evidence'; path = '30-tools/tests/Test-TiaWriteE2E.ps1' },
     @{ name = 'backup-recovery'; path = '30-tools/tests/Test-TiaBackupRecovery.ps1' }

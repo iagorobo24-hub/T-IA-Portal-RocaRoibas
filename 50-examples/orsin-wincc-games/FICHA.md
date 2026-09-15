@@ -134,4 +134,4 @@ Dos cosas que valen la pena:
 - [x] Confirmado que **no contiene PLC**: solo `HMI_1 [TP1200 Comfort]`
 - [x] **Verificado en TIA: el VBScript sobrevivió** — 8 carpetas de scripts, código intacto
 - [ ] Revisar las pantallas una a una (los juegos son pop-ups, no pantallas normales)
-- [ ] Comprobar si el Runtime Advanced V17 sirve para simular un proyecto V20
+- [ ] Runtime Advanced V17 **no sirve para simular este proyecto V20** — ver `70-runs/simulation/runtime-advanced-v20.md`; queda pendiente instalar/verificar Runtime Advanced V20
