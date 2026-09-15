@@ -16,13 +16,15 @@ El proceso se lanza con `--tia-major-version 20 --profile lite`. `lite` mantiene
 y deja las capacidades no listadas accesibles mediante el puente `FindTools`/`CallTool` del propio
 servidor. No se usa el binario V21 como sustituto.
 
-Evidencia de instalación:
+Evidencia de instalación y uso:
 
 - `dotnet build -c Release`: **0 errores, 2 advertencias** del proyecto fuente.
 - `--doctor --tia-major-version 20`: Openness V20 inicializada y grupo `Siemens TIA Openness`
   confirmado.
 - Disponibilidad de fichero: `30-tools/tests/Test-TiaCreateAvailability.ps1`.
-
-Pendiente de la siguiente tarea: listar las herramientas MCP del runtime y ejecutar un scaffold
-mínimo en una copia desechable. La existencia del binario no demuestra todavía que la generación
-completa de proyectos funcione.
+- Runtime smoke: `30-tools/tests/Test-TiaCreateRuntime.ps1` pasa con el perfil `lite` y 55
+  herramientas.
+- Scaffold E2E: `30-tools/tests/Test-AgentDemoScaffoldEvidence.ps1` crea un proyecto V20
+  desechable, compila con 0 errores/0 warnings, guarda, inspecciona y exporta el bloque creado.
+- Secuencia MCP: `30-tools/scripts/Invoke-McpToolSequence.ps1` conserva una única sesión
+  Bootstrap → Connect → trabajo → Disconnect y aplica un lease global para evitar carreras.

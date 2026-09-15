@@ -33,4 +33,13 @@ if ($lifecycle.status -ne 'ready' -or $lifecycle.registerDisposable -ne $true -o
     $lifecycle.registeredAfter -ne $lifecycle.registeredBefore) {
     throw "Disposable PLCSIM lifecycle was not clean: $lifecycleOutput"
 }
-Write-Output 'PASS: native PLCSIM adapter inspects and unregisters a disposable CPU without powering on'
+
+$runtimeOutput = & $adapter --power-on-disposable 2>&1 | Out-String
+if ($LASTEXITCODE -ne 0) { throw "Native PLCSIM disposable runtime failed: $runtimeOutput" }
+$runtime = $runtimeOutput | ConvertFrom-Json
+if ($runtime.status -ne 'ready' -or $runtime.powerOnDisposable -ne $true -or
+    $runtime.powerOnCode -ne '0x0' -or $runtime.powerOffCode -ne '0x0' -or
+    $runtime.registeredAfter -ne $runtime.registeredBefore) {
+    throw "Disposable PLCSIM power cycle was not clean: $runtimeOutput"
+}
+Write-Output 'PASS: native PLCSIM adapter inspects, powers on/off, and unregisters a disposable CPU'
