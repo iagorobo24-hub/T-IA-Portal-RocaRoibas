@@ -17,6 +17,9 @@ Herramientas de consola para operar TIA Portal por Openness sin depender de un c
 | [`Write-TiaAcceptanceStatus.ps1`](Write-TiaAcceptanceStatus.ps1) | Genera el estado honesto de aceptación: verificado, no verificado, bloqueado y supuesto |
 | [`Find-TiaRuntimeMedia.ps1`](Find-TiaRuntimeMedia.ps1) | Busca medios de instalación Runtime/TIA sin instalar nada y exige confirmación para el siguiente paso |
 | [`Write-TiaSimulationReadiness.ps1`](Write-TiaSimulationReadiness.ps1) | Preflight de simulación: separa disponibilidad PLC, compatibilidad HMI V20 y evidencia conductual |
+| [`Invoke-TiaProjectAnalysis.ps1`](Invoke-TiaProjectAnalysis.ps1) | Genera un dossier semántico de solo lectura desde un inventario MCP y fuentes exportadas |
+| [`New-TiaSclProposal.ps1`](New-TiaSclProposal.ps1) | Genera una propuesta SCL, copia, diff y hashes sin modificar el original ni TIA |
+| [`Invoke-TiaWorkflow.ps1`](Invoke-TiaWorkflow.ps1) | Orquesta `analyze` y `propose`; mantiene `apply` separado y rechazado hasta completar sus gates |
 | [`Stop-TiaPortal.ps1`](Stop-TiaPortal.ps1) | Cierra las instancias headless que `Disconnect` **no** cierra |
 
 ---
@@ -71,6 +74,59 @@ Attach/Open → leer → Close/Disconnect`.
 La prueba permanente `Test-McpToolSequence.ps1` verifica el protocolo y que todas las llamadas
 quedan registradas en el mismo informe. El helper no concede permisos de escritura: los decide
 el perfil del ejecutable.
+
+## `Invoke-TiaProjectAnalysis.ps1`
+
+Construye un dossier JSON y Markdown sin abrir ni modificar TIA. Consume un inventario `readOnly`
+producido por MCP y el árbol de fuentes exportadas; reconoce declaraciones SCL (`.s7dcl`) y
+exportaciones individuales XML (`ExportBlock`).
+
+```powershell
+.\Invoke-TiaProjectAnalysis.ps1 `
+  -InventoryPath "...\inventory.json" `
+  -SourceRoot "...\export" `
+  -Objective "Entender la estructura antes de proponer cambios"
+```
+
+El informe calcula cobertura de fuentes, tipos y lenguajes, referencias de llamadas y hallazgos
+de protección, inconsistencias, comentarios ausentes y tablas de tags por defecto. `-FailOnBlockingFindings`
+devuelve código 1 si el inventario contiene objetos que no se pueden tocar.
+
+## `New-TiaSclProposal.ps1`
+
+Genera una propuesta de un único reemplazo textual en una fuente `.s7dcl` enlazada desde el
+dossier. Rechaza bloques protegidos, inconsistentes, no-SCL, fuentes ausentes o reemplazos
+ambiguos. La carpeta de salida contiene `proposal.json`, una copia propuesta, `proposal.diff` y
+`proposal.md`; el fichero original y TIA permanecen intactos.
+
+```powershell
+.\New-TiaSclProposal.ps1 `
+  -AnalysisPath "...\analysis.json" `
+  -BlockName "FB_Motor" `
+  -FindText '#Run := #CmdStart AND #Interlock;' `
+  -ReplaceText '#Run := #CmdStart AND #Interlock AND #Ready;'
+```
+
+Aplicar una propuesta es deliberadamente otra operación y debe seguir el ciclo de escritura de
+`AGENTS.md`.
+
+## `Invoke-TiaWorkflow.ps1`
+
+Punto de entrada semántico para snapshots. Los dos workflows disponibles no mutan TIA:
+
+```powershell
+.\Invoke-TiaWorkflow.ps1 -Workflow analyze `
+  -InventoryPath "...\inventory.json" -SourceRoot "...\export"
+
+.\Invoke-TiaWorkflow.ps1 -Workflow propose `
+  -AnalysisPath "...\analysis.json" -BlockName "FB_Motor" `
+  -FindText '#Run := #CmdStart AND #Interlock;' `
+  -ReplaceText '#Run := #CmdStart AND #Interlock AND #Ready;'
+```
+
+Cada ejecución deja `workflow.json` con estado, perfil, artefactos y la afirmación explícita de
+que no hubo mutación de TIA. `-Workflow apply` falla de forma intencionada hasta que exista una
+implementación que adquiera el lease MCP y cumpla backup, preview, compile, save y export.
 
 ---
 

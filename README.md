@@ -21,6 +21,7 @@ ingeniería.
 | **`60-library/`** | ✅ **5 bloques SCL compilando con 0 errores y 0 advertencias en TIA V20** |
 | M1b — `tia-create` | ✅ **V20 2.7.2 compilado y smoke-test MCP: 55 herramientas lite** |
 | Pruebas en PLCSIM/HMI | 🟡 **API PLCSIM V6 inicializada; comportamiento y HMI V20 pendientes** |
+| **P1 — dossier semántico** | ✅ **análisis SCL/XML de solo lectura, cobertura, referencias y hallazgos** |
 
 ## ✅ Funciona
 
@@ -61,12 +62,28 @@ Para escritura hay que relanzar el servidor con `--allow-write` ([ADR-006](00-me
 30-tools\scripts\Run-WorkspaceChecks.ps1
 ```
 
-El último informe verificó **22 PASS, 0 WARN y 0 BLOCKED**. La prueba E2E de escritura completa
+El último informe verificó **25 PASS, 0 WARN y 0 BLOCKED**. La prueba E2E de escritura completa
 está en [`70-runs/e2e/20260915-082218/report.json`](70-runs/e2e/20260915-082218/report.json) y el
 estado de entorno en [`70-runs/environment/latest.json`](70-runs/environment/latest.json).
 El barrido de estándares de los siete ejemplos está en
 [`70-runs/standards/sweep-20260915-all/sweep-report.json`](70-runs/standards/sweep-20260915-all/sweep-report.json):
 7/7 proyectos leídos, sin modificar ninguno.
+
+### Análisis semántico de un snapshot
+
+Después de obtener un inventario MCP y exportar sus fuentes, se puede generar un dossier JSON y
+Markdown sin volver a abrir ni modificar TIA:
+
+```powershell
+30-tools\scripts\Invoke-TiaProjectAnalysis.ps1 `
+  -InventoryPath "...\inventory.json" `
+  -SourceRoot "...\export" `
+  -Objective "Entender el proyecto antes de proponer cambios"
+```
+
+El dossier enlaza bloques con sus fuentes `.s7dcl` o XML, cuenta lenguajes y tipos, detecta
+referencias de llamadas y separa hallazgos bloqueantes de avisos. La siguiente tarea de P1 será
+generar propuestas SCL revisables, todavía separadas de cualquier aplicación en TIA.
 
 ## Empieza por aquí
 
