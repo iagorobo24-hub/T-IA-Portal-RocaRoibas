@@ -126,6 +126,10 @@ try {
     if (-not (Test-Path -LiteralPath $proposedSource -PathType Leaf)) { throw "Proposed source does not exist: $proposedSource" }
     $proposedHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $proposedSource).Hash.ToLowerInvariant()
     if ($proposedHash -ne [string]$proposal.source.proposedSha256) { throw 'Proposed source hash does not match proposal.json; it may have been altered.' }
+    $originalSource = [IO.Path]::GetFullPath([string]$proposal.source.originalPath)
+    if (-not (Test-Path -LiteralPath $originalSource -PathType Leaf)) { throw "Original source does not exist: $originalSource" }
+    $originalHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $originalSource).Hash.ToLowerInvariant()
+    if ($originalHash -ne [string]$proposal.source.originalSha256) { throw 'Original source hash does not match proposal.json; the source changed after proposal generation.' }
 
     $blockPath = [string]$proposal.block.path
     $separator = $blockPath.LastIndexOf('/')
@@ -167,6 +171,8 @@ try {
         groupPath = $groupPath
         proposedSource = $proposedSource
         proposedSha256 = $proposedHash
+        originalSource = $originalSource
+        originalSha256 = $originalHash
         stagedDocument = $stagedDocument
         stagedSourceRoot = $stagedSourceRoot
         stagedCompanion = $stagedCompanion

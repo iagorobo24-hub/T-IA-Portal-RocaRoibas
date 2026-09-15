@@ -12,6 +12,7 @@ $sclSourcePath = Join-Path $temp 'FB_Valve.scl'
 $reportRoot = Join-Path $temp 'reports'
 $previewReportRoot = Join-Path $temp 'preview-reports'
 $sclPreviewReportRoot = Join-Path $temp 'scl-preview-reports'
+$staleReportRoot = Join-Path $temp 'stale-reports'
 
 try {
     New-Item -ItemType Directory -Path $temp -Force | Out-Null
@@ -88,6 +89,33 @@ END_FUNCTION_BLOCK
     if ($sclPreview.localValidation.importMode -ne 'external-source') { throw 'SCL preview must select external-source import mode.' }
     if ($sclPreview.preview.kind -ne 'external-source') { throw 'SCL preview must record the external-source preview kind.' }
     Write-Output 'PASS: SCL proposal apply stages ImportSources mode during local preview'
+
+    $staleOriginalPath = Join-Path $temp 'FB_Stale.original.scl'
+    $staleProposedPath = Join-Path $temp 'FB_Stale.proposed.scl'
+    $staleText = 'FUNCTION_BLOCK "FB_Stale"`r`nBEGIN`r`n   #Run := TRUE;`r`nEND_FUNCTION_BLOCK`r`n'
+    [IO.File]::WriteAllText($staleOriginalPath, $staleText, [Text.UTF8Encoding]::new($true))
+    [IO.File]::WriteAllText($staleProposedPath, $staleText.Replace('#Run := TRUE;', '#Run := FALSE;'), [Text.UTF8Encoding]::new($true))
+    $staleOriginalHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $staleOriginalPath).Hash.ToLowerInvariant()
+    $staleProposedHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $staleProposedPath).Hash.ToLowerInvariant()
+    [IO.File]::AppendAllText($staleOriginalPath, '// changed after proposal`r`n', [Text.UTF8Encoding]::new($true))
+    $staleProposalPath = Join-Path $temp 'stale-proposal.json'
+    [ordered]@{
+        schemaVersion = 1; status = 'PROPOSED'; readOnly = $true; applied = $false; tiaMutation = $false
+        projectPath = $projectFile; sourceRoot = $temp; plc = 'PLC_1'
+        block = [ordered]@{ name = 'FB_Stale'; path = 'FB_Stale'; language = 'SCL' }
+        source = [ordered]@{ originalPath = $staleOriginalPath; proposedPath = $staleProposedPath; proposedSha256 = $staleProposedHash; originalSha256 = $staleOriginalHash; matchCount = 1; extension = '.scl' }
+        checks = [ordered]@{ exactBlockMatch = $true; sclOnly = $true; noBlockingFindings = $true; uniqueReplacement = $true; originalUntouched = $true }
+        findings = @()
+    } | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $staleProposalPath -Encoding UTF8
+    $staleFailed = $false
+    try { & $script -ProposalPath $staleProposalPath -ProjectFile $projectFile -ReportRoot $staleReportRoot 2>&1 | Out-Null } catch { $staleFailed = $true }
+    if (-not $staleFailed) { throw 'A stale original source should have been rejected.' }
+    $staleReports = @(Get-ChildItem -LiteralPath $staleReportRoot -Recurse -File -Filter 'apply-report.json')
+    if ($staleReports.Count -ne 1) { throw 'A stale source rejection must leave one report.' }
+    $staleReport = Get-Content -Raw -LiteralPath $staleReports[0].FullName | ConvertFrom-Json
+    if ($staleReport.status -ne 'BLOCKED' -or $staleReport.tiaMutation -ne $false) { throw 'Stale source rejection must be BLOCKED without TIA mutation.' }
+    if ($staleReport.errors[0] -notmatch 'original source hash') { throw 'Stale source rejection did not identify the original hash mismatch.' }
+    Write-Output 'PASS: proposal apply rejects a stale original source before staging or TIA access'
 }
 finally {
     if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Recurse -Force }
