@@ -236,6 +236,26 @@
 - [x] Verify the generated project can be opened and inspected by V20 Openness and that the standards checker passes. The checker leaves one non-blocking `MISSING_BLOCK_COMMENT` warning because the scaffold source comments are not imported as block header metadata.
 - [x] Add a reusable single-session MCP sequence runner and document the mixed LAD/SCL export fallback discovered during acceptance.
 
+### Task 3.3: Document deterministic creation recipes for projects, I/O and data blocks
+
+**Files:**
+- Create: `10-kb/20-recetas/R05-proyecto-nuevo.md`
+- Create: `10-kb/20-recetas/R06-tags-io.md`
+- Create: `10-kb/20-recetas/R07-udt-db.md`
+- Create: `30-tools/tests/Test-TiaCreationRecipes.ps1`
+- Modify: `TIA-Claude_Portable/tests/Test-PortablePackageContent.ps1`
+
+**Interfaces:**
+- Consumes: the verified V20 `tia-create` tool manifest and its `ScaffoldProject`, tag and
+  `PlcBuildAndImport` contracts.
+- Produces: deterministic, human-reviewable recipes for the first three creation workflows,
+  with dry-run gates, catalog resolution, dependency order and portable-package coverage.
+
+- [x] Document new-project scaffolding with `ScaffoldProject` and hardware catalog resolution.
+- [x] Document tag-table creation/import and the requirement for detailed readback evidence.
+- [x] Document UDT → global DB → logic dependency order and the DSL boundary for complex SCL.
+- [x] Add a deterministic recipe-content test and include it in the portable core contract.
+
 ## Phase 4: HMI and simulation
 
 ### Task 4.1: Build the HMI knowledge base

@@ -44,9 +44,9 @@ Si falla        los modos de fallo conocidos y su arreglo
 
 | # | Receta | Estado |
 |---|---|---|
-| R05 | Proyecto nuevo desde cero | ⬜ |
-| R06 | De una lista de E/S a tablas de tags importadas | ⬜ |
-| R07 | UDTs y bloques de datos | ⬜ |
+| [R05](R05-proyecto-nuevo.md) | Proyecto nuevo desde cero | 📄 documentada; scaffold V20 verificado en fixture |
+| [R06](R06-tags-io.md) | De una lista de E/S a tablas de tags importadas | 📄 procedimiento documentado |
+| [R07](R07-udt-db.md) | UDTs y bloques de datos | 📄 procedimiento documentado |
 
 ### Tanda 3 — lógica ✅
 

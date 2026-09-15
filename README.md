@@ -63,7 +63,7 @@ Para escritura hay que relanzar el servidor con `--allow-write` ([ADR-006](00-me
 30-tools\scripts\Run-WorkspaceChecks.ps1
 ```
 
-El último informe verificó **30 PASS, 0 WARN y 0 BLOCKED**. La prueba E2E de escritura completa
+El último informe verificó **31 PASS, 0 WARN y 0 BLOCKED**. La prueba E2E de escritura completa
 está en [`70-runs/e2e/20260915-082218/report.json`](70-runs/e2e/20260915-082218/report.json) y el
 estado de entorno en [`70-runs/environment/latest.json`](70-runs/environment/latest.json).
 El barrido de estándares de los siete ejemplos está en

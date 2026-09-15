@@ -27,7 +27,7 @@ try {
     foreach ($tool in @('Invoke-TiaProjectAnalysis.ps1', 'New-TiaSclProposal.ps1', 'Invoke-TiaWorkflow.ps1', 'Invoke-TiaSclProposalApply.ps1', 'New-TiaIoList.ps1', 'New-TiaFunctionalDescription.ps1')) {
         if (-not (Test-Path -LiteralPath (Join-Path $core "30-tools\scripts\$tool") -PathType Leaf)) { throw "Core package is missing semantic tool: $tool" }
     }
-    foreach ($test in @('Test-TiaProjectAnalysis.ps1', 'Test-TiaSclProposal.ps1', 'Test-TiaSclProposalApply.ps1', 'Test-TiaIoList.ps1', 'Test-TiaFunctionalDescription.ps1', 'Test-TiaWorkflow.ps1')) {
+    foreach ($test in @('Test-TiaProjectAnalysis.ps1', 'Test-TiaSclProposal.ps1', 'Test-TiaSclProposalApply.ps1', 'Test-TiaIoList.ps1', 'Test-TiaFunctionalDescription.ps1', 'Test-TiaWorkflow.ps1', 'Test-TiaCreationRecipes.ps1')) {
         if (-not (Test-Path -LiteralPath (Join-Path $core "30-tools\tests\$test") -PathType Leaf)) { throw "Core package is missing semantic test: $test" }
     }
     foreach ($guide in @('README-INSTALL.md', 'docs\arquitectura.md', 'docs\funcionamiento.md', 'docs\harnesses.md', 'docs\prompt-claude-code.md')) {
