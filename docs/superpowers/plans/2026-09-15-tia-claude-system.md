@@ -507,7 +507,30 @@ intentionally independent from the green local workspace checks.
   functional-description sections.
 - [x] Implement deterministic read-only generators and add both to the workspace checks.
 - [x] Document the recipes and include both tools/tests in the portable content contract.
-- [ ] Run R15/R16 on a live project after obtaining a detailed `GetTagTables/GetTags` snapshot.
+- [x] Run R15/R16 on the live V20 sorting-plant example using an actual `ExportPlcTagTable` XML
+  snapshot, merged into the block inventory. Evidence remains local in
+  `70-runs/live-read/sorting-plant-{analysis,io-list,functional-description}.*`.
+
+### Task 9.2: Add a compatibility adapter for real Openness tag-table exports
+
+**Files:**
+- Create: `30-tools/scripts/Convert-TiaTagTableExportToInventory.ps1`
+- Create: `30-tools/tests/Test-ConvertTiaTagTableExport.ps1`
+- Modify: `30-tools/scripts/README.md`
+- Modify: `30-tools/scripts/Run-WorkspaceChecks.ps1`
+- Modify: `TIA-Claude_Portable/tests/Test-PortablePackageContent.ps1`
+
+**Interfaces:**
+- Consumes: XML from `ExportPlcTagTable`, obtained directly or through
+  `FindTools` → `CallTool` on `tia-create lite`.
+- Produces: the detailed, read-only inventory schema consumed by R15, preserving names, types,
+  logical addresses and multilingual comments without guessing missing data.
+
+- [x] Add a fixture test with preferred and fallback cultures.
+- [x] Implement the converter and document the `CallTool` compatibility path.
+- [x] Include the converter and its test in the portable content contract.
+- [x] Run the converter and R15/R16 against a live example and keep the evidence outside public
+  version control unless the project owner authorizes publication.
 
 ## Final acceptance gate
 
