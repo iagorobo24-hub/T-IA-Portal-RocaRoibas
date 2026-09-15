@@ -9,6 +9,7 @@ Herramientas de consola para operar TIA Portal por Openness sin depender de un c
 | [`Invoke-McpToolsSmoke.ps1`](Invoke-McpToolsSmoke.ps1) | Comprueba transporte stdio y roster de herramientas sin tocar TIA |
 | [`Invoke-McpToolCall.ps1`](Invoke-McpToolCall.ps1) | Ejecuta una llamada MCP aislada para fixtures y pruebas |
 | [`Invoke-McpToolSequence.ps1`](Invoke-McpToolSequence.ps1) | Ejecuta una secuencia ordenada sobre una única sesión MCP |
+| [`Inspect-McpToolSchemas.ps1`](Inspect-McpToolSchemas.ps1) | Lee `tools/list` y guarda las firmas exactas del roster MCP sin conectar a un proyecto |
 | [`Invoke-AgentDemoScaffold.ps1`](Invoke-AgentDemoScaffold.ps1) | Dry-run y scaffold controlado del proyecto PLC de aceptación |
 | [`Export-HarnessAdapter.ps1`](Export-HarnessAdapter.ps1) | Exporta perfiles a Claude Code, Codex u OpenCode sin tocar sus configuraciones |
 | [`Migrate-Examples.ps1`](Migrate-Examples.ps1) | Migra, compila e inventaría los proyectos de `50-examples` |
@@ -78,6 +79,24 @@ Attach/Open → leer → Close/Disconnect`.
 La prueba permanente `Test-McpToolSequence.ps1` verifica el protocolo y que todas las llamadas
 quedan registradas en el mismo informe. El helper no concede permisos de escritura: los decide
 el perfil del ejecutable.
+
+## `Inspect-McpToolSchemas.ps1`
+
+El perfil `lite` mantiene pequeño el roster visible, pero no elimina capacidades: `tia-create`
+puede exponerlas a través de `FindTools`/`CallTool`. Cuando haya que automatizar una capacidad no
+listada, inspecciona primero el esquema real con el perfil `full`:
+
+```powershell
+.\Inspect-McpToolSchemas.ps1 `
+  -ExecutablePath "..\mcp\tia-create\bin\v20\TiaMcpServer.exe" `
+  -Arguments "--tia-major-version 20 --profile full" `
+  -ToolName CheckDownloadReadiness,DownloadToPlc,GetDeviceIpAddress,GetOnlineState `
+  -OutputPath "..\..\70-runs\mcp\schemas.json"
+```
+
+Es una operación de solo lectura: solo ejecuta el handshake y `tools/list`. No conecta con TIA,
+no abre proyectos y no modifica red, PLC ni archivos de proyecto. La salida es la fuente de verdad
+para construir el JSON de `CallTool` y evita inventar nombres o parámetros.
 
 ## `Invoke-TiaProjectAnalysis.ps1`
 

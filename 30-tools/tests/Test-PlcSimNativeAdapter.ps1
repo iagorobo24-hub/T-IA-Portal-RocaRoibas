@@ -42,4 +42,16 @@ if ($runtime.status -ne 'ready' -or $runtime.powerOnDisposable -ne $true -or
     $runtime.registeredAfter -ne $runtime.registeredBefore) {
     throw "Disposable PLCSIM power cycle was not clean: $runtimeOutput"
 }
-Write-Output 'PASS: native PLCSIM adapter inspects, powers on/off, and unregisters a disposable CPU'
+
+# Probe the persistent acceptance path with an impossible adapter name. It must
+# refuse before registration/power-on and return the available adapter list;
+# this remains safe on machines where the real Siemens adapter is configured.
+$acceptanceOutput = & $adapter --register-acceptance --interface '__TIA_CLAUDE_TEST_NO_SUCH_ADAPTER__' 2>&1 | Out-String
+if ($LASTEXITCODE -eq 0) { throw "Acceptance probe unexpectedly started a CPU: $acceptanceOutput" }
+$acceptanceJsonLine = @($acceptanceOutput -split "`r?`n" | Where-Object { $_.TrimStart().StartsWith('{') } | Select-Object -First 1)
+if ($acceptanceJsonLine.Count -ne 1) { throw "Acceptance path returned no JSON diagnostics: $acceptanceOutput" }
+$acceptance = $acceptanceJsonLine | ConvertFrom-Json
+if ($acceptance.status -ne 'failed' -or $acceptance.stage -notin @('select-interface', 'enumerate-interfaces')) {
+    throw "Acceptance path did not fail safely during interface selection: $acceptanceOutput"
+}
+Write-Output 'PASS: native PLCSIM adapter inspects, powers on/off, cleans up, and gates persistent acceptance'

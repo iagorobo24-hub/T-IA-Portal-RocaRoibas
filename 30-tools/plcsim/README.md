@@ -48,3 +48,22 @@ comportamiento del PLC. `--power-on-disposable` añade un arranque y apagado
 controlados de la CPU virtual, pero tampoco descarga un proyecto ni lee/escribe
 tags. La descarga y la prueba de comportamiento requieren una fase de
 simulación explícita y sus propios gates de seguridad.
+
+## Instancia persistente para aceptación
+
+Cuando el preflight confirme que el adaptador está operativo, se puede registrar una CPU
+virtual persistente con el mismo tipo que el proyecto Sorting Plant (`CPU 1516F-3 PN/DP`):
+
+```powershell
+.\30-tools\plcsim\bin\v6\tia-claude-plcsim-adapter.exe `
+  --register-acceptance `
+  --name TIAClaudeAcceptance_1516F `
+  --ip 192.168.0.1 `
+  --interface "Siemens PLCSIM Virtual Ethernet Adapter"
+```
+
+El proceso enumera el adaptador, lo enlaza a `IE1`, configura la IP, aplica el binding de
+PLCSIM, enciende la CPU y permanece vivo. Mientras está vivo, TIA puede descargar el proyecto
+al target virtual. Para terminarlo se envía `stop` por stdin; entonces apaga, desregistra y
+libera la instancia. Si el adaptador no está operativo, el comando termina sin registrar una
+CPU y devuelve las interfaces disponibles. No se debe usar este modo con una interfaz física.
