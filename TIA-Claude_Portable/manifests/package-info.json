@@ -15,17 +15,19 @@
     "smoke": "55 lite tools; ScaffoldProject apply verified in disposable V20 project"
   },
   "plcsimAdvancedRuntimeApi": {
-    "status": "installed-and-read-only-probe-verified",
+    "status": "installed-and-native-lifecycle-probe-verified",
     "version": "6.0.0.1",
     "apiDll": "C:\\Program Files (x86)\\Common Files\\Siemens\\PLCSIMADV\\API\\6.0\\Siemens.Simatic.Simulation.Runtime.Api.x64.dll",
     "redistributed": false,
-    "note": "Siemens runtime binaries remain installed locally; the portable package ships only the probe source."
+    "nativeAdapter": "source-included; build requires LLVM clang-cl, Visual Studio C++ Build Tools and Windows SDK",
+    "lifecycle": "register-disposable then unregister verified; no PowerOn or download performed",
+    "note": "Siemens runtime binaries remain installed locally; the portable package ships source and tests, not vendor DLLs."
   },
   "distribution": {
     "core": {
       "path": "dist/TIA-Claude_Core",
-      "files": 242,
-      "bytes": 21384616,
+      "files": 244,
+      "bytes": 21394870,
       "manifest": "dist/TIA-Claude_Core/manifests/package-manifest.json"
     },
     "examples": {
@@ -36,5 +38,5 @@
     }
   },
   "legacyMonolithicWorkspace": "workspace/",
-  "generatedUtc": "2026-09-15T08:51:00Z"
+  "generatedUtc": "2026-09-15T09:19:00Z"
 }
