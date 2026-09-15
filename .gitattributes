@@ -1,0 +1,18 @@
+# Proyectos y archivos TIA: binarios, git no debe intentar mergearlos
+*.ap1*   binary
+*.ap2*   binary
+*.zap1*  binary
+*.zap2*  binary
+*.als1*  binary
+*.als2*  binary
+*.s7res  binary
+
+# Fuentes textuales de TIA: sí diffean
+*.s7dcl  text eol=crlf
+*.scl    text eol=crlf
+*.udt    text eol=crlf
+*.db     text eol=crlf
+
+# Scripts
+*.ps1    text eol=crlf
+*.cmd    text eol=crlf

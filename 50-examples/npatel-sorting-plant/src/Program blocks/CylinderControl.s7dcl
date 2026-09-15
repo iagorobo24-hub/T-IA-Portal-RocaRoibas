@@ -1,0 +1,79 @@
+﻿{
+    S7_Optimized := "TRUE";
+    S7_Language := "LAD";
+}
+FUNCTION_BLOCK "CylinderControl"
+    VAR_INPUT 
+        "Extend Command" : Bool;
+        "Retract Command" : Bool;
+        "Limit Switch Not Extended" : Bool;
+        "Limit Switch Retracted" : Bool;
+    END_VAR
+    VAR_OUTPUT 
+        Fault : Bool;
+        "interlock" : Bool;
+        "Extend Cylinder" : Bool;
+        "Retract Cylinder" : Bool;
+    END_VAR
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_U4"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            Contact( #"Extend Command" )
+            Contact( #"Retract Command" )
+            Coil( #Fault )
+        END_RUNG
+        RUNG wire#powerrail
+            Contact( #Fault )
+            ReturnCoil( FALSE )
+        END_RUNG
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_4sd"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            I_Contact( #"Limit Switch Retracted" )
+            I_Contact( #Fault )
+            Coil( #interlock )
+        END_RUNG
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_4wQ"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            Contact( #"Extend Command" )
+            I_Contact( #"Retract Command" )
+            S_Coil( #"Extend Cylinder" )
+        END_RUNG
+        RUNG wire#powerrail
+            Contact( #"Retract Command" )
+            I_Contact( #"Extend Command" )
+            R_Coil( #"Extend Cylinder" )
+        END_RUNG
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_57d"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            I_Contact( #"Extend Cylinder" )
+            Coil( #"Retract Cylinder" )
+        END_RUNG
+
+    END_NETWORK
+
+END_FUNCTION_BLOCK

@@ -1,0 +1,75 @@
+﻿{
+    S7_Optimized := "TRUE";
+    S7_Language := "LAD";
+}
+FUNCTION "ResetSimulation" : Void
+    VAR_OUTPUT 
+        osWorkpieceCube_SetActive : Bool;
+        osWorkpieceCylinder_SetActive : Bool;
+        pcCylinderHeadRetract_SetActive : Bool;
+        pcCylinderHeadExtend_SetActive : Bool;
+        scConveyorLongConstSpeed_SetActive : Bool;
+        scConveyorLongVarSpeed_SetActive : Bool;
+        scConveyorShortConstSpeed_SetActive : Bool;
+        scConveyorShortVarSpeed_SetActive : Bool;
+        scConveyorLongVarSpeed_SetSpeed : Real;
+        scConveyorShortVarSpeed_SetSpeed : Real;
+        "Workpiece Counter" : USInt;
+        "Cylindrical Counter" : USInt;
+        "Cube Counter" : USInt;
+    END_VAR
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_uK"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            R_Coil( #osWorkpieceCylinder_SetActive )
+        END_RUNG
+        RUNG wire#powerrail
+            R_Coil( #osWorkpieceCube_SetActive )
+        END_RUNG
+        RUNG wire#powerrail
+            R_Coil( #pcCylinderHeadRetract_SetActive )
+        END_RUNG
+        RUNG wire#powerrail
+            R_Coil( #pcCylinderHeadExtend_SetActive )
+        END_RUNG
+        RUNG wire#powerrail
+            R_Coil( #scConveyorLongConstSpeed_SetActive )
+        END_RUNG
+        RUNG wire#powerrail
+            R_Coil( #scConveyorLongVarSpeed_SetActive )
+        END_RUNG
+        RUNG wire#powerrail
+            R_Coil( #scConveyorShortConstSpeed_SetActive )
+        END_RUNG
+        RUNG wire#powerrail
+            R_Coil( #scConveyorShortVarSpeed_SetActive )
+        END_RUNG
+        RUNG wire#powerrail
+            Move{
+                Card := 2; 
+                DisableENO := TRUE
+            }(
+                IN := 0.0, 
+                OUT1 => #scConveyorLongVarSpeed_SetSpeed, 
+                OUT2 => #scConveyorShortVarSpeed_SetSpeed
+            )
+        END_RUNG
+        RUNG wire#powerrail
+            Move{
+                Card := 3; 
+                DisableENO := TRUE
+            }(
+                IN := 0, 
+                OUT1 => #"Workpiece Counter", 
+                OUT2 => #"Cylindrical Counter", 
+                OUT3 => #"Cube Counter"
+            )
+        END_RUNG
+
+    END_NETWORK
+
+END_FUNCTION

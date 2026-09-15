@@ -1,0 +1,6 @@
+﻿        {
+           S7_Optimized := "TRUE";
+           S7_StandardRetain := "FALSE"
+        }
+    DATA_BLOCK Intersection_DB : Intersection
+    END_DATA_BLOCK

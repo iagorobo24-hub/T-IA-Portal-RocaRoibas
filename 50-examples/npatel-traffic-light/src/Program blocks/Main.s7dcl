@@ -1,0 +1,40 @@
+﻿{
+    S7_Optimized := "TRUE";
+    S7_Language := "LAD";
+    S7_BlockTitle := "MLC_3Vz";
+}
+ORGANIZATION_BLOCK "Main"
+
+    {
+      S7_Language := "LAD"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            "Intersection_DB"(
+                northLightGreen => "northLightGreen", 
+                northLightYellow => "northLightYellow", 
+                northLightRed => "northLightRed", 
+                southLightGreen => "southLightGreen", 
+                southLightYellow => "southLightYellow", 
+                southLightRed => "southLightRed", 
+                eastLightGreen => "eastLightGreen", 
+                eastLightYellow => "eastLightYellow", 
+                eastLightRed => "eastLightRed", 
+                westLightGreen => "westLightGreen", 
+                westLightYellow => "westLightYellow", 
+                westLightRed => "westLightRed"
+            )
+        END_RUNG
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD"
+    }
+    NETWORK
+        RUNG wire#powerrail
+        END_RUNG
+
+    END_NETWORK
+
+END_ORGANIZATION_BLOCK

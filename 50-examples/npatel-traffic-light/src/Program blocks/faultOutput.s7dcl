@@ -1,0 +1,42 @@
+﻿{
+    S7_Optimized := "TRUE";
+    S7_Language := "LAD";
+}
+FUNCTION "faultOutput" : Void
+    VAR_OUTPUT 
+        redLight : Bool;
+        greenLight : Bool;
+        yellowLight : Bool;
+        "interlock" : Bool;
+    END_VAR
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_4f2"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            Contact( "Clock_1Hz" )
+            Coil( #redLight )
+        END_RUNG
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_57b"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            R_Coil( #interlock )
+        END_RUNG
+        RUNG wire#powerrail
+            R_Coil( #greenLight )
+        END_RUNG
+        RUNG wire#powerrail
+            R_Coil( #yellowLight )
+        END_RUNG
+
+    END_NETWORK
+
+END_FUNCTION

@@ -1,0 +1,23 @@
+﻿<root>
+  <Comment Id="MLC_MW">
+    <MultiLanguageText Lang="en-US">Trigger a fault if the conveyor is controlled both by constant and variable mode</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_3iV">
+    <MultiLanguageText Lang="en-US">Fault</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_4dW">
+    <MultiLanguageText Lang="en-US">Set the interlock to true when conveyor is moving with constant or variable speed to indicate the conveyor is moving</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_4m8">
+    <MultiLanguageText Lang="en-US">Interlock</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_3fb">
+    <MultiLanguageText Lang="en-US">Variable or Constant mode</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_4Z6">
+    <MultiLanguageText Lang="en-US">If moving at constant speed, set var speed setpoint to 0.0 If moving at variable speed, set speed to input speed if less then max speed or else set max speed.</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_5CR">
+    <MultiLanguageText Lang="en-US">Var Speed Set Speed Calculation</MultiLanguageText>
+  </Comment>
+</root>

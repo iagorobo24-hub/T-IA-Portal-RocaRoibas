@@ -1,0 +1,6 @@
+﻿        {
+           S7_Optimized := "TRUE";
+           S7_StandardRetain := "FALSE"
+        }
+    DATA_BLOCK SortingPlantControl_DB : SortingPlantControl
+    END_DATA_BLOCK

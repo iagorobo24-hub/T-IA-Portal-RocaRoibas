@@ -1,0 +1,25 @@
+﻿{
+    S7_Optimized := "TRUE";
+    S7_Language := "LAD";
+    S7_BlockTitle := "MLC_32k";
+}
+ORGANIZATION_BLOCK "Main"
+
+    {
+      S7_Language := "LAD"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            "motorControl_DB"(
+                Enable := "S7_Data".FROM_IOT2050.controlButton, 
+                "Motor Status" := "S7_Data".TO_IOT2050.motorStatus, 
+                Error =>  , 
+                Current => "S7_Data".TO_IOT2050.motorCurrent, 
+                Voltage => "S7_Data".TO_IOT2050.motorVoltage, 
+                Temperature => "S7_Data".TO_IOT2050.motorTemperature
+            )
+        END_RUNG
+
+    END_NETWORK
+
+END_ORGANIZATION_BLOCK

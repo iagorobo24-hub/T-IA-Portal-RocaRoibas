@@ -1,0 +1,116 @@
+FUNCTION_BLOCK "FB_ValveOnOff"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+AUTHOR : JMellid
+FAMILY : Valves
+//==============================================================================
+// Mando de una valvula todo-nada con dos finales de carrera.
+//
+// Una sola salida (Solenoid): energizada = abrir, desenergizada = cerrar. Es el
+// caso mas comun y el mas seguro: si se corta la alimentacion, la valvula va a
+// su posicion de reposo por muelle.
+//
+// Vigila el tiempo de carrera en los dos sentidos y detecta la combinacion
+// imposible de los dos finales de carrera activos a la vez, que casi siempre es
+// un cable cortado o un sensor mal ajustado.
+//
+// Ver 10-kb/20-recetas/R09-bloque-valvula.md
+//==============================================================================
+   VAR_INPUT
+      CmdOpen       : Bool;               // Orden de apertura
+      CmdClose      : Bool;               // Orden de cierre. Manda sobre CmdOpen
+      CmdReset      : Bool;               // Rearme del fallo enclavado
+      Interlock     : Bool := TRUE;       // TRUE = permitido abrir
+      FbOpen        : Bool;               // Final de carrera de abierta
+      FbClosed      : Bool;               // Final de carrera de cerrada
+      FbUsed        : Bool := TRUE;       // FALSE si no hay finales de carrera
+      TravelTimeout : Time := T#5S;       // Tiempo maximo de carrera
+   END_VAR
+
+   VAR_OUTPUT
+      Solenoid  : Bool;                   // Salida a la electrovalvula
+      IsOpen    : Bool;                   // Confirmada abierta
+      IsClosed   : Bool;                  // Confirmada cerrada
+      Moving    : Bool;                   // En transito
+      Ready     : Bool;                   // Disponible para maniobrar
+      Fault     : Bool;                   // Fallo enclavado
+      FaultCode : Int;                    // 0 = sin fallo, ver constantes
+   END_VAR
+
+   VAR
+      statOpenLatch : Bool;               // Memoria de la orden de apertura
+      statFault     : Bool;
+      statFaultCode : Int;
+      tonTravel : TON_TIME;               // Vigila el tiempo de carrera
+   END_VAR
+
+   VAR_TEMP
+      tempAtTarget : Bool;                // Esta en la posicion pedida
+   END_VAR
+
+   VAR CONSTANT
+      FAULT_NONE          : Int := 0;
+      FAULT_TIMEOUT_OPEN  : Int := 201;   // No llego a abierta a tiempo
+      FAULT_TIMEOUT_CLOSE : Int := 202;   // No llego a cerrada a tiempo
+      FAULT_BOTH_LIMITS   : Int := 203;   // Los dos finales a la vez: imposible
+   END_VAR
+
+BEGIN
+
+   REGION 1 - Rearme del fallo
+      IF #CmdReset THEN
+         #statFault     := FALSE;
+         #statFaultCode := #FAULT_NONE;
+      END_IF;
+   END_REGION
+
+   REGION 2 - Memoria de la orden
+      // El cierre, el fallo y el enclavamiento mandan sobre la apertura.
+      IF #CmdClose OR #statFault OR NOT #Interlock THEN
+         #statOpenLatch := FALSE;
+      ELSIF #CmdOpen THEN
+         #statOpenLatch := TRUE;
+      END_IF;
+   END_REGION
+
+   REGION 3 - Deteccion de fallo
+      // Los dos finales activos a la vez no puede pasar fisicamente: cable
+      // cortado, sensor mal ajustado o un NC cableado como NA. Se comprueba
+      // antes que el tiempo de carrera porque invalida cualquier otra lectura.
+      IF #FbUsed AND #FbOpen AND #FbClosed THEN
+         #statFault     := TRUE;
+         #statFaultCode := #FAULT_BOTH_LIMITS;
+      END_IF;
+
+      // En destino cuando el final de carrera que toca esta activo.
+      IF #statOpenLatch THEN
+         #tempAtTarget := #FbOpen;
+      ELSE
+         #tempAtTarget := #FbClosed;
+      END_IF;
+
+      #tonTravel(IN := #FbUsed AND NOT #tempAtTarget AND NOT #statFault,
+                 PT := #TravelTimeout);
+
+      IF #tonTravel.Q AND NOT #statFault THEN
+         #statFault := TRUE;
+         IF #statOpenLatch THEN
+            #statFaultCode := #FAULT_TIMEOUT_OPEN;
+         ELSE
+            #statFaultCode := #FAULT_TIMEOUT_CLOSE;
+         END_IF;
+      END_IF;
+   END_REGION
+
+   REGION 4 - Salidas
+      // Con fallo la valvula va a reposo: se desenergiza y cierra sola.
+      #Solenoid  := #statOpenLatch AND NOT #statFault;
+      #IsOpen    := #FbOpen AND NOT #FbClosed OR NOT #FbUsed AND #statOpenLatch;
+      #IsClosed  := #FbClosed AND NOT #FbOpen OR NOT #FbUsed AND NOT #statOpenLatch;
+      #Moving    := #FbUsed AND NOT #tempAtTarget AND NOT #statFault;
+      #Ready     := #Interlock AND NOT #statFault;
+      #Fault     := #statFault;
+      #FaultCode := #statFaultCode;
+   END_REGION
+
+END_FUNCTION_BLOCK

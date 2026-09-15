@@ -1,0 +1,47 @@
+﻿        {
+           S7_Optimized := "TRUE";
+           S7_StandardRetain := "FALSE"
+        }
+    DATA_BLOCK MQTTdata
+        VAR
+            enable : Bool;
+            { S7_Setpoint := "False" }
+            tcpParam : _.LMQTT_typeTcpConnParamData;
+            mqttParam : _.LMQTT_typeParamData;
+            mqttDataPublish : _.LMQTT_typePublishData;
+            mqttDataSubscribe : _.LMQTT_typeSubscribeData;
+            recievedData : Array[0..4] of _.LMQTT_typeSubscriptionData;
+            recDataCounter : UInt;
+        END_VAR
+
+        VAR RETAIN
+            automaticPublish : Bool;
+            automaticReconnect : Bool;
+        END_VAR
+
+        VAR
+            status : STRUCT
+                tcpOk : Bool;
+                mqttOk : Bool;
+                statusID : Int;
+                statusCode : DWord;
+                error : Bool;
+            END_STRUCT;
+            mqttSubscriptionData : _.LMQTT_typeSubscriptionData;
+        END_VAR
+
+        enable := true;
+        tcpParam.connectionID := 16#10;
+        tcpParam.ipAdressBroker[0] := 192;
+        tcpParam.ipAdressBroker[1] := 168;
+        tcpParam.ipAdressBroker[2] := 200;
+        tcpParam.ipAdressBroker[3] := 1;
+        tcpParam.mqttPort := 1883;
+        mqttParam.connectFlag.cleanSession := true;
+        mqttParam.clientIdentifier := 'SIMATIC PLC';
+        mqttDataPublish.publishTopic := WSTRING#'TO_IOT2050';
+        mqttDataPublish.publishMessageData := WSTRING#'';
+        mqttDataSubscribe.subscriptionTopic := WSTRING#'FROM_IOT2050';
+        automaticReconnect := true;
+
+    END_DATA_BLOCK

@@ -1,0 +1,14 @@
+﻿<root>
+  <Comment Id="MLC_U4">
+    <MultiLanguageText Lang="en-US">Trigger fault when the cylinder is set to extend and retract at the same time</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_4sd">
+    <MultiLanguageText Lang="en-US">Turn ON the inerlock when the Cylinder is Not in Retracted position</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_4wQ">
+    <MultiLanguageText Lang="en-US">Set or Reset extend cylinder based on extend or retract command</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_57d">
+    <MultiLanguageText Lang="en-US">Set retract to true when Cylinder is not extended</MultiLanguageText>
+  </Comment>
+</root>

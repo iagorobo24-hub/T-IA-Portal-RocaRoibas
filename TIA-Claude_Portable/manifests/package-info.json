@@ -1,0 +1,31 @@
+{
+  "packageName": "TIA-Claude_Portable",
+  "packageVersion": "0.2.0",
+  "tiaCanonical": 20,
+  "dotnetSdk": "10.0.401",
+  "tiaInspect": {
+    "path": "workspace/30-tools/mcp/tia-inspect/bin/v20/TiaMcpServer.exe",
+    "sha256": "7e56f5db294de7ae6b8e65ba88f0f5de141e8fd0402fc7041a67687d650cd3e8",
+    "bytes": 371712
+  },
+  "tiaCreate": {
+    "status": "not-installed",
+    "required": "V20 runtime, profile lite"
+  },
+  "distribution": {
+    "core": {
+      "path": "dist/TIA-Claude_Core",
+      "files": 146,
+      "bytes": 7297993,
+      "manifest": "dist/TIA-Claude_Core/manifests/package-manifest.json"
+    },
+    "examples": {
+      "path": "dist/TIA-Claude_Examples",
+      "files": 605,
+      "bytes": 192429939,
+      "manifest": "dist/TIA-Claude_Examples/manifests/examples-manifest.json"
+    }
+  },
+  "legacyMonolithicWorkspace": "workspace/",
+  "generatedUtc": "2026-09-15T06:38:10Z"
+}

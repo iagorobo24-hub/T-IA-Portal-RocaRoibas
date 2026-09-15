@@ -1,0 +1,67 @@
+[CmdletBinding()]
+param(
+    [string]$WorkspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path,
+    [ValidateSet('read', 'write')]
+    [string]$Profile = 'read',
+    [string]$OutputPath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path '.mcp.json'),
+    [string]$LocalManifestPath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path '30-tools\mcp\servers.local.json'),
+    [switch]$AcknowledgeWriteProfile
+)
+
+$ErrorActionPreference = 'Stop'
+$WorkspaceRoot = [IO.Path]::GetFullPath($WorkspaceRoot)
+$OutputPath = [IO.Path]::GetFullPath($OutputPath)
+$LocalManifestPath = [IO.Path]::GetFullPath($LocalManifestPath)
+
+if ($Profile -eq 'write' -and -not $AcknowledgeWriteProfile) {
+    throw "Generating the write profile requires -AcknowledgeWriteProfile. This profile exposes project-mutating MCP tools."
+}
+
+$manifestPath = Join-Path $WorkspaceRoot '30-tools\mcp\servers.json'
+if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+    throw "Missing server manifest: $manifestPath"
+}
+
+$manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+$profileObject = $manifest.profiles.PSObject.Properties[$Profile].Value
+if ($null -eq $profileObject) {
+    throw "Unknown MCP profile '$Profile'."
+}
+
+$mcpServers = [ordered]@{}
+foreach ($serverProperty in $profileObject.servers.PSObject.Properties) {
+    $name = $serverProperty.Name
+    $serverDefinition = $manifest.servers.PSObject.Properties[$name].Value
+    if ($null -eq $serverDefinition) { throw "Profile '$Profile' references undefined server '$name'." }
+
+    $command = Join-Path $WorkspaceRoot ($serverDefinition.commandRelative -replace '/', '\')
+    if (-not (Test-Path -LiteralPath $command -PathType Leaf)) {
+        throw "Server executable does not exist: $command"
+    }
+
+    $args = @($serverDefinition.baseArgs) + @($serverProperty.Value.extraArgs)
+    $mcpServers[$name] = [ordered]@{
+        command = $command
+        args = $args
+    }
+}
+
+$config = [ordered]@{ mcpServers = $mcpServers }
+$outputDirectory = Split-Path -Parent $OutputPath
+$manifestDirectory = Split-Path -Parent $LocalManifestPath
+New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
+New-Item -ItemType Directory -Path $manifestDirectory -Force | Out-Null
+$config | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $OutputPath -Encoding UTF8
+
+$local = [ordered]@{
+    schemaVersion = 1
+    generatedAt = [DateTimeOffset]::Now.ToString('o')
+    profile = $Profile
+    mcpServers = $mcpServers
+}
+$local | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $LocalManifestPath -Encoding UTF8
+
+Write-Output "Generated $Profile MCP profile at $OutputPath"
+Write-Output "Local manifest written to $LocalManifestPath"
+$global:LASTEXITCODE = 0
+exit 0

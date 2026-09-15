@@ -1,0 +1,17 @@
+﻿<root>
+  <Comment Id="MLC_Z7">
+    <MultiLanguageText Lang="en-US">This block performs the RESET operation once the Reset button has been pressed</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_3Dm">
+    <MultiLanguageText Lang="en-US">Turn OFF Green</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_38w">
+    <MultiLanguageText Lang="en-US">Turn OFF Yellow</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_3cp">
+    <MultiLanguageText Lang="en-US">Turn ON Red</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_uF">
+    <MultiLanguageText Lang="en-US">Remove the Fault</MultiLanguageText>
+  </Comment>
+</root>

@@ -1,0 +1,36 @@
+﻿        {
+           S7_Optimized := "TRUE";
+           S7_StandardRetain := "FALSE"
+        }
+    DATA_BLOCK OPC_UA_DB
+        VAR
+            {
+               S7_Access := "ReadOnly := External";
+               S7_MLC := "MLC_4jH"
+            }
+            TO_IOT2050 : STRUCT
+                { S7_Access := "ReadOnly := External" }
+                heaterOutput : Real;
+                { S7_Access := "ReadOnly := External" }
+                coolerOutput : Real;
+                { S7_Access := "ReadOnly := External" }
+                actualTemperature : Real;
+                { S7_Access := "ReadOnly := External" }
+                heaterStatus : Bool;
+                { S7_Access := "ReadOnly := External" }
+                coolerStatus : Bool;
+            END_STRUCT;
+            { S7_MLC := "MLC_54x" }
+            FROM_IOT2050 : STRUCT
+                tempSetpoint : Real;
+            END_STRUCT;
+        END_VAR
+
+        TO_IOT2050.heaterOutput := 0.0;
+        TO_IOT2050.coolerOutput := 0.0;
+        TO_IOT2050.actualTemperature := 0.0;
+        TO_IOT2050.heaterStatus := false;
+        TO_IOT2050.coolerStatus := false;
+        FROM_IOT2050.tempSetpoint := 0.0;
+
+    END_DATA_BLOCK

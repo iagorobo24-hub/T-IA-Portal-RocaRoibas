@@ -1,0 +1,93 @@
+FUNCTION_BLOCK "FB_ModeManager"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+AUTHOR : JMellid
+FAMILY : Modes
+//==============================================================================
+// Gestor de modos de una maquina: Parado / Manual / Automatico.
+//
+// Una maquina esta SIEMPRE en exactamente uno de los tres. Este bloque es el
+// unico sitio donde se decide cual, y el resto del programa solo lee las
+// salidas. Si cada bloque decide por su cuenta si esta en manual, acabas con
+// estados contradictorios que nadie sabe reproducir.
+//
+// Precedencia, de mas fuerte a mas debil:
+//   1. Emergencia   (EmergencyOk = FALSE)  -> Parado, y no se sale sin rearme
+//   2. Orden de paro                        -> Parado
+//   3. Orden de manual                      -> Manual
+//   4. Orden de automatico, si hay permisos  -> Automatico
+//
+// Ver 10-kb/20-recetas/R11-modos-manual-auto.md
+//==============================================================================
+   VAR_INPUT
+      EmergencyOk     : Bool;             // TRUE = seta NO pulsada (contacto NC)
+      CmdStop         : Bool;             // Orden de paro
+      CmdManual       : Bool;             // Peticion de modo manual
+      CmdAuto         : Bool;             // Peticion de modo automatico
+      CmdReset        : Bool;             // Rearme tras emergencia
+      AutoConditions  : Bool := TRUE;     // Permisos para entrar en automatico
+      SequenceRunning : Bool;             // Hay una secuencia en marcha
+   END_VAR
+
+   VAR_OUTPUT
+      ModeStopped : Bool;                 // Modo Parado
+      ModeManual  : Bool;                 // Modo Manual
+      ModeAuto    : Bool;                 // Modo Automatico
+      Mode        : Int;                  // 0 Parado, 1 Manual, 2 Auto
+      EmergencyLatched : Bool;            // Emergencia enclavada, falta rearme
+   END_VAR
+
+   VAR
+      statMode      : Int;                // Modo actual
+      statEmergency : Bool;               // Memoria de la emergencia
+   END_VAR
+
+   VAR CONSTANT
+      MODE_STOPPED : Int := 0;
+      MODE_MANUAL  : Int := 1;
+      MODE_AUTO    : Int := 2;
+   END_VAR
+
+BEGIN
+
+   REGION 1 - Emergencia
+      // Se enclava al caer y solo la suelta un rearme CON la seta ya liberada.
+      // Rearmar con la seta pulsada no debe hacer nada: es el error clasico.
+      IF NOT #EmergencyOk THEN
+         #statEmergency := TRUE;
+      ELSIF #CmdReset THEN
+         #statEmergency := FALSE;
+      END_IF;
+   END_REGION
+
+   REGION 2 - Seleccion de modo
+      // Un unico IF/ELSIF: el orden de las ramas ES la precedencia, y al ser
+      // excluyentes es imposible acabar en dos modos a la vez.
+      IF #statEmergency OR NOT #EmergencyOk THEN
+         #statMode := #MODE_STOPPED;
+
+      ELSIF #CmdStop THEN
+         #statMode := #MODE_STOPPED;
+
+      ELSIF #CmdManual THEN
+         // Cambiar a manual con una secuencia en marcha la aborta. Es
+         // deliberado: el operador que pide manual quiere el mando ahora.
+         #statMode := #MODE_MANUAL;
+
+      ELSIF #CmdAuto AND #AutoConditions AND NOT #SequenceRunning THEN
+         // Solo se ENTRA en automatico desde reposo. Entrar con la secuencia
+         // a medias dejaria la maquina en un paso que nadie eligio.
+         #statMode := #MODE_AUTO;
+      END_IF;
+      // Sin ninguna orden, el modo se mantiene. Es intencionado.
+   END_REGION
+
+   REGION 3 - Salidas
+      #ModeStopped      := #statMode = #MODE_STOPPED;
+      #ModeManual       := #statMode = #MODE_MANUAL;
+      #ModeAuto         := #statMode = #MODE_AUTO;
+      #Mode             := #statMode;
+      #EmergencyLatched := #statEmergency;
+   END_REGION
+
+END_FUNCTION_BLOCK

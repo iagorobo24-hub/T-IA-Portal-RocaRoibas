@@ -1,0 +1,78 @@
+﻿{
+    S7_Optimized := "TRUE";
+    S7_Language := "LAD";
+    S7_BlockTitle := "MLC_3Cu";
+}
+ORGANIZATION_BLOCK "Main"
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_4kk"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            Contact( "Control_HMI".fromHMI.resetSimulation )
+            "ResetSimulation"(
+                osWorkpieceCube_SetActive => "osWorkpieceCube_SetActive", 
+                osWorkpieceCylinder_SetActive => "osWorkpieceCylinder_SetActive", 
+                pcCylinderHeadRetract_SetActive => "pcCylinderHeadExtend_SetActive", 
+                pcCylinderHeadExtend_SetActive => "pcCylinderHeadRetract_SetActive", 
+                scConveyorLongConstSpeed_SetActive => "scConveyorLongConstSpeed_SetActive", 
+                scConveyorLongVarSpeed_SetActive => "scConveyorLongVarSpeed_SetActive", 
+                scConveyorShortConstSpeed_SetActive => "scConveyorShortConstSpeed_SetActive", 
+                scConveyorShortVarSpeed_SetActive => "scConveyorShortVarSpeed_SetActive", 
+                scConveyorLongVarSpeed_SetSpeed => "scConveyorLongVarSpeed_SetSpeed", 
+                scConveyorShortVarSpeed_SetSpeed => "scConveyorShortVarSpeed_SetSpeed", 
+                "Workpiece Counter" => "Control_HMI".toHMI.numWorkpieces, 
+                "Cylindrical Counter" => "Control_HMI".toHMI.numCylinders, 
+                "Cube Counter" => "Control_HMI".toHMI.numCubes
+            )
+            Coil( "Control_HMI".toHMI.resetStatus )
+        END_RUNG
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            "SortingPlantControl_DB"(
+                "Light Sensor Cube" := "csLightSensorCube_Detected", 
+                "Light Sensor Cylinder" := "csLightSensorCylinder_Detected", 
+                "Light Sensor Workpiece" := "csLightSensorWorkpiece_Detected", 
+                "Limit Switch Cylinder NotExtended" := "csLimitSwitchCylinderNotExtended_Activated", 
+                "Limit Switch Cylinder Retracted" := "csLimitSwitchCylinderRetracted_Activated", 
+                "Cylinder Extend Command" := "Control_HMI".fromHMI.cylinderCommand.extendCylinder, 
+                "Cylinder Retract Command" := "Control_HMI".fromHMI.cylinderCommand.retractCylinder, 
+                "Long Conveyor Constant Speed Command" := "Control_HMI".fromHMI.longConveyor.constSpeedControl, 
+                "Long Conveyor Var Speed Command" := "Control_HMI".fromHMI.longConveyor.varSpeedControl, 
+                "Long Conveyor Var Speed Percentage" := "Control_HMI".fromHMI.longConveyor.varSpeedPercentage, 
+                "Short Conveyor Constant Speed Command" := "Control_HMI".fromHMI.shortConveyor.constSpeedControl, 
+                "Short Conveyor Var Speed Command" := "Control_HMI".fromHMI.shortConveyor.varSpeedControl, 
+                "Short Conveyor Var Speed Percentage" := "Control_HMI".fromHMI.shortConveyor.varSpeedPercentage, 
+                "Generate Workpieces" := "Control_HMI".fromHMI.generateWorkpieces, 
+                "Total Workpiece Counter Value" := "Control_HMI".toHMI.numWorkpieces, 
+                "Cylinder Counter Value" := "Control_HMI".toHMI.numCylinders, 
+                "Cube Counter Value" := "Control_HMI".toHMI.numCubes, 
+                Error => "Control_HMI".toHMI.Error, 
+                ErrorID => "Control_HMI".toHMI.ErrorID, 
+                "Workpiece Cylinder Generation" => "osWorkpieceCylinder_SetActive", 
+                "Workpiece Cube Generation" => "osWorkpieceCube_SetActive", 
+                "Cylinder Retract" => "pcCylinderHeadRetract_SetActive", 
+                "Cylinder Extend" => "pcCylinderHeadExtend_SetActive", 
+                "Conveyor Long Const Speed" => "scConveyorLongConstSpeed_SetActive", 
+                "Conveyor Long Var Speed" => "scConveyorLongVarSpeed_SetActive", 
+                "Conveyor Long Var Speed Setpoint" => "scConveyorLongVarSpeed_SetSpeed", 
+                "Conveyor Short Const Speed" => "scConveyorShortConstSpeed_SetActive", 
+                "Conveyor Short Var Speed" => "scConveyorShortVarSpeed_SetActive", 
+                "Conveyor Long Short Speed Setpoint" => "scConveyorShortVarSpeed_SetSpeed", 
+                "Total Workpiece Count Set" => "Control_HMI".toHMI.numWorkpieces, 
+                "Cylinder Count Set" => "Control_HMI".toHMI.numCylinders, 
+                "Cube Count Set" => "Control_HMI".toHMI.numCubes
+            )
+        END_RUNG
+
+    END_NETWORK
+
+END_ORGANIZATION_BLOCK

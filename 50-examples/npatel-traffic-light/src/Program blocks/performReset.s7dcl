@@ -1,0 +1,58 @@
+﻿{
+    S7_Optimized := "TRUE";
+    S7_Language := "LAD";
+    S7_BlockTitle := "MLC_Z7";
+}
+FUNCTION "performReset" : Void
+    VAR_OUTPUT 
+        lightRed : Bool;
+        lightYellow : Bool;
+        lightGreen : Bool;
+        fault : Bool;
+    END_VAR
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_3Dm"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            R_Coil( #lightGreen )
+        END_RUNG
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_38w"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            R_Coil( #lightYellow )
+        END_RUNG
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_3cp"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            S_Coil( #lightRed )
+        END_RUNG
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_uF"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            R_Coil( #fault )
+        END_RUNG
+
+    END_NETWORK
+
+END_FUNCTION

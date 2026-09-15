@@ -1,0 +1,235 @@
+﻿{
+    S7_Optimized := "TRUE";
+    S7_Language := "LAD";
+}
+FUNCTION_BLOCK "Intersection"
+    VAR_OUTPUT 
+        northLightGreen : Bool;
+        northLightYellow : Bool;
+        northLightRed : Bool;
+        southLightGreen : Bool;
+        southLightYellow : Bool;
+        southLightRed : Bool;
+        eastLightGreen : Bool;
+        eastLightYellow : Bool;
+        eastLightRed : Bool;
+        westLightGreen : Bool;
+        westLightYellow : Bool;
+        westLightRed : Bool;
+    END_VAR
+    VAR 
+        northLightOperation : _.LightOperation;
+        southLightOperation : _.LightOperation;
+        { S7_Setpoint := "True" }
+        northInterlock : Bool;
+        { S7_Setpoint := "True" }
+        southInterlock : Bool;
+        eastInterlock : Bool;
+        westInterlock : Bool;
+        eastLightOperation : _.LightOperation;
+        westLightOperation : _.LightOperation;
+        { S7_Setpoint := "True" }
+        eastInterlockFallEdge : Bool;
+        westInterlockFallEdge : Bool;
+        northInterlockFallEdge : Bool;
+        southInterlockFallEdge : Bool;
+        {
+             InstructionName := "TON_TIME";
+             LibVersion := "1.0"
+        }
+        northSouthONDelay : TON_TIME;
+        {
+             InstructionName := "TON_TIME";
+             LibVersion := "1.0"
+        }
+        eastWestONDelay : TON_TIME;
+        {
+             S7_Access := "ReadOnly := External";
+             S7_Visibility := "Hidden := External"
+        }
+        startNorth : Bool;
+        {
+             S7_Access := "ReadOnly := External";
+             S7_Visibility := "Hidden := External"
+        }
+        startSouth : Bool;
+        {
+             S7_Access := "ReadOnly := External";
+             S7_Visibility := "Hidden := External"
+        }
+        startEast : Bool;
+        {
+             S7_Access := "ReadOnly := External";
+             S7_Visibility := "Hidden := External"
+        }
+        startWest : Bool;
+        startNSTimer : Bool;
+        startEWTimer : Bool;
+    END_VAR
+    VAR_TEMP 
+        performRESET : Bool;
+        performSTART : Bool;
+    END_VAR
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_36D"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            Contact( "reset_Button_IN" )
+            wire#w1
+            Coil( #performRESET )
+        END_RUNG
+        RUNG wire#powerrail
+            Contact( "reset_MEM_TAG" )
+        END_RUNG wire#w1
+        RUNG wire#powerrail
+            Contact( "start_Button_IN" )
+            wire#w2
+            Coil( #performSTART )
+        END_RUNG
+        RUNG wire#powerrail
+            Contact( "start_MEM_TAG" )
+        END_RUNG wire#w2
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_4ZS"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            N_Contact(
+                Top := #eastInterlock, 
+                Bottom := #eastInterlockFallEdge
+            )
+            N_Contact(
+                Top := #westInterlock, 
+                Bottom := #westInterlockFallEdge
+            )
+            S_Coil( #startNSTimer )
+        END_RUNG
+        RUNG wire#powerrail
+            Contact( #startNSTimer )
+            #northSouthONDelay.TON{ time_type := Time }(
+                PT := t#5s, 
+                ET =>  
+            )
+            wire#w1
+            Coil( #startSouth )
+        END_RUNG
+        RUNG wire#powerrail
+            Contact( #performSTART )
+        END_RUNG wire#w1
+        RUNG wire#w1
+            Coil( #startNorth )
+        END_RUNG
+        RUNG wire#w1
+            R_Coil( #startNSTimer )
+        END_RUNG
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_4Wa"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            N_Contact(
+                Top := #northInterlock, 
+                Bottom := #northInterlockFallEdge
+            )
+            N_Contact(
+                Top := #southInterlock, 
+                Bottom := #southInterlockFallEdge
+            )
+            S_Coil( #startEWTimer )
+        END_RUNG
+        RUNG wire#powerrail
+            Contact( #startEWTimer )
+            #eastWestONDelay.TON{ time_type := Time }(
+                PT := t#5s, 
+                ET =>  
+            )
+            wire#w1
+            Coil( #startEast )
+        END_RUNG
+        RUNG wire#w1
+            Coil( #startWest )
+        END_RUNG
+        RUNG wire#w1
+            R_Coil( #startEWTimer )
+        END_RUNG
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_3Jp"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            I_Contact( #eastInterlock )
+            I_Contact( #westInterlock )
+            wire#w1
+            #northLightOperation(
+                start := #startNorth, 
+                reset := #performRESET, 
+                fault := "systemFAULT", 
+                lightGreen => #northLightGreen, 
+                lightYellow => #northLightYellow, 
+                lightRed => #northLightRed, 
+                interlock => #northInterlock
+            )
+        END_RUNG
+        RUNG wire#w1
+            #southLightOperation(
+                start := #startSouth, 
+                reset := #performRESET, 
+                fault := "systemFAULT", 
+                lightGreen => #southLightGreen, 
+                lightYellow => #southLightYellow, 
+                lightRed => #southLightRed, 
+                interlock => #southInterlock
+            )
+        END_RUNG
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_52D"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            I_Contact( #northInterlock )
+            I_Contact( #southInterlock )
+            wire#w1
+            #eastLightOperation(
+                start := #startEast, 
+                reset := #performRESET, 
+                fault := "systemFAULT", 
+                lightGreen => #eastLightGreen, 
+                lightYellow => #eastLightYellow, 
+                lightRed => #eastLightRed, 
+                interlock => #eastInterlock
+            )
+        END_RUNG
+        RUNG wire#w1
+            #westLightOperation(
+                start := #startWest, 
+                reset := #performRESET, 
+                fault := "systemFAULT", 
+                lightGreen => #westLightGreen, 
+                lightYellow => #westLightYellow, 
+                lightRed => #westLightRed, 
+                interlock => #westInterlock
+            )
+        END_RUNG
+
+    END_NETWORK
+
+END_FUNCTION_BLOCK

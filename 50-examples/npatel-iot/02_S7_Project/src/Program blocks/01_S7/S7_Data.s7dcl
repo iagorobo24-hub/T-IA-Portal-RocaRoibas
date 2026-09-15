@@ -1,0 +1,17 @@
+﻿        {
+           S7_Optimized := "FALSE";
+           S7_StandardRetain := "FALSE"
+        }
+    DATA_BLOCK S7_Data
+        VAR
+            TO_IOT2050 : STRUCT
+                motorCurrent : UInt;
+                motorVoltage : UInt;
+                motorTemperature : Real;
+                motorStatus : Bool;
+            END_STRUCT;
+            FROM_IOT2050 : STRUCT
+                controlButton : Bool;
+            END_STRUCT;
+        END_VAR
+    END_DATA_BLOCK

@@ -1,0 +1,105 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Document>
+  <Engineering version="V20" />
+  <DocumentInfo>
+    <Created>2026-09-14T11:29:00.919355Z</Created>
+    <ExportSetting>None</ExportSetting>
+    <InstalledProducts>
+      <Product>
+        <DisplayName>Totally Integrated Automation Portal</DisplayName>
+        <DisplayVersion>V20</DisplayVersion>
+      </Product>
+      <OptionPackage>
+        <DisplayName>TIA Portal Openness</DisplayName>
+        <DisplayVersion>V20</DisplayVersion>
+      </OptionPackage>
+      <OptionPackage>
+        <DisplayName>TIA Portal Version Control Interface</DisplayName>
+        <DisplayVersion>V20</DisplayVersion>
+      </OptionPackage>
+      <Product>
+        <DisplayName>STEP 7 Professional</DisplayName>
+        <DisplayVersion>V20</DisplayVersion>
+      </Product>
+      <OptionPackage>
+        <DisplayName>STEP 7 Safety</DisplayName>
+        <DisplayVersion>V20</DisplayVersion>
+      </OptionPackage>
+      <Product>
+        <DisplayName>WinCC Basic/Comfort/Advanced</DisplayName>
+        <DisplayVersion>V20</DisplayVersion>
+      </Product>
+      <Product>
+        <DisplayName>WinCC Unified</DisplayName>
+        <DisplayVersion>V20</DisplayVersion>
+      </Product>
+    </InstalledProducts>
+  </DocumentInfo>
+  <SW.Types.PlcStruct ID="0">
+    <AttributeList>
+      <Interface><Sections xmlns="http://www.siemens.com/automation/Openness/SW/Interface/v5">
+  <Section Name="None">
+    <Member Name="cleanSession" Datatype="Bool">
+      <Comment>
+        <MultiLanguageText Lang="en-US">When TRUE, all data from a previous session will be deleted  </MultiLanguageText>
+      </Comment>
+    </Member>
+    <Member Name="will" Datatype="Bool">
+      <Comment>
+        <MultiLanguageText Lang="en-US">When TRUE, activates the last will and testament function </MultiLanguageText>
+      </Comment>
+    </Member>
+    <Member Name="willQoS1" Datatype="Bool">
+      <Comment>
+        <MultiLanguageText Lang="en-US">When TRUE, the QoS has level 1 for the last will</MultiLanguageText>
+      </Comment>
+    </Member>
+    <Member Name="willQoS2" Datatype="Bool">
+      <Comment>
+        <MultiLanguageText Lang="en-US">When TRUE, the QoS has level 2 for the last will</MultiLanguageText>
+      </Comment>
+    </Member>
+    <Member Name="willRetain" Datatype="Bool">
+      <Comment>
+        <MultiLanguageText Lang="en-US">When TRUE, the last will is stored at the broker after its been sent </MultiLanguageText>
+      </Comment>
+    </Member>
+    <Member Name="password" Datatype="Bool">
+      <Comment>
+        <MultiLanguageText Lang="en-US">When TRUE, the MQTT broker requires a login (name and password) of the client</MultiLanguageText>
+      </Comment>
+    </Member>
+    <Member Name="userName" Datatype="Bool">
+      <Comment>
+        <MultiLanguageText Lang="en-US">When TRUE, the MQTT broker requires a login (name and password) of the client</MultiLanguageText>
+      </Comment>
+    </Member>
+  </Section>
+</Sections></Interface>
+      <Name>LMQTT_typeConnectFlags</Name>
+      <Namespace />
+    </AttributeList>
+    <ObjectList>
+      <MultilingualText ID="1" CompositionName="Comment">
+        <ObjectList>
+          <MultilingualTextItem ID="2" CompositionName="Items">
+            <AttributeList>
+              <Culture>en-US</Culture>
+              <Text />
+            </AttributeList>
+          </MultilingualTextItem>
+        </ObjectList>
+      </MultilingualText>
+      <MultilingualText ID="3" CompositionName="Title">
+        <ObjectList>
+          <MultilingualTextItem ID="4" CompositionName="Items">
+            <AttributeList>
+              <Culture>en-US</Culture>
+              <Text />
+            </AttributeList>
+          </MultilingualTextItem>
+        </ObjectList>
+      </MultilingualText>
+    </ObjectList>
+  </SW.Types.PlcStruct>
+</Document>

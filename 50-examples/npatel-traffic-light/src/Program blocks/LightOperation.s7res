@@ -1,0 +1,20 @@
+﻿<root>
+  <Comment Id="MLC_YV">
+    <MultiLanguageText Lang="en-US">Perform fault operation sequence when system is in fault and has not been reset</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_4c7">
+    <MultiLanguageText Lang="en-US">Perform Reset and Set Red light to Solid</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_52W">
+    <MultiLanguageText Lang="en-US">Start the Normal signal light operation by setting the interlock to true so that no external can control the lights</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_3w4">
+    <MultiLanguageText Lang="en-US">As soon as Interlock comes to true, turn on GREE light</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_3GB">
+    <MultiLanguageText Lang="en-US">Turn ON YELLOW light when Green goes off</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_3a6">
+    <MultiLanguageText Lang="en-US">Turn ON RED light once yellow goes off, and remove the interlock indicating the signal light operation has been performed</MultiLanguageText>
+  </Comment>
+</root>

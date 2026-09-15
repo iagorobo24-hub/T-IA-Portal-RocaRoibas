@@ -1,0 +1,17 @@
+﻿<root>
+  <Comment Id="MLC_36D">
+    <MultiLanguageText Lang="en-US">Perform Reset or Start button event either through HMI button or PLC tag input</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_4ZS">
+    <MultiLanguageText Lang="en-US">5 sec delay between switching on NS signal control. Start button gives precedence to NS and it will start NS first</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_4Wa">
+    <MultiLanguageText Lang="en-US">5 sec delay between switching on EW signal control</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_3Jp">
+    <MultiLanguageText Lang="en-US">North South Light operation</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_52D">
+    <MultiLanguageText Lang="en-US">East West Light operation</MultiLanguageText>
+  </Comment>
+</root>

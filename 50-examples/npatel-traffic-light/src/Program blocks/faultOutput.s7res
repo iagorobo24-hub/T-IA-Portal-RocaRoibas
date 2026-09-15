@@ -1,0 +1,8 @@
+﻿<root>
+  <Comment Id="MLC_4f2">
+    <MultiLanguageText Lang="en-US">Turn ON/OFF Red Light Every 1 second</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_57b">
+    <MultiLanguageText Lang="en-US">Remove the interlock and ensure the other lights are OFF</MultiLanguageText>
+  </Comment>
+</root>

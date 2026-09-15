@@ -1,0 +1,169 @@
+﻿{
+    S7_Optimized := "TRUE";
+    S7_Language := "LAD";
+}
+FUNCTION_BLOCK "motorControl"
+    VAR_INPUT 
+        {
+             S7_Access := "ReadOnly := External";
+             S7_Visibility := "Hidden := External"
+        }
+        Enable : Bool;
+    END_VAR
+    VAR_OUTPUT 
+        Error : Bool;
+        {
+             S7_Access := "ReadOnly := External";
+             S7_Visibility := "Hidden := External"
+        }
+        Current : UInt;
+        {
+             S7_Access := "ReadOnly := External";
+             S7_Visibility := "Hidden := External"
+        }
+        Voltage : UInt;
+        {
+             S7_Access := "ReadOnly := External";
+             S7_Visibility := "Hidden := External"
+        }
+        Temperature : Real;
+    END_VAR
+    VAR_IN_OUT 
+        {
+             S7_Access := "ReadOnly := External";
+             S7_Visibility := "Hidden := External"
+        }
+        "Motor Status" : Bool;
+    END_VAR
+    VAR 
+        LGF_SinusCI_Instance : _.LGF_SinusCI;
+        LGF_RectangleCI_Instance : _.LGF_RectangleCI;
+    END_VAR
+    VAR_TEMP 
+        randIntError : Bool;
+        randIntStatusID : UInt;
+        randIntStatus : Word;
+        sinusError : Bool;
+        sinusStatusID : UInt;
+        sinusStatus : Word;
+        rectError : Bool;
+        rectStatusID : UInt;
+        rectStatus : Word;
+    END_VAR
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_38m"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            Contact( #Enable )
+            Coil( #"Motor Status" )
+        END_RUNG
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_bB";
+      S7_NetworkComment := "MLC_4UK"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            Contact( #"Motor Status" )
+            wire#w1
+            #LGF_RectangleCI_Instance(
+                amplitude := 70.0, 
+                offset := 70.0, 
+                periodeMS := 50000, 
+                callOB := "OB_Cyclic interrupt", 
+                reset :=  , 
+                rectangleValues => #Current, 
+                error => #rectError, 
+                statusID => #rectStatusID, 
+                status => #rectStatus
+            )
+        END_RUNG
+        RUNG wire#w1
+            "LGF_RandomInt"(
+                minValue := 0, 
+                maxValue := 255, 
+                Ret_Val => #Voltage, 
+                error => #randIntError, 
+                statusID => #randIntStatusID, 
+                status => #randIntStatus
+            )
+        END_RUNG
+        RUNG wire#w1
+            #LGF_SinusCI_Instance(
+                amplitude := 50.0, 
+                offset := 0.0, 
+                periodeMS := 50000, 
+                callOB := "OB_Cyclic interrupt", 
+                reset :=  , 
+                sinusValues => #Temperature, 
+                error => #sinusError, 
+                statusID => #sinusStatusID, 
+                status => #sinusStatus
+            )
+        END_RUNG
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_4Ja"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            I_Contact( #"Motor Status" )
+            wire#w1
+            Move{
+                Card := 1; 
+                DisableENO := TRUE
+            }(
+                IN := 0, 
+                OUT1 => #Current
+            )
+        END_RUNG
+        RUNG wire#w1
+            Move{
+                Card := 1; 
+                DisableENO := TRUE
+            }(
+                IN := 0, 
+                OUT1 => #Voltage
+            )
+        END_RUNG
+        RUNG wire#w1
+            Move{
+                Card := 1; 
+                DisableENO := TRUE
+            }(
+                IN := 0.0, 
+                OUT1 => #Temperature
+            )
+        END_RUNG
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_4fi"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            Contact( #rectError )
+            wire#w1
+            Coil( #Error )
+        END_RUNG
+        RUNG wire#powerrail
+            Contact( #randIntError )
+        END_RUNG wire#w1
+        RUNG wire#powerrail
+            Contact( #sinusError )
+        END_RUNG wire#w1
+
+    END_NETWORK
+
+END_FUNCTION_BLOCK

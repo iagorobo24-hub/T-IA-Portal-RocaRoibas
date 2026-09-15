@@ -1,0 +1,38 @@
+﻿<root>
+  <Comment Id="MLC_3bP">
+    <MultiLanguageText Lang="en-US">in ms</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_3dP">
+    <MultiLanguageText Lang="en-US">max speed in m/s for constant speed mode</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_Rz">
+    <MultiLanguageText Lang="en-US">max speed in m/s for variable speed mode</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_jn">
+    <MultiLanguageText Lang="en-US">optimal distance for ejection in m. In this case 20 mm</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_Xw">
+    <MultiLanguageText Lang="en-US">Generate workpieces when triggered from HMI</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_5C3">
+    <MultiLanguageText Lang="en-US">Multiply time by 1000 to convert from seconds to milliseconds. Later convert it to the Time format in T#ms</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_3Zu">
+    <MultiLanguageText Lang="en-US">Calculate Wait time</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_LE">
+    <MultiLanguageText Lang="en-US">Count Workpieces</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_4id">
+    <MultiLanguageText Lang="en-US">Control Pneumatic Cylinder</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_Rr">
+    <MultiLanguageText Lang="en-US">Short Conveyor Control</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_45J">
+    <MultiLanguageText Lang="en-US">Long Conveyor Control</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_kd">
+    <MultiLanguageText Lang="en-US">Trigger Fault</MultiLanguageText>
+  </Comment>
+</root>

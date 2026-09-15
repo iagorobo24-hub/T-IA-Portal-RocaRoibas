@@ -1,0 +1,391 @@
+﻿{
+    S7_Optimized := "TRUE";
+    S7_Language := "LAD";
+}
+FUNCTION_BLOCK "SortingPlantControl"
+    VAR_INPUT 
+        "Light Sensor Cube" : Bool;
+        "Light Sensor Cylinder" : Bool;
+        "Light Sensor Workpiece" : Bool;
+        "Limit Switch Cylinder NotExtended" : Bool;
+        "Limit Switch Cylinder Retracted" : Bool;
+        "Cylinder Extend Command" : Bool;
+        "Cylinder Retract Command" : Bool;
+        "Long Conveyor Constant Speed Command" : Bool;
+        "Long Conveyor Var Speed Command" : Bool;
+        "Long Conveyor Var Speed Percentage" : Real;
+        "Short Conveyor Constant Speed Command" : Bool;
+        "Short Conveyor Var Speed Command" : Bool;
+        "Short Conveyor Var Speed Percentage" : Real;
+        "Generate Workpieces" : Bool;
+        "Total Workpiece Counter Value" : USInt;
+        "Cylinder Counter Value" : USInt;
+        "Cube Counter Value" : USInt;
+    END_VAR
+    VAR_OUTPUT 
+        Error : Bool;
+        ErrorID : Word;
+        "Workpiece Cylinder Generation" : Bool;
+        "Workpiece Cube Generation" : Bool;
+        "Cylinder Retract" : Bool;
+        "Cylinder Extend" : Bool;
+        "Conveyor Long Const Speed" : Bool;
+        "Conveyor Long Var Speed" : Bool;
+        "Conveyor Long Var Speed Setpoint" : Real;
+        "Conveyor Short Const Speed" : Bool;
+        "Conveyor Short Var Speed" : Bool;
+        "Conveyor Long Short Speed Setpoint" : Real;
+        "Total Workpiece Count Set" : USInt;
+        "Cylinder Count Set" : USInt;
+        "Cube Count Set" : USInt;
+    END_VAR
+    VAR 
+        CylinderControl_Instance : _.CylinderControl;
+        ShortConveyorControl_Instance : _.ConveyorControl;
+        LongConveyorControl_Instance : _.ConveyorControl;
+        {
+             InstructionName := "CTU_USINT";
+             LibVersion := "1.0"
+        }
+        upCounter_Workpiece : CTU_USINT;
+        lightSensorWorkpieceFALLEdge : Bool;
+        lightSensorCubeFALLEdge : Bool;
+        {
+             InstructionName := "CTU_USINT";
+             LibVersion := "1.0"
+        }
+        upCounter_Cube : CTU_USINT;
+        lightSensorCylinderFALLEdge : Bool;
+        {
+             InstructionName := "CTU_USINT";
+             LibVersion := "1.0"
+        }
+        upCounter_Cylinder : CTU_USINT;
+        { S7_MLC := "MLC_3bP" }
+        waitTime : Time;
+        startWaitTimer : Bool;
+        {
+             InstructionName := "TON_TIME";
+             LibVersion := "1.0"
+        }
+        onTimer_Waitfunction : TON_TIME;
+        {
+             S7_Access := "ReadOnly := External";
+             S7_Visibility := "Hidden := External"
+        }
+        cylinderInterlock : Bool;
+        {
+             S7_Access := "ReadOnly := External";
+             S7_Visibility := "Hidden := External"
+        }
+        shortConvInterlock : Bool;
+        {
+             S7_Access := "ReadOnly := External";
+             S7_Visibility := "Hidden := External"
+        }
+        longConvInterlock : Bool;
+    END_VAR
+    VAR_TEMP 
+        shortConvFault : Bool;
+        longConvFault : Bool;
+        cylFault : Bool;
+        waitTimeCalc : UDInt;
+        performEject : Bool;
+    END_VAR
+    VAR CONSTANT 
+        { S7_MLC := "MLC_3dP" }
+        constantMaxSpeed : Real := 0.05;
+        { S7_MLC := "MLC_Rz" }
+        varMaxSpeed : Real := 0.15;
+        { S7_MLC := "MLC_jn" }
+        optimumEjectDistance : Real := 0.02;
+    END_VAR
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_Xw"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            Contact( #"Generate Workpieces" )
+            Contact( #"Limit Switch Cylinder Retracted" )
+            wire#w1
+            Coil( #"Workpiece Cube Generation" )
+        END_RUNG
+        RUNG wire#w1
+            Coil( #"Workpiece Cylinder Generation" )
+        END_RUNG
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_3Zu";
+      S7_NetworkComment := "MLC_5C3"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            Contact( #"Conveyor Long Const Speed" )
+            Calculate{
+                Card := 3; 
+                SrcType := Real; 
+                DisableENO := TRUE; 
+                Equation := (IN1 / IN2) * IN3
+            }(
+                IN1 := #optimumEjectDistance, 
+                IN2 := #constantMaxSpeed, 
+                IN3 := 1000.0, 
+                OUT => #waitTimeCalc
+            )
+            wire#w1
+            T_CONV{
+                src_type := UDInt; 
+                dest_type := Time
+            }(
+                IN := #waitTimeCalc, 
+                OUT => #waitTime
+            )
+        END_RUNG
+        RUNG wire#powerrail
+            Contact( #"Conveyor Long Var Speed" )
+            Calculate{
+                Card := 3; 
+                SrcType := Real; 
+                DisableENO := TRUE; 
+                Equation := (IN1 / IN2) * IN3
+            }(
+                IN1 := #optimumEjectDistance, 
+                IN2 := #"Conveyor Long Var Speed Setpoint", 
+                IN3 := 1000.0, 
+                OUT => #waitTimeCalc
+            )
+        END_RUNG wire#w1
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_LE"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            Move{
+                Card := 1; 
+                DisableENO := TRUE
+            }(
+                IN := #"Total Workpiece Counter Value", 
+                OUT1 => #upCounter_Workpiece.CV
+            )
+            Move{
+                Card := 1; 
+                DisableENO := TRUE
+            }(
+                IN := #"Cylinder Counter Value", 
+                OUT1 => #upCounter_Cylinder.CV
+            )
+            Move{
+                Card := 1; 
+                DisableENO := TRUE
+            }(
+                IN := #"Cube Counter Value", 
+                OUT1 => #upCounter_Cube.CV
+            )
+        END_RUNG
+        RUNG wire#powerrail
+            Contact( #shortConvInterlock )
+            N_Contact(
+                Top := #"Light Sensor Workpiece", 
+                Bottom := #lightSensorWorkpieceFALLEdge
+            )
+            #upCounter_Workpiece.CTU{ value_type := USInt }(
+                R :=  , 
+                PV := 0, 
+                CV => #"Total Workpiece Count Set"
+            )
+        END_RUNG
+        RUNG wire#powerrail
+            Contact( #longConvInterlock )
+            wire#w1
+            N_Contact(
+                Top := #"Light Sensor Cube", 
+                Bottom := #lightSensorCubeFALLEdge
+            )
+            #upCounter_Cube.CTU{ value_type := USInt }(
+                R :=  , 
+                PV := 0, 
+                CV => #"Cube Count Set"
+            )
+        END_RUNG
+        RUNG wire#w1
+            N_Contact(
+                Top := #"Light Sensor Cylinder", 
+                Bottom := #lightSensorCylinderFALLEdge
+            )
+            wire#w2
+            #upCounter_Cylinder.CTU{ value_type := USInt }(
+                R :=  , 
+                PV := 0, 
+                CV => #"Cylinder Count Set"
+            )
+        END_RUNG
+        RUNG wire#w2
+            S_Coil( #startWaitTimer )
+        END_RUNG
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            Contact( #startWaitTimer )
+            #onTimer_Waitfunction.TON{ time_type := Time }(
+                PT := #waitTime, 
+                ET =>  
+            )
+            Coil( #performEject )
+        END_RUNG
+        RUNG wire#powerrail
+            Contact( #performEject )
+            I_Contact( #"Limit Switch Cylinder NotExtended" )
+            R_Coil( #startWaitTimer )
+        END_RUNG
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_4id"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            #CylinderControl_Instance(
+                "Extend Command" := wire#w1, 
+                "Retract Command" := wire#w2, 
+                "Limit Switch Not Extended" := #"Limit Switch Cylinder NotExtended", 
+                "Limit Switch Retracted" := #"Limit Switch Cylinder Retracted", 
+                Fault => #cylFault, 
+                interlock => #cylinderInterlock, 
+                "Extend Cylinder" => #"Cylinder Extend", 
+                "Retract Cylinder" => #"Cylinder Retract"
+            )
+        END_RUNG
+        RUNG wire#powerrail
+            Contact( #performEject )
+        END_RUNG wire#w1
+        RUNG wire#powerrail
+            Contact( #"Cylinder Extend Command" )
+        END_RUNG wire#w1
+        RUNG wire#powerrail
+            I_Contact( #performEject )
+        END_RUNG wire#w2
+        RUNG wire#powerrail
+            Contact( #"Cylinder Retract Command" )
+        END_RUNG wire#w2
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_Rr"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            #ShortConveyorControl_Instance(
+                Execute := wire#w1, 
+                "Constant Speed Control" := #"Short Conveyor Constant Speed Command", 
+                "Variable Speed Control" := #"Short Conveyor Var Speed Command", 
+                "Variable Speed Percentage" := #"Short Conveyor Var Speed Percentage", 
+                "Constant Max Speed" := #constantMaxSpeed, 
+                "Variable Max Speed" := #varMaxSpeed, 
+                Fault => #shortConvFault, 
+                Interlock => #shortConvInterlock, 
+                "Constant Speed Mode" => #"Conveyor Short Const Speed", 
+                "Variable Speed Mode" => #"Conveyor Short Var Speed", 
+                "Variable Speed Setpoint" => #"Conveyor Long Short Speed Setpoint"
+            )
+        END_RUNG
+        RUNG wire#powerrail
+            I_Contact( #cylinderInterlock )
+        END_RUNG wire#w1
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_45J"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            #LongConveyorControl_Instance(
+                Execute := wire#w1, 
+                "Constant Speed Control" := #"Long Conveyor Constant Speed Command", 
+                "Variable Speed Control" := #"Long Conveyor Var Speed Command", 
+                "Variable Speed Percentage" := #"Long Conveyor Var Speed Percentage", 
+                "Constant Max Speed" := #constantMaxSpeed, 
+                "Variable Max Speed" := #varMaxSpeed, 
+                Fault => #longConvFault, 
+                Interlock => #longConvInterlock, 
+                "Constant Speed Mode" => #"Conveyor Long Const Speed", 
+                "Variable Speed Mode" => #"Conveyor Long Var Speed", 
+                "Variable Speed Setpoint" => #"Conveyor Long Var Speed Setpoint"
+            )
+        END_RUNG
+        RUNG wire#powerrail
+            I_Contact( #cylinderInterlock )
+        END_RUNG wire#w1
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_kd"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            Contact( #cylFault )
+            Move{
+                Card := 1; 
+                DisableENO := TRUE
+            }(
+                IN := 16#8610, 
+                OUT1 => #ErrorID
+            )
+            wire#w1
+            Coil( #Error )
+        END_RUNG
+        RUNG wire#powerrail
+            Contact( #shortConvFault )
+            Move{
+                Card := 1; 
+                DisableENO := TRUE
+            }(
+                IN := 16#8620, 
+                OUT1 => #ErrorID
+            )
+        END_RUNG wire#w1
+        RUNG wire#powerrail
+            Contact( #longConvFault )
+            Move{
+                Card := 1; 
+                DisableENO := TRUE
+            }(
+                IN := 16#8630, 
+                OUT1 => #ErrorID
+            )
+        END_RUNG wire#w1
+        RUNG wire#powerrail
+            I_Contact( #Error )
+            Move{
+                Card := 1; 
+                DisableENO := TRUE
+            }(
+                IN := 16#8600, 
+                OUT1 => #ErrorID
+            )
+        END_RUNG
+
+    END_NETWORK
+
+END_FUNCTION_BLOCK

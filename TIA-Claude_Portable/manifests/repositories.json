@@ -1,0 +1,8 @@
+[
+  { "name": "siemens-snippets", "url": "https://github.com/siemens/tia-portal-openness-code-snippets.git", "commit": "3c85c26ad9429b52e897d8ae8d3bb96b5c7a05f6", "license": "Siemens terms + MIT for source" },
+  { "name": "tia-inspect-upstream", "url": "https://github.com/heilingbrunner/tiaportal-mcp.git", "commit": "9c1883c8558dbf4651e73aa0a211813bd61c21be", "license": "MIT" },
+  { "name": "wincc-games", "url": "https://github.com/RobertOrsin/TIAPortalGames.git", "commit": "3b6930e592c312f0afd4f4b381860beee12bd112", "license": "No license file found; private reference only" },
+  { "name": "plc-projects", "url": "https://github.com/npatel221/PLC_Projects.git", "commit": "9c99f6e6ff2937f612bedea5fc0b84b51a8170ef", "license": "No license file found; private reference only" },
+  { "name": "tia-integration-ai", "url": "https://github.com/Dego-Dantas/tia-integration-ai.git", "commit": "d004c832b5fe24ca7e8660c164d7cb73f00a8797", "license": "MIT" },
+  { "name": "tia-create-reference", "url": "https://github.com/bulaofen0036-coder/TIA_Portal_Openness_MCP.git", "commit": "218e829df3f056b653d7831c60a6297818db72fd", "license": "MIT" }
+]

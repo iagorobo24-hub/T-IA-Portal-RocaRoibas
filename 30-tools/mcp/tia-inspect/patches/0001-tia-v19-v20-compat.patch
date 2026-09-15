@@ -1,0 +1,137 @@
+diff --git a/src/TiaMcpServer/Siemens/Diagnostics.cs b/src/TiaMcpServer/Siemens/Diagnostics.cs
+index 2c62290..955335d 100644
+--- a/src/TiaMcpServer/Siemens/Diagnostics.cs
++++ b/src/TiaMcpServer/Siemens/Diagnostics.cs
+@@ -1,4 +1,4 @@
+-using System;
++﻿using System;
+ using System.Collections.Generic;
+ using System.IO;
+ using System.Linq;
+@@ -39,8 +39,8 @@ public sealed class DiagnosticsReport
+     /// </summary>
+     public static class Diagnostics
+     {
+-        // Openness of this server targets V20+; V21 is the oldest version worth reporting.
+-        private const int MinTiaMajorVersion = 21;
++        // Patched for this workspace: report installs from V19 up, not only V21.
++        private const int MinTiaMajorVersion = 19;
+         private const int MaxTiaMajorVersion = 30;
+ 
+         // V20+ splits Openness into Siemens.Engineering.Base.dll and friends; older installations
+@@ -72,39 +72,39 @@ public static DiagnosticsReport Run(Portal portal, bool allowWrite = false)
+ 
+             var status = $"Diagnose:";
+ 
+-            status += $"\n├─ Connected = {isConnected}";
++            status += $"\nâ”œâ”€ Connected = {isConnected}";
+ 
+             if (projectName != null || projectPath != null)
+             {
+-                status += $"\n├─ Project: {projectName ?? "Unknown"}, {projectPath ?? "Unknown"}";
++                status += $"\nâ”œâ”€ Project: {projectName ?? "Unknown"}, {projectPath ?? "Unknown"}";
+             }
+             else
+             {
+-                status += $"\n├─ Project: No project open";
++                status += $"\nâ”œâ”€ Project: No project open";
+             }
+ 
+-            status += $"\n├─ Active Version: V{Openness.TiaMajorVersion}";
++            status += $"\nâ”œâ”€ Active Version: V{Openness.TiaMajorVersion}";
+ 
+             if (installations.Count > 0)
+             {
+-                status += $"\n├─ Installed TIA Portal versions:";
++                status += $"\nâ”œâ”€ Installed TIA Portal versions:";
+                 for (int i = 0; i < installations.Count; i++)
+                 {
+                     var inst = installations[i];
+                     var isLast = i == installations.Count - 1;
+-                    var prefix = isLast ? "│  └─" : "│  ├─";
++                    var prefix = isLast ? "â”‚  â””â”€" : "â”‚  â”œâ”€";
+                     status += $"\n{prefix} V{inst.MajorVersion}: {inst.InstallPath}";
+-                    status += $"\n{(isLast ? "│   " : "│  │")}  ├─ Engineering: {(inst.EngineeringExists ? "OK" : "missing")}";
+-                    status += $"\n{(isLast ? "│   " : "│  │")}  └─ Portal:      {(inst.PortalExeExists ? "OK" : "missing")}";
++                    status += $"\n{(isLast ? "â”‚   " : "â”‚  â”‚")}  â”œâ”€ Engineering: {(inst.EngineeringExists ? "OK" : "missing")}";
++                    status += $"\n{(isLast ? "â”‚   " : "â”‚  â”‚")}  â””â”€ Portal:      {(inst.PortalExeExists ? "OK" : "missing")}";
+                 }
+             }
+             else
+             {
+-                status += $"\n├─ Installed TIA Portal versions: none found (>= V{MinTiaMajorVersion})";
++                status += $"\nâ”œâ”€ Installed TIA Portal versions: none found (>= V{MinTiaMajorVersion})";
+             }
+ 
+-            status += $"\n├─ User in 'Siemens TIA Openness' user group: {userInGroup}";
+-            status += $"\n└─ Write mode (--allow-write): {(allowWrite ? "enabled" : "disabled, read-only tools only")}";
++            status += $"\nâ”œâ”€ User in 'Siemens TIA Openness' user group: {userInGroup}";
++            status += $"\nâ””â”€ Write mode (--allow-write): {(allowWrite ? "enabled" : "disabled, read-only tools only")}";
+ 
+             return new DiagnosticsReport
+             {
+@@ -120,7 +120,7 @@ public static DiagnosticsReport Run(Portal portal, bool allowWrite = false)
+         }
+ 
+         /// <summary>
+-        /// Discovers all installed TIA Portal versions >= V21 and checks whether the Openness
++        /// Discovers all installed TIA Portal versions >= V19 and checks whether the Openness
+         /// assembly and Portal.exe are actually present in each installation.
+         /// </summary>
+         public static IReadOnlyList<TiaInstallation> GetInstalledTiaPortalVersions()
+diff --git a/src/TiaMcpServer/Siemens/Portal.Write.cs b/src/TiaMcpServer/Siemens/Portal.Write.cs
+index 4293b94..0e7c17d 100644
+--- a/src/TiaMcpServer/Siemens/Portal.Write.cs
++++ b/src/TiaMcpServer/Siemens/Portal.Write.cs
+@@ -1,4 +1,4 @@
+-using Siemens.Engineering;
++﻿using Siemens.Engineering;
+ using Siemens.Engineering.SW.Blocks;
+ using Siemens.Engineering.SW.ExternalSources;
+ using Siemens.Engineering.SW.Tags;
+@@ -287,8 +287,17 @@ public bool RenameWatchTable(string softwarePath, string watchTablePath, string
+                 () =>
+                 {
+                     EnsureValidName(newName);
++                    #if TIA_V21_PLUS
+                     RequireWatchTable(softwarePath, watchTablePath).Name = newName;
+                     return true;
++#else
++                    _ = RequireWatchTable(softwarePath, watchTablePath);
++                    throw new PortalException(PortalErrorCode.NotSupported,
++                        "Renaming a watch table requires TIA Portal V21 or newer: PlcWatchTable.Name is read-only in this Openness version.");
++#pragma warning disable CS0162
++                    return true;
++#pragma warning restore CS0162
++#endif
+                 },
+                 ("softwarePath", softwarePath), ("watchTablePath", watchTablePath), ("newName", newName));
+         }
+diff --git a/src/TiaMcpServer/TiaMcpServer.csproj b/src/TiaMcpServer/TiaMcpServer.csproj
+index 644c01a..ddc9e6b 100644
+--- a/src/TiaMcpServer/TiaMcpServer.csproj
++++ b/src/TiaMcpServer/TiaMcpServer.csproj
+@@ -5,6 +5,8 @@
+     <LangVersion>Latest</LangVersion>
+     <OutputType>Exe</OutputType>
+     <PlatformTarget>x64</PlatformTarget>
++    <OpennessPackageVersion Condition=" '$(OpennessPackageVersion)' == '' ">20.0.1744190253</OpennessPackageVersion>
++    <DefineConstants Condition=" '$(TiaMajor)' == '21' ">$(DefineConstants);TIA_V21_PLUS</DefineConstants>
+     <Prefer32Bit>false</Prefer32Bit>
+     <AssemblyVersion>0.1.0</AssemblyVersion>
+     <BaseOutputPath>.\bin</BaseOutputPath>
+@@ -14,12 +16,10 @@
+     <PackageReference Include="ModelContextProtocol" Version="2.2.0" />
+     <PackageReference Include="Siemens.Collaboration.Net.OperatingSystem.Windows" Version="3.0.1725521661" />
+     <PackageReference Include="Siemens.Collaboration.Net.TiaPortal.Openness.Resolver" Version="2.0.1765367256" />
+-    <PackageReference Include="Siemens.Collaboration.Net.TiaPortal.Packages.Openness" Version="21.0.1765349347" />
++    <PackageReference Include="Siemens.Collaboration.Net.TiaPortal.Packages.Openness" Version="$(OpennessPackageVersion)" />
+   </ItemGroup>
+   <ItemGroup>
+-    <Reference Include="System.Management">
+-      <HintPath>C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8\System.Management.dll</HintPath>
+-    </Reference>
++    <Reference Include="System.Management" />
+   </ItemGroup>
+   <ItemGroup>
+     <Compile Remove="tests\**" />

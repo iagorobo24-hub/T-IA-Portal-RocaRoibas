@@ -1,0 +1,6 @@
+﻿        {
+           S7_Optimized := "TRUE";
+           S7_StandardRetain := "FALSE"
+        }
+    DATA_BLOCK InstLMQTT_Client : LMQTT_Client
+    END_DATA_BLOCK

@@ -1,0 +1,19 @@
+﻿<root>
+  <Comment Id="MLC_38m">
+    <MultiLanguageText Lang="en-US">Set the Motor status to ON/OFF and turn ON/OFF the motor</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_4UK">
+    <MultiLanguageText Lang="en-US">Current = Rectangle wave
+Voltage = random number between 0 - 255
+Temperature = Sin wave</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_bB">
+    <MultiLanguageText Lang="en-US">Generate signal data when Motor is running</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_4Ja">
+    <MultiLanguageText Lang="en-US">Set all Parameters to 0 when Motor is not running</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_4fi">
+    <MultiLanguageText Lang="en-US">Trigger Error flag if any of the Signal Generators give an error</MultiLanguageText>
+  </Comment>
+</root>

@@ -1,0 +1,8 @@
+﻿<root>
+  <Comment Id="MLC_3Cu">
+    <MultiLanguageText Lang="en-US">"Main Program Sweep (Cycle)"</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_4kk">
+    <MultiLanguageText Lang="en-US">Reset the Simulation and PLC Tags</MultiLanguageText>
+  </Comment>
+</root>

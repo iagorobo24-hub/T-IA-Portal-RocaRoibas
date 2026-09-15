@@ -1,0 +1,149 @@
+﻿{
+    S7_Optimized := "TRUE";
+    S7_Language := "LAD";
+}
+FUNCTION_BLOCK "ConveyorControl"
+    VAR_INPUT 
+        Execute : Bool;
+        "Constant Speed Control" : Bool;
+        "Variable Speed Control" : Bool;
+        "Variable Speed Percentage" : Real;
+        "Constant Max Speed" : Real;
+        "Variable Max Speed" : Real;
+    END_VAR
+    VAR_OUTPUT 
+        Fault : Bool;
+        "Interlock" : Bool;
+        "Constant Speed Mode" : Bool;
+        "Variable Speed Mode" : Bool;
+        "Variable Speed Setpoint" : Real;
+    END_VAR
+    VAR_TEMP 
+        varSpeedSetpoint : Real;
+    END_VAR
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_3iV";
+      S7_NetworkComment := "MLC_MW"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            Contact( #"Constant Speed Control" )
+            Contact( #"Variable Speed Control" )
+            Coil( #Fault )
+        END_RUNG
+        RUNG wire#powerrail
+            Contact( #Fault )
+            ReturnCoil( FALSE )
+        END_RUNG
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_4m8";
+      S7_NetworkComment := "MLC_4dW"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            Contact( #"Constant Speed Mode" )
+            wire#w1
+            I_Contact( #Fault )
+            Coil( #Interlock )
+        END_RUNG
+        RUNG wire#powerrail
+            Contact( #"Variable Speed Mode" )
+            Ge{ SrcType := Real }(
+                IN1 := #"Variable Speed Setpoint", 
+                IN2 := 0.0
+            )
+        END_RUNG wire#w1
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_3fb"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            Contact( #Execute )
+            wire#w1
+            Contact( #"Constant Speed Control" )
+            I_Contact( #"Variable Speed Control" )
+            I_Contact( #"Variable Speed Mode" )
+            Coil( #"Constant Speed Mode" )
+        END_RUNG
+        RUNG wire#w1
+            Contact( #"Variable Speed Control" )
+            I_Contact( #"Constant Speed Control" )
+            I_Contact( #"Constant Speed Mode" )
+            Coil( #"Variable Speed Mode" )
+        END_RUNG
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_5CR";
+      S7_NetworkComment := "MLC_4Z6"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            Contact( #"Constant Speed Mode" )
+            wire#w1
+            Move{
+                Card := 1; 
+                DisableENO := TRUE
+            }(
+                IN := 0.0, 
+                OUT1 => #"Variable Speed Setpoint"
+            )
+        END_RUNG
+        RUNG wire#powerrail
+            I_Contact( #"Variable Speed Mode" )
+        END_RUNG wire#w1
+        RUNG wire#powerrail
+            Contact( #"Variable Speed Mode" )
+            Calculate{
+                Card := 3; 
+                SrcType := Real; 
+                DisableENO := TRUE; 
+                Equation := (IN1 / IN2) * IN3
+            }(
+                IN1 := #"Variable Speed Percentage", 
+                IN2 := 100.0, 
+                IN3 := #"Variable Max Speed", 
+                OUT => #varSpeedSetpoint
+            )
+            wire#w2
+            Le{ SrcType := Real }(
+                IN1 := #varSpeedSetpoint, 
+                IN2 := #"Variable Max Speed"
+            )
+            Move{
+                Card := 1; 
+                DisableENO := TRUE
+            }(
+                IN := #varSpeedSetpoint, 
+                OUT1 => #"Variable Speed Setpoint"
+            )
+        END_RUNG
+        RUNG wire#w2
+            Gt{ SrcType := Real }(
+                IN1 := #varSpeedSetpoint, 
+                IN2 := #"Variable Max Speed"
+            )
+            Move{
+                Card := 1; 
+                DisableENO := TRUE
+            }(
+                IN := #"Variable Max Speed", 
+                OUT1 => #"Variable Speed Setpoint"
+            )
+        END_RUNG
+
+    END_NETWORK
+
+END_FUNCTION_BLOCK

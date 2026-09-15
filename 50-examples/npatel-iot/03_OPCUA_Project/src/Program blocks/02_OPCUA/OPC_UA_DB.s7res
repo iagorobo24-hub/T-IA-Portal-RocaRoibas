@@ -1,0 +1,8 @@
+﻿<root>
+  <Comment Id="MLC_4jH">
+    <MultiLanguageText Lang="en-US">Read Access for IOT2050</MultiLanguageText>
+  </Comment>
+  <Comment Id="MLC_54x">
+    <MultiLanguageText Lang="en-US">Write Access for IOT2050</MultiLanguageText>
+  </Comment>
+</root>

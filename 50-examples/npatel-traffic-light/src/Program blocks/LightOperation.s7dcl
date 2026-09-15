@@ -1,0 +1,156 @@
+﻿{
+    S7_Optimized := "TRUE";
+    S7_Language := "LAD";
+}
+FUNCTION_BLOCK "LightOperation"
+    VAR_INPUT 
+        start : Bool;
+        reset : Bool;
+    END_VAR
+    VAR_OUTPUT 
+        lightGreen : Bool;
+        lightYellow : Bool;
+        lightRed : Bool;
+        "interlock" : Bool;
+    END_VAR
+    VAR_IN_OUT 
+        fault : Bool;
+    END_VAR
+    VAR 
+        interlockRiseEdge : Bool;
+        {
+             InstructionName := "TP_TIME";
+             LibVersion := "1.0"
+        }
+        greenLightPulse : TP_TIME;
+        {
+             InstructionName := "TP_TIME";
+             LibVersion := "1.0"
+        }
+        yellowLightPulse : TP_TIME;
+        greenLightFallEdge : Bool;
+        yellowLightFallEdge : Bool;
+        redlightRiseEdge : Bool;
+    END_VAR
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_YV"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            Contact( #fault )
+            I_Contact( #reset )
+            "faultOutput"(
+                redLight => #lightRed, 
+                greenLight => #lightGreen, 
+                yellowLight => #lightYellow, 
+                interlock => #interlock
+            )
+            ReturnCoil( False )
+        END_RUNG
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_4c7"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            Contact( #reset )
+            I_Contact( #interlock )
+            "performReset"(
+                lightRed => #lightRed, 
+                lightYellow => #lightYellow, 
+                lightGreen => #lightGreen, 
+                fault => #fault
+            )
+        END_RUNG
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_52W"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            Contact( #start )
+            I_Contact( #fault )
+            Contact( #lightRed )
+            I_Contact( #lightYellow )
+            I_Contact( #lightGreen )
+            S_Coil( #interlock )
+        END_RUNG
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_3w4"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            P_Contact(
+                Top := #interlock, 
+                Bottom := #interlockRiseEdge
+            )
+            wire#w1
+            R_Coil( #lightRed )
+        END_RUNG
+        RUNG wire#w1
+            #greenLightPulse.TP{ time_type := Time }(
+                PT := t#5s, 
+                ET =>  
+            )
+            Coil( #lightGreen )
+        END_RUNG
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_3GB"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            Contact( #interlock )
+            N_Contact(
+                Top := #lightGreen, 
+                Bottom := #greenLightFallEdge
+            )
+            #yellowLightPulse.TP{ time_type := Time }(
+                PT := t#3s, 
+                ET =>  
+            )
+            Coil( #lightYellow )
+        END_RUNG
+
+    END_NETWORK
+
+    {
+      S7_Language := "LAD";
+      S7_NetworkTitle := "MLC_3a6"
+    }
+    NETWORK
+        RUNG wire#powerrail
+            Contact( #interlock )
+            wire#w1
+            N_Contact(
+                Top := #lightYellow, 
+                Bottom := #yellowLightFallEdge
+            )
+            S_Coil( #lightRed )
+        END_RUNG
+        RUNG wire#w1
+            P_Contact(
+                Top := #lightRed, 
+                Bottom := #redlightRiseEdge
+            )
+            R_Coil( #interlock )
+        END_RUNG
+
+    END_NETWORK
+
+END_FUNCTION_BLOCK
