@@ -27,8 +27,8 @@
     "core": {
       "path": "dist/TIA-Claude_Core",
       "files": 251,
-      "bytes": 21377653,
-      "totalBytesIncludingManifest": 21426163,
+      "bytes": 21379581,
+      "totalBytesIncludingManifest": 21428091,
       "manifest": "dist/TIA-Claude_Core/manifests/package-manifest.json"
     },
     "examples": {
@@ -39,5 +39,5 @@
     }
   },
   "legacyMonolithicWorkspace": "workspace/",
-  "generatedUtc": "2026-09-15T09:40:35Z"
+  "generatedUtc": "2026-09-15T09:45:11Z"
 }

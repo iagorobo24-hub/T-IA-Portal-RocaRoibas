@@ -123,6 +123,11 @@ Regla práctica: **si la tarea es entender, `tia-inspect`. Si es crear, `tia-cre
 Para editar un bloque existente, `tia-inspect` con `--allow-write`: tiene mejor modelo de errores
 y no se registra sin la bandera.
 
+Todas las secuencias automatizadas deben ejecutarse con
+`30-tools/scripts/Invoke-McpToolSequence.ps1`, que mantiene una única sesión MCP y adquiere el
+lease `Local\TIA-Claude-McpSession`. Si el lease está ocupado, espera hasta el timeout y falla;
+no se lanzan dos sesiones concurrentes contra TIA.
+
 ---
 
 ## 6. Ciclo de trabajo en un proyecto
@@ -141,6 +146,11 @@ y no se registra sin la bandera.
 
 Los pasos 8 y 9 **no son opcionales**. Un `.ap20` es binario: sin el export en `src/` nadie —
 tú incluido, dentro de tres meses — puede ver qué tocó el agente.
+
+Para simulación PLC, `Write-TiaSimulationReadiness.ps1` debe mostrar también
+`plcsimVirtualAdapterReady=true`. Tener PLCSIM Advanced instalado o poder hacer `PowerOn/PowerOff`
+de una CPU temporal no autoriza una descarga: la ruta PG/PC debe identificar explícitamente el
+adaptador virtual de Siemens y el target debe ser una instancia virtual desechable.
 
 ---
 
