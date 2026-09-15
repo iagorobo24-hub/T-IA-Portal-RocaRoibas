@@ -18,6 +18,12 @@ $notVerified = [System.Collections.Generic.List[string]]::new()
 $blocked = [System.Collections.Generic.List[string]]::new()
 $assumptions = [System.Collections.Generic.List[string]]::new()
 
+$checksPath = Join-Path $WorkspaceRoot '70-runs\checks\latest.json'
+$checks = Read-JsonIfPresent $checksPath
+function Has-PassingCheck([string]$Name) {
+    return [bool]($checks -and @($checks.checks | Where-Object { $_.name -eq $Name -and $_.status -eq 'PASS' }).Count -gt 0)
+}
+
 $environment = Read-JsonIfPresent (Join-Path $WorkspaceRoot '70-runs\environment\latest.json')
 if ($environment -and $environment.tiaMajor -eq 20) { $verified.Add('TIA Portal/Openness V20 baseline') }
 else { $notVerified.Add('TIA Portal/Openness V20 baseline') }
@@ -25,6 +31,12 @@ else { $notVerified.Add('TIA Portal/Openness V20 baseline') }
 $createSmoke = Read-JsonIfPresent (Join-Path $WorkspaceRoot '70-runs\environment\tia-create-smoke.json')
 if ($createSmoke -and $createSmoke.success -eq $true) { $verified.Add('tia-create MCP startup and lite tool roster') }
 else { $notVerified.Add('tia-create MCP startup and lite tool roster') }
+
+if (Has-PassingCheck 'portable-install-relocation') { $verified.Add('portable core installation and relocation') }
+else { $notVerified.Add('portable core installation and relocation') }
+
+if (Has-PassingCheck 'harness-adapters') { $verified.Add('deterministic cross-harness MCP adapters') }
+else { $notVerified.Add('deterministic cross-harness MCP adapters') }
 
 $sweep = Read-JsonIfPresent (Join-Path $WorkspaceRoot '70-runs\standards\sweep-20260915-all\sweep-report.json')
 if ($sweep -and $sweep.success -eq $true -and $sweep.collectionErrorCount -eq 0) { $verified.Add('read-only inventory of all seven examples') }
@@ -55,15 +67,25 @@ if (-not $applyOk -and $tiaProcesses.Count -gt 0) {
     $blocked.Add('TIA Portal tiene una instancia de usuario abierta; no se sustituye ni se cierra automáticamente')
 }
 
-$runtimeDoc = Join-Path $WorkspaceRoot '70-runs\simulation\runtime-advanced-v20.md'
-if (Test-Path -LiteralPath $runtimeDoc -PathType Leaf) { $notVerified.Add('HMI Runtime Advanced V20 compatible y probado') }
-else { $notVerified.Add('HMI Runtime Advanced V20 compatible y probado') }
 $readinessPath = Join-Path $WorkspaceRoot '70-runs\simulation\readiness-latest.json'
 $readiness = Read-JsonIfPresent $readinessPath
+$runtimeDoc = Join-Path $WorkspaceRoot '70-runs\simulation\runtime-advanced-v20.md'
+$runtimeVerified = $readiness -and $readiness.gates -and $readiness.gates.hmiRuntimeAdvancedV20Ready -eq $true
+if ((Test-Path -LiteralPath $runtimeDoc -PathType Leaf) -and $runtimeVerified) {
+    $verified.Add('HMI Runtime Advanced V20 compatible y probado')
+} else {
+    $notVerified.Add('HMI Runtime Advanced V20 compatible y probado')
+}
 if ($readiness -and $readiness.readOnly -eq $true -and $readiness.gates) {
     $verified.Add('preflight determinista de preparación para simulación')
 } else {
     $notVerified.Add('preflight determinista de preparación para simulación')
+}
+if ($readiness -and $readiness.gates -and $readiness.gates.plcsimVirtualAdapterReady -ne $true) {
+    $blocked.Add('El adaptador virtual Siemens PLCSIM no está operativo')
+}
+if ($readiness -and $readiness.gates -and $readiness.gates.hmiRuntimeAdvancedV20Ready -ne $true) {
+    $blocked.Add('WinCC Runtime Advanced V20 compatible no está verificado')
 }
 $notVerified.Add('comportamiento funcional PLC probado en PLCSIM')
 $notVerified.Add('PA-1 ejecutada dos veces desde sesión fría en dos harnesses')
@@ -77,11 +99,19 @@ $result = [ordered]@{
     notVerified = @($notVerified)
     blocked = @($blocked)
     assumptions = @($assumptions)
+    checks = if ($checks) {
+        [ordered]@{
+            success = $checks.success
+            summary = $checks.summary
+            generatedAt = $checks.generatedAt
+        }
+    } else { $null }
     evidence = [ordered]@{
-        checks = Join-Path $WorkspaceRoot '70-runs\checks\latest.json'
+        checks = $checksPath
         environment = Join-Path $WorkspaceRoot '70-runs\environment\latest.json'
         simulationReadiness = if (Test-Path -LiteralPath $readinessPath -PathType Leaf) { $readinessPath } else { $null }
         scaffold = if ($scaffoldFiles) { $scaffoldFiles[0].FullName } else { $null }
+        portableCoreManifest = Join-Path $WorkspaceRoot 'TIA-Claude_Portable\dist\TIA-Claude_Core\manifests\package-manifest.json'
     }
 }
 $json = $result | ConvertTo-Json -Depth 10

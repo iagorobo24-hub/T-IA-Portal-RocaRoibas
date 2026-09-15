@@ -98,6 +98,40 @@ while ($line = [Console]::In.ReadLine()) {
     $global:LASTEXITCODE = 0
     Write-Output 'PASS: simulation acceptance validates the virtual route before one guarded download'
 
+    $notReadyAdapter = Join-Path $temp 'not-ready-adapter.ps1'
+    $notReadyPidPath = Join-Path $temp 'not-ready.pid'
+    $escapedPidPath = $notReadyPidPath.Replace("'", "''")
+    $notReadyScript = @'
+Set-Content -LiteralPath '__PID_PATH__' -Value $PID -Encoding ASCII
+[Console]::Out.WriteLine('{"status":"error","message":"fixture adapter refused registration"}')
+[Console]::Out.Flush()
+while ($line = [Console]::In.ReadLine()) {
+    if ($line -eq 'stop' -or $line -eq 'quit') { break }
+}
+'@ -replace '__PID_PATH__', $escapedPidPath
+    $notReadyScript | Set-Content -LiteralPath $notReadyAdapter -Encoding UTF8
+    $notReadyReportPath = Join-Path $temp 'not-ready.json'
+    $notReadyArguments = ' -NoProfile -NonInteractive -File "' + $notReadyAdapter + '"'
+    $notReadyOutput = & $pwsh -NoProfile -NonInteractive -File $script `
+        -ReadinessPath $readyPath -OutputPath $notReadyReportPath -ProjectFile $projectFile `
+        -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
+        -McpExecutablePath $pwsh -McpArguments $fixtureArguments -PlcSimAdapterPath $pwsh `
+        -PlcSimAdapterArguments $notReadyArguments -StartVirtualPlc -AcknowledgeVirtualTarget -Run 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 1) { throw "Non-ready adapter must fail with exit code 1. Output: $notReadyOutput" }
+    if (-not (Test-Path -LiteralPath $notReadyPidPath -PathType Leaf)) { throw 'Non-ready adapter did not publish its PID.' }
+    $notReadyPid = [int](Get-Content -Raw -LiteralPath $notReadyPidPath)
+    $orphan = Get-Process -Id $notReadyPid -ErrorAction SilentlyContinue
+    if ($orphan) {
+        try { $orphan.Kill() } catch { }
+        throw 'Non-ready virtual PLC process was left running after startup failure.'
+    }
+    $notReady = Get-Content -Raw -LiteralPath $notReadyReportPath | ConvertFrom-Json
+    if ($notReady.phase -ne 'VIRTUAL_PLC_START' -or $notReady.mutationAttempted -ne $false) {
+        throw 'Non-ready adapter failure was not recorded as a pre-mutation startup failure.'
+    }
+    $global:LASTEXITCODE = 0
+    Write-Output 'PASS: simulation acceptance cleans up a virtual PLC that fails readiness'
+
     $adapterFixture = Join-Path $temp 'adapter-fixture.ps1'
     @'
 [Console]::Out.WriteLine('{"status":"ready","instanceName":"FixtureVirtualPlc","interfaceName":"Fixture PLCSIM","ip":"192.168.0.1"}')

@@ -63,12 +63,14 @@ Para escritura hay que relanzar el servidor con `--allow-write` ([ADR-006](00-me
 30-tools\scripts\Run-WorkspaceChecks.ps1
 ```
 
-El último informe verificó **33 PASS, 0 WARN y 0 BLOCKED**. La prueba E2E de escritura completa
+El último informe verificó **37 PASS, 0 WARN y 0 BLOCKED**. La prueba E2E de escritura completa
 está en [`70-runs/e2e/20260915-082218/report.json`](70-runs/e2e/20260915-082218/report.json) y el
 estado de entorno en [`70-runs/environment/latest.json`](70-runs/environment/latest.json).
 El barrido de estándares de los siete ejemplos está en
 [`70-runs/standards/sweep-20260915-all/sweep-report.json`](70-runs/standards/sweep-20260915-all/sweep-report.json):
 7/7 proyectos leídos, sin modificar ninguno.
+El estado de aceptación final, que separa capacidades verificadas de runtime pendiente y bloqueos
+externos, está en `70-runs/acceptance/status-latest.json`.
 
 ### Análisis semántico de un snapshot
 

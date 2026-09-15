@@ -310,6 +310,8 @@
   recipe R17; keep functional expectations project-specific until the real runtime run.
 - [x] Reject observation-only plans: every behavioral step must carry explicit expectations before
   the runner can report `verified`.
+- [x] Add a regression case for a virtual adapter that starts but refuses readiness; the acceptance
+  runner must stop before MCP mutation and leave no child process alive.
 - [ ] Register a disposable virtual CPU, download only to that virtual target, observe a sequence
   transition, and write verified behavioral evidence.
 - [x] Record the current blocker and keep behavioral simulation unverified rather than marking it successful from compilation alone.
@@ -443,6 +445,22 @@ intentionally independent from the green local workspace checks.
 **Interfaces:**
 - Consumes: environment report, package verifier, standards checker and documentation index.
 - Produces: one command with clear PASS/WARN/BLOCKED sections and non-zero exit on unsafe release state.
+
+### Task 6.3: Make the final acceptance status evidence-driven
+
+**Files:**
+- Modify: `30-tools/scripts/Write-TiaAcceptanceStatus.ps1`
+- Modify: `30-tools/tests/Test-TiaAcceptanceStatus.ps1`
+
+**Interfaces:**
+- Consumes: the latest environment, simulation-readiness and aggregate workspace-check reports.
+- Produces: a machine-readable status that separates verified capabilities, missing evidence,
+  external blockers and assumptions; it must never infer runtime behavior from compilation.
+
+- [x] Add portable installation/relocation and cross-harness adapter evidence.
+- [x] Import current PLCSIM and Runtime Advanced gates as explicit blockers.
+- [x] Expose aggregate check summary and all evidence paths in the acceptance report.
+- [x] Add regression assertions that the missing PLCSIM behavior remains unverified.
 
 - [x] Write the failing test for an incomplete or unsafe aggregate report.
 - [x] Implement the aggregator.
