@@ -35,6 +35,8 @@ $definitions = @(
     @{ name = 'project-analysis'; path = '30-tools/tests/Test-TiaProjectAnalysis.ps1' },
     @{ name = 'scl-proposal'; path = '30-tools/tests/Test-TiaSclProposal.ps1' },
     @{ name = 'scl-proposal-apply'; path = '30-tools/tests/Test-TiaSclProposalApply.ps1' },
+    @{ name = 'io-list'; path = '30-tools/tests/Test-TiaIoList.ps1' },
+    @{ name = 'functional-description'; path = '30-tools/tests/Test-TiaFunctionalDescription.ps1' },
     @{ name = 'semantic-workflow'; path = '30-tools/tests/Test-TiaWorkflow.ps1' }
 )
 

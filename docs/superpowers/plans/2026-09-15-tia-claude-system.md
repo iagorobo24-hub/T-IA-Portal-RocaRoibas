@@ -464,6 +464,31 @@ intentionally independent from the green local workspace checks.
 - [ ] Registrar el informe real y actualizar la aceptación solo después de verificar el hash y
   la compilación del proyecto.
 
+## Phase 9: Evidence-based engineering documents
+
+### Task 9.1: Generate I/O list and functional description without inventing evidence
+
+**Files:**
+- Create: `30-tools/scripts/New-TiaIoList.ps1`
+- Create: `30-tools/scripts/New-TiaFunctionalDescription.ps1`
+- Create: `30-tools/tests/Test-TiaIoList.ps1`
+- Create: `30-tools/tests/Test-TiaFunctionalDescription.ps1`
+- Create: `10-kb/20-recetas/R15-lista-es.md`
+- Create: `10-kb/20-recetas/R16-descripcion-funcional.md`
+- Modify: `30-tools/scripts/Run-WorkspaceChecks.ps1`
+
+**Interfaces:**
+- R15 consumes a `readOnly` inventory with detailed tag tables and produces JSON, CSV and
+  Markdown. It blocks if the inventory contains only counters or tree text.
+- R16 consumes `analysis.json` and an optional `io-list.json`, and produces a traceable JSON and
+  Markdown description. It never invents sequences or runtime behavior.
+
+- [x] Write fixture tests for physical I/Q/M, symbolic tags, missing detailed evidence and the
+  functional-description sections.
+- [x] Implement deterministic read-only generators and add both to the workspace checks.
+- [x] Document the recipes and include both tools/tests in the portable content contract.
+- [ ] Run R15/R16 on a live project after obtaining a detailed `GetTagTables/GetTags` snapshot.
+
 ## Final acceptance gate
 
 The system is complete only when all of the following are evidenced:

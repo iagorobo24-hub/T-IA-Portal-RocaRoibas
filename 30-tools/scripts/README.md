@@ -18,6 +18,8 @@ Herramientas de consola para operar TIA Portal por Openness sin depender de un c
 | [`Find-TiaRuntimeMedia.ps1`](Find-TiaRuntimeMedia.ps1) | Busca medios de instalación Runtime/TIA sin instalar nada y exige confirmación para el siguiente paso |
 | [`Write-TiaSimulationReadiness.ps1`](Write-TiaSimulationReadiness.ps1) | Preflight de simulación: separa disponibilidad PLC, compatibilidad HMI V20 y evidencia conductual |
 | [`Invoke-TiaProjectAnalysis.ps1`](Invoke-TiaProjectAnalysis.ps1) | Genera un dossier semántico de solo lectura desde un inventario MCP y fuentes exportadas |
+| [`New-TiaIoList.ps1`](New-TiaIoList.ps1) | Genera lista JSON/CSV/Markdown de E/S solo si hay tags detalladas verificables |
+| [`New-TiaFunctionalDescription.ps1`](New-TiaFunctionalDescription.ps1) | Compone una descripción funcional trazable desde dossier e I/O |
 | [`New-TiaSclProposal.ps1`](New-TiaSclProposal.ps1) | Genera una propuesta SCL, copia, diff y hashes sin modificar el original ni TIA |
 | [`Invoke-TiaWorkflow.ps1`](Invoke-TiaWorkflow.ps1) | Orquesta `analyze`, `propose` y `apply` con preview local y perfil de escritura explícito |
 | [`Stop-TiaPortal.ps1`](Stop-TiaPortal.ps1) | Cierra las instancias headless que `Disconnect` **no** cierra |
