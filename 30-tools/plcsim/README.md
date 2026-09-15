@@ -36,9 +36,12 @@ Windows SDK y la API instalada por PLCSIM Advanced:
 ```powershell
 .\30-tools\plcsim\Build-PlcSimAdapter.ps1 -Force
 .\30-tools\plcsim\bin\v6\tia-claude-plcsim-adapter.exe --inspect
+.\30-tools\plcsim\bin\v6\tia-claude-plcsim-adapter.exe --register-inspect
 .\30-tools\plcsim\bin\v6\tia-claude-plcsim-adapter.exe --register-disposable
 ```
 
+`--register-inspect` crea una instancia temporal, informa de sus propiedades y
+la limpia; sirve para comprobar la base de la ruta de simulación.
 `--register-disposable` es una prueba de ciclo de vida, no una prueba de
 comportamiento del PLC. Las operaciones `PowerOn`, descarga y lectura/escritura
 de tags requieren una fase de simulación explícita y sus propios gates de
