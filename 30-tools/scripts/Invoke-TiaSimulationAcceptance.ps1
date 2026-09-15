@@ -121,6 +121,9 @@ function Invoke-IoPlan([Diagnostics.Process]$Process, [string]$Path) {
         $step = $steps[$index]
         $command = [string]$step.command
         if ([string]::IsNullOrWhiteSpace($command)) { throw "El step $index no tiene command." }
+        if (-not $step.expect -or @($step.expect.PSObject.Properties).Count -eq 0) {
+            throw "El step $index debe declarar expect para que la evidencia pueda marcarse como verificada."
+        }
         $Process.StandardInput.WriteLine($command)
         $Process.StandardInput.Flush()
         $read = $Process.StandardOutput.ReadLineAsync()
