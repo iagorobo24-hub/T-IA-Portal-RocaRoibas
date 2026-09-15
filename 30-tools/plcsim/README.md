@@ -1,8 +1,11 @@
-# PLCSIM Advanced runtime probe
+# PLCSIM Advanced runtime probes
 
 Este componente comprueba la presencia y la inicialización de la API nativa de
-PLCSIM Advanced. Es deliberadamente de solo lectura: no registra instancias, no
-enciende controladores virtuales y no descarga ningún programa.
+PLCSIM Advanced. Incluye dos niveles:
+
+- el probe administrado, que solo inicializa la API y consulta el contador;
+- el adaptador C++ nativo, que además registra una CPU virtual temporal y la
+  desregistra inmediatamente, sin encenderla ni descargar ningún programa.
 
 La API V6.0 instalada expone:
 
@@ -11,9 +14,8 @@ La API V6.0 instalada expone:
 - entry points `RuntimeApiEntry_Initialize` y `RuntimeApiEntry_DestroyInterface`
 
 El probe valida esos dos entry points, puede consultar el número de instancias
-registradas y libera inmediatamente el manager. La automatización de instancias
-se añadirá solo después de tener una prueba aislada de registro, apagado y
-limpieza.
+registradas y libera inmediatamente el manager. El adaptador nativo añade una
+prueba aislada de registro y limpieza, manteniendo apagados los controladores.
 
 ```powershell
 dotnet run --project .\30-tools\plcsim\TiaClaude.PlcSimProbe.csproj -- --json
@@ -27,3 +29,17 @@ dotnet run --project .\30-tools\plcsim\TiaClaude.PlcSimProbe.csproj -- --json --
 
 La ubicación por defecto es la instalación V6.0 de Siemens. Para probar otra,
 se puede pasar `--api-dll <ruta-completa>`.
+
+El adaptador nativo requiere LLVM `clang-cl`, Visual Studio Build Tools con el
+Windows SDK y la API instalada por PLCSIM Advanced:
+
+```powershell
+.\30-tools\plcsim\Build-PlcSimAdapter.ps1 -Force
+.\30-tools\plcsim\bin\v6\tia-claude-plcsim-adapter.exe --inspect
+.\30-tools\plcsim\bin\v6\tia-claude-plcsim-adapter.exe --register-disposable
+```
+
+`--register-disposable` es una prueba de ciclo de vida, no una prueba de
+comportamiento del PLC. Las operaciones `PowerOn`, descarga y lectura/escritura
+de tags requieren una fase de simulación explícita y sus propios gates de
+seguridad.

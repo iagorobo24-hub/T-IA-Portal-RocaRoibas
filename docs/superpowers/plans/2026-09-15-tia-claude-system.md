@@ -271,6 +271,8 @@
 - [x] Run the safe TIA/Openness preflight without replacing the user's open project: attach by
   exact project name, compile with 0 errors/0 warnings, and confirm `CheckDownloadReadiness=true`.
 - [x] Discover and initialize the installed PLCSIM Advanced V6 runtime API with a read-only probe.
+- [x] Add and verify a native C++ lifecycle adapter that registers and unregisters a disposable
+  virtual CPU without powering it on or downloading to it.
 - [ ] Register a disposable virtual CPU, download only to that virtual target, observe a sequence
   transition, and write verified behavioral evidence.
 - [x] Record the current blocker and keep behavioral simulation unverified rather than marking it successful from compilation alone.
