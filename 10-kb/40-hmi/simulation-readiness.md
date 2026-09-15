@@ -6,6 +6,9 @@ o Runtime. No abre programas, no descarga y no cierra procesos.
 El informe separa cuatro hechos que no deben mezclarse:
 
 - **Toolchain PLC:** TIA/Openness V20, `tia-inspect` y PLCSIM Advanced instalados.
+- **API de runtime:** el probe de `30-tools/plcsim/` inicializa y libera la API nativa V6.0 sin
+  crear instancias. Eso verifica la instalación de la API, no todavía el registro, descarga ni
+  comportamiento de un PLC virtual.
 - **Runtime HMI:** existe una instalación real y compatible de WinCC Runtime Advanced V20. Un
   driver V20 o un Runtime V17 no pasan esta puerta.
 - **Comportamiento:** hay una evidencia `sorting-plant-acceptance.json` con `status: verified`.

@@ -43,6 +43,16 @@ parte visual del gemelo digital.
 > El proyecto usa PLCSIM Advanced **V3.0** y tú tienes **V6.0**. Debería funcionar, pero puede
 > pedir reconfigurar la instancia virtual. Anótalo cuando lo pruebes.
 
+### Preflight V20/PLCSIM verificado el 2026-09-15
+
+El proyecto se adjuntó a la instancia de TIA ya abierta, sin cerrarla ni reemplazarla. Openness
+V20 confirmó el software path exacto `Sorting Plant Controller`, compiló con **0 errores y 0
+advertencias**, y `CheckDownloadReadiness` devolvió `Ready=true`. Este último resultado solo
+confirma que existe una configuración de descarga; todavía no demuestra que la ruta apunte a una
+CPU virtual de PLCSIM. Las dos rutas detectadas apuntan a la interfaz inalámbrica Realtek y a
+`1 X1`/`1 X2`, por lo que no se debe ejecutar `DownloadToPlc` hasta crear/seleccionar
+explícitamente la instancia virtual y confirmar la ruta PLCSIM.
+
 ## Lo más valioso: la documentación SCE
 
 `docs/SCE-150-002-gemelo-digital-MCD.pdf` (2,2 MB) es material formativo **oficial de Siemens**

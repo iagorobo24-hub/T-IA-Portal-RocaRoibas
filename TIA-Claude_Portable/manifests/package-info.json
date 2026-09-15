@@ -1,6 +1,6 @@
 {
   "packageName": "TIA-Claude_Portable",
-  "packageVersion": "0.2.0",
+  "packageVersion": "0.3.0",
   "tiaCanonical": 20,
   "dotnetSdk": "10.0.401",
   "tiaInspect": {
@@ -12,22 +12,29 @@
     "status": "installed-and-smoke-tested",
     "version": "2.7.2",
     "required": "V20 runtime, profile lite",
-    "smoke": "55 lite tools; real ScaffoldProject apply remains pending"
+    "smoke": "55 lite tools; ScaffoldProject apply verified in disposable V20 project"
+  },
+  "plcsimAdvancedRuntimeApi": {
+    "status": "installed-and-read-only-probe-verified",
+    "version": "6.0.0.1",
+    "apiDll": "C:\\Program Files (x86)\\Common Files\\Siemens\\PLCSIMADV\\API\\6.0\\Siemens.Simatic.Simulation.Runtime.Api.x64.dll",
+    "redistributed": false,
+    "note": "Siemens runtime binaries remain installed locally; the portable package ships only the probe source."
   },
   "distribution": {
     "core": {
       "path": "dist/TIA-Claude_Core",
-      "files": 236,
-      "bytes": 21335988,
+      "files": 242,
+      "bytes": 21384616,
       "manifest": "dist/TIA-Claude_Core/manifests/package-manifest.json"
     },
     "examples": {
       "path": "dist/TIA-Claude_Examples",
-      "files": 637,
-      "bytes": 189944075,
+      "files": 640,
+      "bytes": 189945773,
       "manifest": "dist/TIA-Claude_Examples/manifests/examples-manifest.json"
     }
   },
   "legacyMonolithicWorkspace": "workspace/",
-  "generatedUtc": "2026-09-15T08:11:00Z"
+  "generatedUtc": "2026-09-15T08:51:00Z"
 }

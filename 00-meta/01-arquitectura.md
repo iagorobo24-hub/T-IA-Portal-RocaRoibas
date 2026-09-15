@@ -69,6 +69,7 @@ C:\Users\jose.mellid\TIA-Claude\
 │   │   ├── new-project.ps1   ← copia 40-projects/_template y lo rellena
 │   │   ├── export-src.ps1    ← proyecto TIA → 40-projects/<x>/src/ para git
 │   │   └── backup.ps1
+│   ├── plcsim/                 ← probe/adaptador de la API nativa PLCSIM Advanced
 │   └── bin/                  ← ejecutables resueltos      [gitignored]
 │
 ├── 40-projects/              ← ★ TRABAJO REAL, un directorio por proyecto
@@ -147,7 +148,7 @@ textual (`.s7dcl` + `.s7res`) que produce heilingbrunner en V20+ **sí** diffea.
                │ Openness API (.NET Framework 4.8)
     ┌──────────▼─────────────────────────────────┐
     │  TIA Portal V20  (C:\...\Portal V20)       │
-    │  + PLCSIM V19 para validación en runtime   │
+    │  + PLCSIM V19 / Advanced V6 para runtime   │
     └────────────────────────────────────────────┘
 ```
 

@@ -19,6 +19,7 @@ if ($spec.hmiName) { throw 'The acceptance scaffold must remain PLC-only.' }
 $runnerText = Get-Content -Raw -LiteralPath $runner
 if ($runnerText -notmatch 'dryRun') { throw 'Scaffold runner must enforce dry-run first.' }
 if ($runnerText -notmatch 'Post-apply inspection/export') { throw 'Scaffold runner must inspect and export after apply.' }
+if ($runnerText -notmatch 'ExportBlock' -or $runnerText -notmatch 'export-blocks') { throw 'Scaffold runner must verify a concrete block export.' }
 if ($runnerText -notmatch 'Check-TiaStandards') { throw 'Scaffold runner must run the standards checker after apply.' }
-if ($runnerText -notmatch 'visible user instance open') { throw 'Scaffold runner must refuse an occupied GUI TIA instance.' }
+if ($runnerText -notmatch 'Get-SessionGuard' -or $runnerText -notmatch 'visible-tia-project-open') { throw 'Scaffold runner must classify visible TIA project state before apply.' }
 Write-Output 'PASS: agent-demo scaffold fixture is defined for a disposable PLC-only acceptance run'

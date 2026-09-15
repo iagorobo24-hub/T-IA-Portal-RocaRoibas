@@ -20,7 +20,7 @@ ingeniería.
 | M3 — base de conocimiento | 🟢 **R01-R14** escritas y validadas: paths, límites, sesiones, errores, lógica y HMI |
 | **`60-library/`** | ✅ **5 bloques SCL compilando con 0 errores y 0 advertencias en TIA V20** |
 | M1b — `tia-create` | ✅ **V20 2.7.2 compilado y smoke-test MCP: 55 herramientas lite** |
-| Pruebas en PLCSIM/HMI | ⬜ **compilar no es funcionar; gates preparados, comportamiento pendiente** |
+| Pruebas en PLCSIM/HMI | 🟡 **API PLCSIM V6 inicializada; comportamiento y HMI V20 pendientes** |
 
 ## ✅ Funciona
 
@@ -61,7 +61,7 @@ Para escritura hay que relanzar el servidor con `--allow-write` ([ADR-006](00-me
 30-tools\scripts\Run-WorkspaceChecks.ps1
 ```
 
-El último informe verificó **13 PASS, 0 WARN y 0 BLOCKED**. La prueba E2E de escritura completa
+El último informe verificó **22 PASS, 0 WARN y 0 BLOCKED**. La prueba E2E de escritura completa
 está en [`70-runs/e2e/20260915-082218/report.json`](70-runs/e2e/20260915-082218/report.json) y el
 estado de entorno en [`70-runs/environment/latest.json`](70-runs/environment/latest.json).
 El barrido de estándares de los siete ejemplos está en
@@ -102,7 +102,7 @@ El barrido de estándares de los siete ejemplos está en
 | Idioma de la interfaz | V20 **solo inglés**; V19 inglés + español ⚠️ *afecta a los paths de Openness* |
 | STEP 7 | Professional + **Safety** en V19 y V20 |
 | WinCC | **Comfort/Advanced ES** + **Unified ES** + Basic, en V19 y V20 |
-| Simulación | **PLCSIM Advanced V6.0** ✅ + PLCSIM V19 + PLCSIM V5.4 |
+| Simulación | **PLCSIM Advanced V6.0** ✅ + PLCSIM V19 + PLCSIM V5.4; API nativa inicializada ✅ |
 | WinCC RT | Runtime Advanced V17 + Unified PC V19 |
 | .NET Framework | 4.8.1 ✅ |
 | .NET SDK | **10.0.401** ✅ (instalado hoy) |
@@ -123,3 +123,11 @@ Clonados en `_ref/` (solo lectura; no se versionan, se recrean con `git clone`):
 | `Dego-Dantas/tia-integration-ai` | Índice que llevó a los dos primeros |
 | `npatel221/PLC_Projects` | 4 proyectos terminados (V16) — referencia de "cómo debe quedar" |
 | `RobertOrsin/TIAPortalGames` | Límites de WinCC + VBScript (V16) — exploración, no estándar |
+
+## Simulación: estado exacto
+
+La API de runtime de PLCSIM Advanced V6.0 ya se puede inicializar desde
+`30-tools/plcsim/`, y `CheckDownloadReadiness` del proyecto Sorting Plant devuelve `Ready=true`.
+Eso todavía no equivale a una simulación: falta registrar una CPU virtual, seleccionar una ruta
+PLCSIM inequívoca, descargar solo a ese target y observar una transición. Runtime Advanced V20
+compatible tampoco está instalado/verificado.

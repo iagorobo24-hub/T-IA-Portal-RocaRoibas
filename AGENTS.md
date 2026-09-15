@@ -177,6 +177,7 @@ tú incluido, dentro de tres meses — puede ver qué tocó el agente.
 |---|---|
 | TIA Portal | **V20** (V19 instalado pero no soportado — ADR-002) |
 | PLCSIM | V19 |
+| PLCSIM Advanced | **V6.0.0.1**; API nativa V6 inicializada por probe de solo lectura; la conducta runtime sigue pendiente |
 | `tia-inspect` | `30-tools/mcp/tia-inspect/bin/v20/TiaMcpServer.exe --tia-major-version 20` |
 | `tia-create` | **V20 2.7.2**, perfil `lite`, compilado y verificado localmente |
 
