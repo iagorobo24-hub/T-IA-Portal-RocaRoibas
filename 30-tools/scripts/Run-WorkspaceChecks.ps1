@@ -37,6 +37,8 @@ $definitions = @(
     @{ name = 'scl-proposal-apply'; path = '30-tools/tests/Test-TiaSclProposalApply.ps1' },
     @{ name = 'io-list'; path = '30-tools/tests/Test-TiaIoList.ps1' },
     @{ name = 'functional-description'; path = '30-tools/tests/Test-TiaFunctionalDescription.ps1' },
+    @{ name = 'tag-export-converter'; path = '30-tools/tests/Test-ConvertTiaTagTableExport.ps1' },
+    @{ name = 'tag-evidence-merge'; path = '30-tools/tests/Test-MergeTiaTagEvidence.ps1' },
     @{ name = 'creation-recipes'; path = '30-tools/tests/Test-TiaCreationRecipes.ps1' },
     @{ name = 'semantic-workflow'; path = '30-tools/tests/Test-TiaWorkflow.ps1' }
 )

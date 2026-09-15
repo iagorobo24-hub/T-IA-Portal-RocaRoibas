@@ -20,6 +20,8 @@ Herramientas de consola para operar TIA Portal por Openness sin depender de un c
 | [`Invoke-TiaProjectAnalysis.ps1`](Invoke-TiaProjectAnalysis.ps1) | Genera un dossier semántico de solo lectura desde un inventario MCP y fuentes exportadas |
 | [`New-TiaIoList.ps1`](New-TiaIoList.ps1) | Genera lista JSON/CSV/Markdown de E/S solo si hay tags detalladas verificables |
 | [`New-TiaFunctionalDescription.ps1`](New-TiaFunctionalDescription.ps1) | Compone una descripción funcional trazable desde dossier e I/O |
+| [`Convert-TiaTagTableExportToInventory.ps1`](Convert-TiaTagTableExportToInventory.ps1) | Normaliza XML real de `ExportPlcTagTable` para R15, sin depender de `GetTags` |
+| [`Merge-TiaTagEvidenceIntoInventory.ps1`](Merge-TiaTagEvidenceIntoInventory.ps1) | Une tags detalladas al inventario de bloques usando el `softwarePath` exacto |
 | [`New-TiaSclProposal.ps1`](New-TiaSclProposal.ps1) | Genera una propuesta SCL, copia, diff y hashes sin modificar el original ni TIA |
 | [`Invoke-TiaWorkflow.ps1`](Invoke-TiaWorkflow.ps1) | Orquesta `analyze`, `propose` y `apply` con preview local y perfil de escritura explícito |
 | [`Stop-TiaPortal.ps1`](Stop-TiaPortal.ps1) | Cierra las instancias headless que `Disconnect` **no** cierra |
@@ -93,6 +95,27 @@ exportaciones individuales XML (`ExportBlock`).
 El informe calcula cobertura de fuentes, tipos y lenguajes, referencias de llamadas y hallazgos
 de protección, inconsistencias, comentarios ausentes y tablas de tags por defecto. `-FailOnBlockingFindings`
 devuelve código 1 si el inventario contiene objetos que no se pueden tocar.
+
+## `Convert-TiaTagTableExportToInventory.ps1`
+
+Convierte una exportación XML de `ExportPlcTagTable` en el inventario detallado que consume R15.
+Es la ruta de compatibilidad cuando el servidor visible no publica `GetTags`: en `tia-create lite`
+se localiza `ExportPlcTagTable` con `FindTools` y se invoca mediante `CallTool`.
+
+```powershell
+.\Convert-TiaTagTableExportToInventory.ps1 `
+  -ExportPath "...\Sorting-Plant-Tags.xml" `
+  -OutputPath "...\inventory-tags.json" `
+  -ProjectPath "...\Project.ap20" `
+  -SoftwarePath "Sorting Plant Controller"
+```
+
+El conversor conserva tipo, dirección, nombre y comentario multilingüe; no deduce tags que no
+estén presentes en el XML.
+
+`Merge-TiaTagEvidenceIntoInventory.ps1` combina ese resultado con el inventario de bloques de
+`tia-inspect`. Rechaza si el `softwarePath` no identifica exactamente un PLC, de modo que el
+análisis semántico y R16 reciben una única evidencia coherente.
 
 ## `New-TiaSclProposal.ps1`
 

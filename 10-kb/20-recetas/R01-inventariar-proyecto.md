@@ -75,7 +75,7 @@ El orden de lectura que más rápido da sentido a un programa ajeno:
 1. OB1 / Main                   → GetBlockSource
 2. lo que OB1 llama, en orden   → GetBlocksWithHierarchy
 3. los DB globales              → GetBlockInterface
-4. las tablas de tags           → GetTagTables → GetTags
+4. las tablas de tags           → GetPlcTagTables → GetTags o ExportPlcTagTable vía FindTools/CallTool
 ```
 
 `GetBlocksWithHierarchy` es la clave: te da el árbol de llamadas, no una lista plana. Un programa
