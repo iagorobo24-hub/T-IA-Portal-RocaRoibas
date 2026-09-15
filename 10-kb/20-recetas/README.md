@@ -69,8 +69,8 @@ Si falla        los modos de fallo conocidos y su arreglo
 
 | # | Receta | Estado |
 |---|---|---|
-| R13 | Pantalla WinCC Unified | ⬜ |
-| R14 | Binding de tags HMI ↔ PLC | ⬜ |
+| [R13](R13-pantalla-hmi.md) | Pantalla WinCC Unified | 📄 documentada, no verificada |
+| [R14](R14-binding-hmi-plc.md) | Binding de tags HMI ↔ PLC | 📄 documentada, no verificada |
 | R15 | Generar la lista de E/S | ⬜ |
 | R16 | Generar la descripción funcional | ⬜ |
 

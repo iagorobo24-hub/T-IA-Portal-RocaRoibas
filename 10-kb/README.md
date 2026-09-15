@@ -17,9 +17,9 @@
 |---|---|---|
 | [`00-fundamentos/`](00-fundamentos/) | [Interfaz de TIA y computer use](00-fundamentos/tia-interfaz-y-computer-use.md) ✅ · versiones, licencias ⬜ | 🟡 |
 | [`10-openness/`](10-openness/) | [Concepto de path](10-openness/path-concept.md) ✅ · [Límites duros](10-openness/limites.md) ✅ · [Conexión y sesiones](10-openness/conexion-y-sesiones.md) ✅ | 🟢 núcleo listo |
-| [`20-recetas/`](20-recetas/) | **Runbooks**: [R01](20-recetas/R01-inventariar-proyecto.md)–[R04](20-recetas/R04-entender-un-bloque.md) ✅ (tanda "entender") · R05-R16 ⬜ | 🟡 tanda 1 de 4 |
+| [`20-recetas/`](20-recetas/) | **Runbooks**: R01-R04 ✅ · R08-R12 ✅ · R13-R14 📄 documentadas, no verificadas · R05-R07/R15-R16 ⬜ | 🟡 |
 | `30-lenguajes/` | SCL, LAD, FBD, STL, GRAPH: sintaxis, patrones, antipatrones | ⬜ |
-| `40-hmi/` | WinCC Unified y Comfort/Advanced | ⬜ |
+| `40-hmi/` | WinCC Unified y Comfort/Advanced | 📄 documentado; runtime V20 pendiente |
 | [`50-errores/`](50-errores/) | [Catálogo](50-errores/README.md) síntoma → causa → arreglo ✅ | 🟢 v1 |
 | [`90-referencia/`](90-referencia/) | [Parámetros reales de `tia-inspect`](90-referencia/parametros-tia-inspect.md) ✅ · tipos, CPUs, memoria ⬜ | 🟡 |
 

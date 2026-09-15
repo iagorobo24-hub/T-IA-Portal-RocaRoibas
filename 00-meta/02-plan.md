@@ -42,7 +42,7 @@ criterio pasa.
 
 ---
 
-### M0 — Desbloquear el entorno `[~1 h, mayormente tuyo]`
+### M0 — Desbloquear el entorno `[COMPLETO]`
 
 Nada funciona hasta esto. Los cinco bloqueos están documentados en `00-analisis-repos.md`.
 
@@ -69,19 +69,20 @@ presente, y una llamada `Connect` real abre TIA Portal y devuelve estado conecta
 
 ---
 
-### M1 — Un MCP hablando con TIA `[~2 h]`
+### M1 — Un MCP hablando con TIA `[PARCIALMENTE COMPLETO]`
 
-`tia-create` V20 (bulaofen, perfil `lite`) ya está compilado y verificado por smoke test. Queda
-probarlo contra un proyecto de juguete desechable una vez que no haya un proyecto de usuario
-abierto en TIA.
+`tia-create` V20 (bulaofen, perfil `lite`) está compilado, instalado y probado contra un proyecto
+de juguete desechable. `tia-inspect` conecta con TIA V20 y el ciclo de escritura E2E ya tiene
+evidencia de backup, importación, compilación, guardado y exportación.
 
-**✅ Criterio de aceptación M1 parcial:** el runtime V20 publica 55 herramientas lite y el
-`ScaffoldProject` mínimo pasa `dryRun=true`. El apply real, la compilación del proyecto generado
-y la prueba desde Claude Code siguen pendientes.
+**✅ Criterio de aceptación M1:** el runtime V20 publica 55 herramientas lite; `ScaffoldProject`
+se ha probado en un proyecto desechable; y `tia-inspect` tiene una escritura E2E con compilación
+0/0. La aplicación semántica de una propuesta sobre TIA sigue pendiente de una sesión sin ventana
+visible.
 
 ---
 
-### M2 — El segundo MCP y la portabilidad entre harnesses `[~3 h]`
+### M2 — El segundo MCP y la portabilidad entre harnesses `[COMPLETO EN CONFIGURACIÓN]`
 
 Instalar `tia-inspect` (heilingbrunner) — depende de Q1 — y escribir `sync-configs.ps1`.
 
@@ -91,7 +92,7 @@ y responden en **al menos dos harnesses distintos** (Claude Code + el que elijas
 
 ---
 
-### M3 — La base de conocimiento `[~8-12 h, el grueso del trabajo]`
+### M3 — La base de conocimiento `[COMPLETO EN V1, AMPLIACIÓN CONTINUA]`
 
 Escribir `10-kb/`. Esto es lo que convierte "una IA con herramientas" en "una IA que sabe de
 automatización". Fuentes: los 91 snippets de Siemens, la doc oficial de Openness, las
@@ -116,7 +117,7 @@ preguntas en `00-meta/eval/kb-quiz.md`). Es una evaluación, no una sensación.
 
 ---
 
-### M4 — Tus estándares `[~2-4 h, requiere entrevistarte]`
+### M4 — Tus estándares `[PROPUESTA V1 VERIFICADA]`
 
 Escribir `20-standards/`. Esto sale de las respuestas del TDD (Q10-Q16) y, sobre todo, de
 mirar proyectos tuyos reales.
@@ -127,7 +128,7 @@ estructura igual que lo harías tú — verificado a ojo sobre 3 bloques generad
 
 ---
 
-### M5 — Ejemplos catalogados `[~3 h]`
+### M5 — Ejemplos catalogados `[COMPLETO V1]`
 
 Migrar los ejemplos V16 → V20 **sobre copia**, e indexarlos en `50-examples/README.md` con
 una ficha por proyecto: qué enseña, qué patrón usa, qué reutilizar y qué no.
@@ -137,7 +138,7 @@ responde a *"¿dónde miro un ejemplo de comunicación OPC-UA?"* sin abrir TIA.
 
 ---
 
-### M6 — PA-1 `[~2 h]`
+### M6 — PA-1 `[PENDIENTE]`
 
 Ejecutar la prueba de aceptación completa. Arreglar lo que salga. Documentar el resultado.
 
@@ -170,7 +171,7 @@ escribir en paralelo mientras se resuelve el toolchain. M0 bloquea absolutamente
 | La IA genera código que compila pero es incorrecto en planta | **Alta** | **Crítico** | Regla dura en `AGENTS.md`: **nada se descarga a un PLC físico sin revisión humana.** Validación en PLCSIM antes que en hardware. Ver Q17 |
 | Superficie de 100+ herramientas confunde al modelo | Media | Medio | Perfil `lite` + recetas en `10-kb/20-recetas/` que fijan la secuencia correcta |
 | Migración V16→V20 rompe los ejemplos | Baja | Bajo | Siempre sobre copia; los originales quedan intactos en `_ref/` |
-| Proyectos de cliente acaban en un repo público por error | Baja | **Crítico** | `.gitignore` por defecto restrictivo; decisión explícita en Q9 |
+| Proyectos de cliente acaban en un repo público por error | Baja | **Crítico** | `.gitignore` restrictivo; workspace público y proyectos privados separados según ADR-005 |
 
 ---
 

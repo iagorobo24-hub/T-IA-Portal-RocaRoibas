@@ -182,18 +182,20 @@ TIA Portal y deja a cualquier IA operativa en minutos. Sus entregables concretos
 | **Base de conocimiento** | Cómo funciona TIA + recetas accionables | `10-kb/` |
 | **Estándares** | Tu forma de nombrar, estructurar y documentar | `20-standards/` |
 | **Toolchain** | MCPs instalados + scripts + `doctor.ps1` | `30-tools/` |
-| **Adaptadores** | Generador de config para cada harness | `30-tools/scripts/sync-configs.ps1` |
+| **Adaptadores** | Generador de config para cada harness y JSON MCP genérico | `30-tools/scripts/Export-HarnessAdapter.ps1` |
 | **Librería** | Bloques y plantillas propios, probados | `60-library/` |
 | **Plantilla de proyecto** | Esqueleto reproducible | `40-projects/_template/` |
 
-⬜ *Decisión abierta: ¿empaquetarlo además como plugin de Claude Code (`.claude-plugin/`) para
-instalarlo con un comando? → TDD Q8.*
+La distribución portable ya es el mecanismo recomendado de instalación. Un plugin específico de
+Claude Code puede añadirse más adelante como comodidad, pero no debe convertirse en la fuente de
+verdad ni en un requisito para Codex, OpenCode, Antigravity o Cursor.
 
 ---
 
 ## Estrategia de Git
 
-⬜ *Decisión abierta (TDD Q9), pero la recomendación es:*
+**Decisión cerrada en ADR-005:** el workspace es público; los proyectos de cliente viven en
+repositorios privados o carpetas privadas separadas.
 
 - **Un repo** para el workspace (`TIA-Claude`), con `40-projects/*/tia/` ignorado y
   `40-projects/*/src/` versionado.

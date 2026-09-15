@@ -80,11 +80,11 @@ bulaofen ya trae `.claude-plugin/plugin.json`. Podríamos hacer lo mismo con nue
 - **b)** Sí, desde el principio
 - **c)** No, con la carpeta clonada basta
 
-### Q9. Git — esto importa y es irreversible si se hace mal
-- **a)** ⭐ Repo **privado** único para todo el workspace. `tia/` ignorado, `src/` versionado
-- **b)** Repo local sin remoto (solo historial, nada sale de la máquina)
-- **c)** Workspace público (conocimiento + herramientas) y proyectos en repos privados aparte
-- **d)** Sin git
+### Q9. Git — RESUELTA
+- **Decisión:** Workspace público (conocimiento + herramientas) y proyectos de cliente en
+  repositorios privados aparte. `tia/` queda ignorado y `src/` se versiona solo cuando el usuario
+  autoriza que no contiene datos de cliente.
+- **ADR:** [`ADR-005-git.md`](decisiones/ADR-005-git.md)
 
 > **Pregunta crítica dentro de esta:** ¿hay proyectos de **cliente** aquí? Si sí, la opción por
 > defecto tiene que ser restrictiva y decidir qué se publica caso por caso, no al revés.
