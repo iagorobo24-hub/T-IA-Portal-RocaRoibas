@@ -97,6 +97,49 @@ while ($line = [Console]::In.ReadLine()) {
     if (@($positive.preflight.selectedRoutes).Count -ne 1) { throw 'Fixture acceptance did not record the selected PLCSIM route.' }
     $global:LASTEXITCODE = 0
     Write-Output 'PASS: simulation acceptance validates the virtual route before one guarded download'
+
+    $adapterFixture = Join-Path $temp 'adapter-fixture.ps1'
+    @'
+[Console]::Out.WriteLine('{"status":"ready","instanceName":"FixtureVirtualPlc","interfaceName":"Fixture PLCSIM","ip":"192.168.0.1"}')
+[Console]::Out.Flush()
+while ($line = [Console]::In.ReadLine()) {
+    if ($line -eq 'stop' -or $line -eq 'quit') {
+        [Console]::Out.WriteLine('{"status":"stopped","powerOffCode":"0x0","unregisterCode":"0x0","destroyCode":"0x0"}')
+        [Console]::Out.Flush()
+        break
+    }
+}
+'@ | Set-Content -LiteralPath $adapterFixture -Encoding UTF8
+    $managedReportPath = Join-Path $temp 'managed.json'
+    $managedAdapterArguments = ' -NoProfile -NonInteractive -File "' + $adapterFixture + '"'
+    $managedOutput = & $pwsh -NoProfile -NonInteractive -File $script `
+        -ReadinessPath $readyPath -OutputPath $managedReportPath -ProjectFile $projectFile `
+        -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
+        -McpExecutablePath $pwsh -McpArguments $fixtureArguments -PlcSimAdapterPath $pwsh `
+        -PlcSimAdapterArguments $managedAdapterArguments -StartVirtualPlc -AcknowledgeVirtualTarget -Run 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0) { throw "Managed virtual PLC fixture failed with exit code $LASTEXITCODE. Output: $managedOutput" }
+    $managed = Get-Content -Raw -LiteralPath $managedReportPath | ConvertFrom-Json
+    if ($managed.status -ne 'VERIFIED' -or $managed.virtualPlc.started -ne $true -or $managed.virtualPlc.cleanup.status -ne 'stopped') {
+        throw 'Managed virtual PLC lifecycle did not start and clean up deterministically.'
+    }
+    $global:LASTEXITCODE = 0
+    Write-Output 'PASS: simulation acceptance owns virtual PLC startup and cleanup'
+
+    $adapterFailureReportPath = Join-Path $temp 'adapter-failure.json'
+    $missingAdapter = Join-Path $temp 'missing-tia-claude-plcsim-adapter.exe'
+    $adapterOutput = & $pwsh -NoProfile -NonInteractive -File $script `
+        -ReadinessPath $readyPath -OutputPath $adapterFailureReportPath -ProjectFile $projectFile `
+        -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
+        -McpExecutablePath $pwsh -McpArguments $fixtureArguments -PlcSimAdapterPath $missingAdapter `
+        -StartVirtualPlc -AcknowledgeVirtualTarget -Run 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 1) { throw "Missing adapter must fail with exit code 1. Output: $adapterOutput" }
+    $adapterFailure = Get-Content -Raw -LiteralPath $adapterFailureReportPath | ConvertFrom-Json
+    if ($adapterFailure.status -ne 'FAILED' -or $adapterFailure.phase -ne 'VIRTUAL_PLC_START') {
+        throw 'Missing adapter did not stop in VIRTUAL_PLC_START.'
+    }
+    if ($adapterFailure.mutationAttempted -ne $false) { throw 'Missing adapter must not mark mutation attempted.' }
+    $global:LASTEXITCODE = 0
+    Write-Output 'PASS: simulation acceptance refuses before MCP when the native virtual PLC adapter is missing'
 }
 finally {
     if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Recurse -Force }

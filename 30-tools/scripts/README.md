@@ -112,11 +112,13 @@ rechaza la descarga si ninguna ruta contiene el adaptador PLCSIM solicitado.
   -ProjectName "Sorting Plant Control_V20" `
   -SoftwarePath "Sorting Plant Controller" `
   -TargetIpAddress "192.168.0.1" `
-  -AcknowledgeVirtualTarget -Run
+  -StartVirtualPlc -AcknowledgeVirtualTarget -Run
 ```
 
 El runner utiliza por defecto `tia-create` V20 con el perfil `full` para disponer de los esquemas
-de descarga. No se debe cambiar `-VirtualInterfacePattern` a una NIC física para el acceptance PLC.
+de descarga. Con `-StartVirtualPlc` también mantiene viva la instancia nativa 1516F y la limpia
+en `finally`; si no se pasa, la instancia debe estar gestionada externamente. No se debe cambiar
+`-VirtualInterfacePattern` a una NIC física para el acceptance PLC.
 
 ## `Invoke-TiaProjectAnalysis.ps1`
 

@@ -19,10 +19,16 @@ param(
     [string]$SoftwarePath,
     [string]$TargetIpAddress,
     [string]$VirtualInterfacePattern = 'PLCSIM',
+    [string]$PlcSimAdapterPath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path '30-tools\plcsim\bin\v6\tia-claude-plcsim-adapter.exe'),
+    [string]$PlcSimAdapterArguments,
+    [string]$PlcSimInterface = 'Siemens PLCSIM Virtual Ethernet Adapter',
+    [string]$VirtualPlcName = 'TIAClaudeAcceptance_1516F',
+    [int]$PlcSimTimeoutMs = 60000,
     [string]$McpExecutablePath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path '30-tools\mcp\tia-create\bin\v20\TiaMcpServer.exe'),
     [string]$McpArguments = '--tia-major-version 20 --profile full --allow-write',
     [int]$TimeoutSeconds = 900,
     [switch]$Run,
+    [switch]$StartVirtualPlc,
     [switch]$AcknowledgeVirtualTarget
 )
 
@@ -70,6 +76,38 @@ function New-BaseReport([object]$Readiness) {
         calls = @()
         readiness = $Readiness
     }
+}
+
+function Start-VirtualPlcProcess {
+    if (-not (Test-Path -LiteralPath $PlcSimAdapterPath -PathType Leaf)) {
+        throw "No existe el adaptador nativo PLCSIM: $PlcSimAdapterPath"
+    }
+    $psi = [Diagnostics.ProcessStartInfo]::new()
+    $psi.FileName = [IO.Path]::GetFullPath($PlcSimAdapterPath)
+    $psi.Arguments = if ([string]::IsNullOrWhiteSpace($PlcSimAdapterArguments)) {
+        '--register-acceptance --name "{0}" --interface "{1}" --ip "{2}" --timeout-ms {3}' -f $VirtualPlcName, $PlcSimInterface, $TargetIpAddress, $PlcSimTimeoutMs
+    } else { $PlcSimAdapterArguments }
+    $psi.WorkingDirectory = Split-Path -Parent $psi.FileName
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $psi.RedirectStandardInput = $true
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.StandardOutputEncoding = [Text.Encoding]::UTF8
+    $process = [Diagnostics.Process]::Start($psi)
+    $stderrTask = $process.StandardError.ReadToEndAsync()
+    $read = $process.StandardOutput.ReadLineAsync()
+    if (-not $read.Wait($PlcSimTimeoutMs)) {
+        try { $process.Kill() } catch { }
+        throw "Timeout esperando el estado ready del adaptador PLCSIM ($PlcSimTimeoutMs ms)."
+    }
+    $line = $read.Result
+    if ([string]::IsNullOrWhiteSpace($line)) { throw 'El adaptador PLCSIM terminó sin emitir estado inicial.' }
+    try { $ready = $line | ConvertFrom-Json } catch { throw "El adaptador PLCSIM emitió JSON inválido: $line" }
+    if ([string]$ready.status -ne 'ready') {
+        throw "El adaptador PLCSIM no está listo: $line"
+    }
+    [pscustomobject]@{ process = $process; ready = $ready; stderrTask = $stderrTask }
 }
 
 $readiness = Read-Json $ReadinessPath
@@ -120,8 +158,29 @@ $pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
 if (-not $pwsh) { $pwsh = (Get-Command powershell -ErrorAction Stop).Source }
 $preflightSequencePath = Join-Path ([IO.Path]::GetTempPath()) ('tia-claude-acceptance-preflight-' + [guid]::NewGuid().ToString('N') + '.json')
 $downloadSequencePath = Join-Path ([IO.Path]::GetTempPath()) ('tia-claude-acceptance-download-' + [guid]::NewGuid().ToString('N') + '.json')
+$virtualProcess = $null
+$virtualAdapterResult = $null
+$exitCode = 0
 
 try {
+    if ($StartVirtualPlc) {
+        $report.phase = 'VIRTUAL_PLC_START'
+        $virtualAdapterResult = Start-VirtualPlcProcess
+        $virtualProcess = $virtualAdapterResult.process
+        $report.virtualPlc = [ordered]@{
+            started = $true
+            adapterPath = [IO.Path]::GetFullPath($PlcSimAdapterPath)
+            name = $VirtualPlcName
+            interface = $PlcSimInterface
+            targetIpAddress = $TargetIpAddress
+            ready = $virtualAdapterResult.ready
+        }
+    }
+    else {
+        $report.virtualPlc = [ordered]@{ started = $false; reason = 'StartVirtualPlc no solicitado; el proceso debe estar gestionado externamente.' }
+    }
+
+    $report.phase = 'PREFLIGHT'
     $preflightCalls = @(
         @{ name = 'Bootstrap'; args = @{} },
         @{ name = 'Connect'; args = @{} },
@@ -164,17 +223,50 @@ try {
     $report.status = 'VERIFIED'
     $report.phase = 'DOWNLOAD_AND_ONLINE_CHECK'
     $report.nextActions = @('Registrar el comportamiento observable de la planta y, si procede, iniciar una aceptación HMI separada.')
-    Write-Report $report 0
 }
 catch {
     $report.status = 'FAILED'
-    $report.phase = if ($report.mutationAttempted) { 'DOWNLOAD_AND_ONLINE_CHECK' } else { 'PREFLIGHT' }
+    if ($report.phase -ne 'VIRTUAL_PLC_START') {
+        $report.phase = if ($report.mutationAttempted) { 'DOWNLOAD_AND_ONLINE_CHECK' } else { 'PREFLIGHT' }
+    }
     $report.blockers = @($_.Exception.Message)
     $report.nextActions = @('No reintentar a ciegas: revisar calls, la ruta PG/PC y el mensaje exacto de Openness.')
-    Write-Report $report 1
+    $exitCode = 1
 }
 finally {
+    if ($virtualProcess) {
+        $cleanupLines = @()
+        try {
+            $virtualProcess.StandardInput.WriteLine('stop')
+            $virtualProcess.StandardInput.Flush()
+            $virtualProcess.StandardInput.Close()
+        }
+        catch { }
+        if (-not $virtualProcess.WaitForExit($PlcSimTimeoutMs)) {
+            try { $virtualProcess.Kill() } catch { }
+        }
+        try {
+            $remaining = $virtualProcess.StandardOutput.ReadToEnd()
+            if ($remaining) { $cleanupLines = @($remaining -split "`r?`n" | Where-Object { $_.Trim() }) }
+        }
+        catch { }
+        $cleanup = $null
+        foreach ($cleanupLine in $cleanupLines) {
+            try { $candidate = $cleanupLine | ConvertFrom-Json; if ($candidate.status -eq 'stopped' -or $candidate.status -eq 'cleanup-failed') { $cleanup = $candidate } } catch { }
+        }
+        if (-not $report.virtualPlc) { $report.virtualPlc = [ordered]@{} }
+        $report.virtualPlc.cleanup = $cleanup
+        if ($cleanup -and $cleanup.status -eq 'cleanup-failed') {
+            $report.status = 'FAILED'
+            $report.phase = 'VIRTUAL_PLC_CLEANUP'
+            $report.blockers = @('El adaptador PLCSIM no confirmó la limpieza completa.')
+            $exitCode = 1
+        }
+        try { $virtualProcess.Dispose() } catch { }
+    }
     foreach ($path in @($preflightSequencePath, $downloadSequencePath)) {
         if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
     }
 }
+
+Write-Report $report $exitCode

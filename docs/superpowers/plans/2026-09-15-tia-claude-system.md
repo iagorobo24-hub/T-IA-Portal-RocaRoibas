@@ -302,6 +302,8 @@
   schemas, PLCSIM route verification and explicit virtual-target acknowledgement before download.
 - [x] Verify its full preflight/download state machine against a deterministic MCP fixture;
   retain the real PLCSIM behavioral acceptance as an environment-dependent gate.
+- [x] Make virtual PLC startup/cleanup an explicit runner phase and verify deterministic cleanup
+  with a managed adapter fixture; keep the real native adapter path opt-in via `-StartVirtualPlc`.
 - [ ] Register a disposable virtual CPU, download only to that virtual target, observe a sequence
   transition, and write verified behavioral evidence.
 - [x] Record the current blocker and keep behavioral simulation unverified rather than marking it successful from compilation alone.
