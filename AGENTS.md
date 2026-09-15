@@ -123,6 +123,12 @@ Regla práctica: **si la tarea es entender, `tia-inspect`. Si es crear, `tia-cre
 Para editar un bloque existente, `tia-inspect` con `--allow-write`: tiene mejor modelo de errores
 y no se registra sin la bandera.
 
+La lista visible de `tia-create lite` no es el roster completo. Si una capacidad no aparece,
+ejecuta `FindTools` con lenguaje natural y después `CallTool` con la firma exacta; no declares
+que falta sin esa comprobación. Para E/S, si `GetTags` no está disponible, usa
+`FindTools("export PLC tag table")` → `CallTool("ExportPlcTagTable", ...)` y normaliza la evidencia
+con `Convert-TiaTagTableExportToInventory.ps1`.
+
 Todas las secuencias automatizadas deben ejecutarse con
 `30-tools/scripts/Invoke-McpToolSequence.ps1`, que mantiene una única sesión MCP y adquiere el
 lease `Local\TIA-Claude-McpSession`. Si el lease está ocupado, espera hasta el timeout y falla;

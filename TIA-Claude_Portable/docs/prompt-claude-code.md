@@ -25,6 +25,12 @@ Usa SCL para lógica y LAD solo desde recetas o bloques probados. No escribas LA
 
 Si el usuario pide crear algo, revisa primero 60-library y 10-kb/20-recetas. Si pide modificar algo, lee el bloque entero y propone el cambio antes de ejecutarlo. Si una herramienta devuelve un error tipado, respeta su categoría y no reintentes a ciegas.
 
+La lista de herramientas de `tia-create lite` es parcial. Si necesitas una capacidad que no
+aparece, usa `FindTools` y luego `CallTool` con la firma devuelta. Para una lista de E/S, si no
+existe `GetTags`, exporta la tabla real con `ExportPlcTagTable` y normalízala con
+`Convert-TiaTagTableExportToInventory.ps1`; combina inventarios con
+`Merge-TiaTagEvidenceIntoInventory.ps1` solo con un `softwarePath` exacto.
+
 Para cambios SCL usa primero `Invoke-TiaProjectAnalysis.ps1` y `New-TiaSclProposal.ps1`. Revisa
 `proposal.json`, `proposal.diff` y sus hashes. El preview se ejecuta con
 `Invoke-TiaWorkflow.ps1 -Workflow apply -Profile read`; no conecta con TIA. La aplicación real
