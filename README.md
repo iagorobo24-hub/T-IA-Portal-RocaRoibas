@@ -147,6 +147,8 @@ Clonados en `_ref/` (solo lectura; no se versionan, se recrean con `git clone`):
 
 La API de runtime de PLCSIM Advanced V6.0 ya se puede inicializar desde
 `30-tools/plcsim/`, y `CheckDownloadReadiness` del proyecto Sorting Plant devuelve `Ready=true`.
-Eso todavía no equivale a una simulación: falta registrar una CPU virtual, seleccionar una ruta
-PLCSIM inequívoca, descargar solo a ese target y observar una transición. Runtime Advanced V20
+El adaptador ya incluye el flujo para registrar una CPU virtual persistente del tipo 1516F,
+seleccionar una ruta PLCSIM inequívoca y descargar solo a ese target. En esta máquina ese flujo
+queda bloqueado antes del registro porque `Siemens PLCSIM Virtual Ethernet Adapter` no aparece
+operativo; todavía falta repetirlo tras activarlo y observar una transición. Runtime Advanced V20
 compatible tampoco está instalado/verificado.

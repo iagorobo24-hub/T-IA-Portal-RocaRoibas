@@ -295,6 +295,9 @@
   virtual CPU without powering it on or downloading to it.
 - [x] Verify a disposable virtual CPU PowerOn/PowerOff cycle with no project download and no
   remaining PLCSIM instance/process.
+- [x] Add a persistent acceptance-instance path for the exact Sorting Plant CPU type (1516F),
+  deterministic IP, IE1 adapter mapping, PowerOn and stdin-controlled cleanup; refuse safely
+  with available-interface evidence when the Siemens virtual adapter is absent.
 - [ ] Register a disposable virtual CPU, download only to that virtual target, observe a sequence
   transition, and write verified behavioral evidence.
 - [x] Record the current blocker and keep behavioral simulation unverified rather than marking it successful from compilation alone.
