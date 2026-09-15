@@ -7,7 +7,7 @@ Claude Code / Codex / OpenCode / Antigravity
                  |
        configuracion generada por maquina
                  |
-      tia-inspect (read) / tia-create (build)
+      tia-inspect (read/write) / tia-create (create)
                  |
        Siemens TIA Openness API V20
                  |

@@ -68,8 +68,10 @@ function Get-McpServers {
         Where-Object { $_.Name -eq 'TiaMcpServer.exe' } |
         ForEach-Object {
             $relative = $_.FullName.Substring($WorkspaceRoot.Length).TrimStart('\').Replace('\', '/')
+            if ($relative -notmatch '^30-tools/mcp/[^/]+/bin/v20/TiaMcpServer\.exe$') { return }
+            $serverRoot = Split-Path (Split-Path $_.DirectoryName -Parent) -Parent
             [pscustomobject]@{
-                name = Split-Path (Split-Path $_.DirectoryName -Parent) -Leaf
+                name = Split-Path $serverRoot -Leaf
                 path = $relative
                 absolutePath = $_.FullName
                 bytes = $_.Length
@@ -122,7 +124,7 @@ function Invoke-Doctor {
         return [pscustomobject]@{ skipped = $true; exitCode = $null; output = $null }
     }
 
-    $server = Get-McpServers | Where-Object { $_.path -match '/v20/' } | Select-Object -First 1
+    $server = Get-McpServers | Where-Object { $_.name -eq 'tia-inspect' } | Select-Object -First 1
     if ($null -eq $server) {
         return [pscustomobject]@{ skipped = $true; reason = 'No V20 TiaMcpServer.exe found'; exitCode = $null; output = $null }
     }

@@ -67,6 +67,20 @@ para y pregunta.
 - **F-blocks / tags de safety**: no los edites. Requieren password y auditoría. Reporta y para.
 - Si un error de Openness menciona safety o protección, **no reintentes**: informa.
 
+### 3.5 Perfiles MCP y proyectos abiertos
+
+- **`read`**: solo `tia-inspect`; es el perfil por defecto para descubrir y analizar.
+- **`write`**: `tia-inspect --allow-write`; requiere backup, lectura previa, preview y compilación.
+- **`create`**: solo `tia-create`; para proyectos nuevos, hardware, redes y HMI. Requiere
+  reconocimiento explícito del perfil de escritura y `dryRun` antes de aplicar.
+- **`full`**: combina lectura/escritura y creación; solo se usa cuando la tarea necesita ambos
+  servidores y también requiere reconocimiento explícito.
+
+Si TIA Portal ya tiene abierto un proyecto que no es inequívocamente el objetivo, no lo cierres,
+no lo sustituyas y no lances una segunda instancia: intenta `Attach` únicamente si corresponde
+al proyecto pedido; en cualquier otro caso detente y pide al usuario que libere o confirme la
+instancia. Un resultado de `dryRun` nunca se presenta como cambio aplicado.
+
 ### 3.4 Datos de cliente
 
 `40-projects/` puede contener know-how de cliente. **No lo copies a `10-kb/`, a `60-library/`
@@ -133,6 +147,8 @@ tú incluido, dentro de tres meses — puede ver qué tocó el agente.
 - **Español.** Identificadores de código en inglés (ver `20-standards/naming.md`).
 - Di lo que has verificado y lo que has supuesto. Si compilaste y dio 0 errores, dilo con el
   número. Si no lo compilaste, dilo también.
+- Clasifica cada resultado relevante como **verificado**, **supuesto**, **no verificado** o
+  **bloqueado**, e indica la evidencia y el siguiente paso cuando no esté verificado.
 - **No inventes que algo funciona.** Este dominio no perdona el optimismo: un bloque que
   "debería funcionar" en una máquina en marcha es un problema real.
 - Cuando una herramienta falle, lee el mensaje: los tres servidores devuelven errores tipados
@@ -160,7 +176,7 @@ tú incluido, dentro de tres meses — puede ver qué tocó el agente.
 | TIA Portal | **V20** (V19 instalado pero no soportado — ADR-002) |
 | PLCSIM | V19 |
 | `tia-inspect` | `30-tools/mcp/tia-inspect/bin/v20/TiaMcpServer.exe --tia-major-version 20` |
-| `tia-create` | ⬜ no instalado; bloqueo explícito en `30-tools/mcp/servers.json` |
+| `tia-create` | **V20 2.7.2**, perfil `lite`, compilado y verificado localmente |
 
 Si `Doctor` dice `User in 'Siemens TIA Openness' user group: False`, **nada va a funcionar**.
 Manda al usuario al README: hay que añadirse al grupo como administrador y cerrar sesión.

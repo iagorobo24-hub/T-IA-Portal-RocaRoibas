@@ -9,23 +9,25 @@
     "bytes": 371712
   },
   "tiaCreate": {
-    "status": "not-installed",
-    "required": "V20 runtime, profile lite"
+    "status": "installed-and-smoke-tested",
+    "version": "2.7.2",
+    "required": "V20 runtime, profile lite",
+    "smoke": "55 lite tools; real ScaffoldProject apply remains pending"
   },
   "distribution": {
     "core": {
       "path": "dist/TIA-Claude_Core",
-      "files": 151,
-      "bytes": 7309963,
+      "files": 230,
+      "bytes": 21305657,
       "manifest": "dist/TIA-Claude_Core/manifests/package-manifest.json"
     },
     "examples": {
       "path": "dist/TIA-Claude_Examples",
-      "files": 605,
-      "bytes": 192430082,
+      "files": 637,
+      "bytes": 189944075,
       "manifest": "dist/TIA-Claude_Examples/manifests/examples-manifest.json"
     }
   },
   "legacyMonolithicWorkspace": "workspace/",
-  "generatedUtc": "2026-09-15T06:53:16Z"
+  "generatedUtc": "2026-09-15T07:41:11Z"
 }

@@ -81,6 +81,7 @@ $psi.UseShellExecute        = $false
 $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
 
 $proc = [System.Diagnostics.Process]::Start($psi)
+$stderrTask = $proc.StandardError.ReadToEndAsync()
 
 function Send-Line([string]$json) {
     $proc.StandardInput.Write($json + "`n")
@@ -171,4 +172,5 @@ try {
 finally {
     try { $proc.StandardInput.Close() } catch {}
     if (-not $proc.WaitForExit(5000)) { try { $proc.Kill() } catch {} }
+    try { $null = $stderrTask.GetAwaiter().GetResult() } catch {}
 }

@@ -43,7 +43,8 @@ $coreItems = @(
     '30-tools/scripts', '30-tools/tests', '30-tools/harnesses', '30-tools/mcp/servers.json',
     '30-tools/mcp/tia-inspect/README.md',
     '30-tools/mcp/tia-inspect/build.ps1', '30-tools/mcp/tia-inspect/patches',
-    '30-tools/mcp/tia-inspect/bin/v20'
+    '30-tools/mcp/tia-inspect/bin/v20',
+    '30-tools/mcp/tia-create/README.md', '30-tools/mcp/tia-create/bin/v20'
 )
 foreach ($item in $coreItems) { Copy-WorkspaceItem $item $coreRoot }
 

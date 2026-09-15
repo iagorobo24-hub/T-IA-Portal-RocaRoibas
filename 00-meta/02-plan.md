@@ -60,8 +60,8 @@ Comando de M0.1, en PowerShell **como administrador**:
 net localgroup "Siemens TIA Openness" "%USERNAME%" /add
 ```
 
-> El grupo existe pero está **vacío**. Es el bloqueo nº1 más común de Openness y no da un
-> error claro: da fallos de conexión opacos. Y **no surte efecto hasta cerrar sesión**.
+> El grupo existe y la pertenencia del usuario está **verificada** en el informe de entorno y por
+> Doctor. Si cambia el usuario de Windows, hay que repetir esta comprobación.
 
 **✅ Criterio de aceptación M0:** `doctor.ps1` imprime todo en verde:
 grupo Openness OK, TIA V20 detectado, `Siemens.Engineering.dll` accesible, runtime del MCP
@@ -71,12 +71,13 @@ presente, y una llamada `Connect` real abre TIA Portal y devuelve estado conecta
 
 ### M1 — Un MCP hablando con TIA `[~2 h]`
 
-Instalar `tia-create` (bulaofen V20, perfil `lite`) y verificarlo contra un proyecto de juguete.
+`tia-create` V20 (bulaofen, perfil `lite`) ya está compilado y verificado por smoke test. Queda
+probarlo contra un proyecto de juguete desechable una vez que no haya un proyecto de usuario
+abierto en TIA.
 
-**✅ Criterio de aceptación M1:** desde Claude Code, la frase *"conéctate a TIA y dime qué
-proyectos hay abiertos"* devuelve respuesta real, y `ScaffoldProject` con
-`templates/project-blueprints/scaffold_spec_start_stop.json` genera un proyecto que compila
-con 0 errores. **Esto ya prueba la mitad de PA-1.**
+**✅ Criterio de aceptación M1 parcial:** el runtime V20 publica 55 herramientas lite y el
+`ScaffoldProject` mínimo pasa `dryRun=true`. El apply real, la compilación del proyecto generado
+y la prueba desde Claude Code siguen pendientes.
 
 ---
 
