@@ -379,6 +379,41 @@ intentionally independent from the green local workspace checks.
   `mcpServers` JSON adapter. They export fragments but do not mutate personal harness
   configuration; the concrete Antigravity/Cursor UI integration remains unverified.
 
+### Task 5.3: Prove reinstallation and path relocation
+
+**Files:**
+- Modify: `TIA-Claude_Portable/install/Install-CorePackage.ps1`
+- Create: `TIA-Claude_Portable/tests/Test-PortableInstallRelocation.ps1`
+- Modify: `30-tools/scripts/Run-WorkspaceChecks.ps1`
+- Modify: `TIA-Claude_Portable/README-INSTALL.md`
+
+**Interfaces:**
+- Consumes: a generated `TIA-Claude_Core` package in an arbitrary source path.
+- Produces: an installed core rooted at an arbitrary destination, a regenerated read-only MCP
+  profile and a verifier that remains available after installation.
+
+- [x] Add a failing relocation test for the missing post-install verifier.
+- [x] Keep the two operational install scripts in the destination without recursively copying the
+  source installer directory.
+- [x] Verify that the generated MCP executable path points to the destination, not the source
+  package, and that the default profile remains read-only.
+- [x] Add the relocation test to the aggregate checks and document post-install verification.
+
+### Task 5.4: Make the cross-harness bootstrap prompt location-independent
+
+**Files:**
+- Modify: `TIA-Claude_Portable/docs/prompt-claude-code.md`
+- Modify: `TIA-Claude_Portable/tests/Test-PortablePackageContent.ps1`
+
+**Interfaces:**
+- Consumes: the installed core root and its generated read-only MCP configuration.
+- Produces: one copyable prompt that works from the relocated root and preserves the same safety
+  and evidence contract across Claude Code and compatible harnesses.
+
+- [x] Remove the obsolete assumption that the package is installed under `workspace/`.
+- [x] Make the first-session bootstrap, profile escalation and runtime-evidence rules explicit.
+- [x] Add package-content assertions for the prompt's mandatory instructions.
+
 ## Phase 6: Repository and release discipline
 
 ### Task 6.1: Initialize Git with confidentiality boundaries
