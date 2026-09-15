@@ -78,7 +78,7 @@ el perfil del ejecutable.
 ## `Invoke-TiaProjectAnalysis.ps1`
 
 Construye un dossier JSON y Markdown sin abrir ni modificar TIA. Consume un inventario `readOnly`
-producido por MCP y el árbol de fuentes exportadas; reconoce declaraciones SCL (`.s7dcl`) y
+producido por MCP y el árbol de fuentes exportadas; reconoce declaraciones SCL (`.s7dcl` y `.scl`) y
 exportaciones individuales XML (`ExportBlock`).
 
 ```powershell
@@ -94,7 +94,7 @@ devuelve código 1 si el inventario contiene objetos que no se pueden tocar.
 
 ## `New-TiaSclProposal.ps1`
 
-Genera una propuesta de un único reemplazo textual en una fuente `.s7dcl` enlazada desde el
+Genera una propuesta de un único reemplazo textual en una fuente `.s7dcl` o `.scl` enlazada desde el
 dossier. Rechaza bloques protegidos, inconsistentes, no-SCL, fuentes ausentes o reemplazos
 ambiguos. La carpeta de salida contiene `proposal.json`, una copia propuesta, `proposal.diff` y
 `proposal.md`; el fichero original y TIA permanecen intactos.
@@ -109,6 +109,28 @@ ambiguos. La carpeta de salida contiene `proposal.json`, una copia propuesta, `p
 
 Aplicar una propuesta es deliberadamente otra operación y debe seguir el ciclo de escritura de
 `AGENTS.md`.
+
+## `Invoke-TiaSclProposalApply.ps1`
+
+Valida una propuesta y, solo con `-Apply`, ejecuta el flujo de escritura V20. Sin `-Apply` no
+conecta con TIA y deja un informe `PREVIEW`. Con `-Apply` exige proyecto exacto, backup,
+instancia TIA no visible, lectura de árbol y bloque, importación, compilación con 0 errores y 0
+advertencias, guardado, exportación y lectura posterior. Las fuentes `.s7dcl` usan
+`PreviewImport` + `ImportFromDocuments`; las `.scl` se colocan en `Program blocks/<grupo>` y usan
+`ImportSources`. Nunca descarga a hardware.
+
+```powershell
+.\Invoke-TiaSclProposalApply.ps1 `
+  -ProposalPath "...\proposal.json" `
+  -ProjectFile "...\Proyecto_V20.ap20" `
+  -ReportRoot "...\70-runs\proposal-apply"       # preview local
+
+# Aplicación real: revisar proposal.json/diff y cerrar TIA visible antes de usar -Apply
+.\Invoke-TiaSclProposalApply.ps1 `
+  -ProposalPath "...\proposal.json" `
+  -ProjectFile "...\Proyecto_V20.ap20" `
+  -Apply
+```
 
 ## `Invoke-TiaWorkflow.ps1`
 
@@ -125,8 +147,9 @@ Punto de entrada semántico para snapshots. Los dos workflows disponibles no mut
 ```
 
 Cada ejecución deja `workflow.json` con estado, perfil, artefactos y la afirmación explícita de
-que no hubo mutación de TIA. `-Workflow apply` falla de forma intencionada hasta que exista una
-implementación que adquiera el lease MCP y cumpla backup, preview, compile, save y export.
+que no hubo mutación de TIA. `-Workflow apply` sigue rechazado deliberadamente: la aplicación se
+hace con `Invoke-TiaSclProposalApply.ps1`, que adquiere el lease MCP mediante el runner de
+secuencias y mantiene el gate de escritura separado.
 
 ---
 

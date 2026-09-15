@@ -6,7 +6,7 @@ $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $script = Join-Path $root '30-tools\scripts\New-TiaSclProposal.ps1'
 $temp = Join-Path ([IO.Path]::GetTempPath()) ('tia-claude-proposal-test-' + [guid]::NewGuid().ToString('N'))
 $sourceRoot = Join-Path $temp 'src'
-$sourcePath = Join-Path $sourceRoot 'Program blocks\FB_Motor.s7dcl'
+$sourcePath = Join-Path $sourceRoot 'Program blocks\FB_Motor.scl'
 $analysisPath = Join-Path $temp 'analysis.json'
 $blockedAnalysisPath = Join-Path $temp 'blocked-analysis.json'
 $outputDirectory = Join-Path $temp 'proposal'
@@ -30,7 +30,7 @@ END_FUNCTION_BLOCK
         sourceRoot = $sourceRoot
         blocks = @([ordered]@{
             name = 'FB_Motor'; path = '01_Devices/FB_Motor'; plc = 'PLC_1'; type = 'FB'; language = 'SCL'
-            consistent = $true; knowHowProtected = $false; source = 'Program blocks\FB_Motor.s7dcl'; sourcePresent = $true
+            consistent = $true; knowHowProtected = $false; source = 'Program blocks\FB_Motor.scl'; sourcePresent = $true
         })
         findings = @()
     }
@@ -39,7 +39,7 @@ END_FUNCTION_BLOCK
     & $script -AnalysisPath $analysisPath -BlockName 'FB_Motor' -FindText '#Run := #CmdStart AND #Interlock;' -ReplaceText '#Run := #CmdStart AND #Interlock AND #Ready;' -OutputDirectory $outputDirectory
     if ($LASTEXITCODE -ne 0) { throw "Proposal command failed with exit code $LASTEXITCODE." }
     $proposalPath = Join-Path $outputDirectory 'proposal.json'
-    $proposedSourcePath = Join-Path $outputDirectory 'FB_Motor.s7dcl'
+    $proposedSourcePath = Join-Path $outputDirectory 'FB_Motor.scl'
     $diffPath = Join-Path $outputDirectory 'proposal.diff'
     if (-not (Test-Path -LiteralPath $proposalPath -PathType Leaf)) { throw 'Proposal JSON was not created.' }
     if (-not (Test-Path -LiteralPath $proposedSourcePath -PathType Leaf)) { throw 'Proposed source was not created.' }

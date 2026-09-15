@@ -64,7 +64,8 @@ $sourceRoot = [IO.Path]::GetFullPath([string]$analysis.sourceRoot)
 $sourcePath = [IO.Path]::GetFullPath((Join-Path $sourceRoot ([string]$block.source)))
 $rootWithSeparator = $sourceRoot.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
 if (-not $sourcePath.StartsWith($rootWithSeparator, [StringComparison]::OrdinalIgnoreCase)) { throw 'Source path escapes the analysis sourceRoot.' }
-if ([IO.Path]::GetExtension($sourcePath).ToLowerInvariant() -ne '.s7dcl') { throw 'Only .s7dcl sources are eligible for proposal generation.' }
+$sourceExtension = [IO.Path]::GetExtension($sourcePath).ToLowerInvariant()
+if ($sourceExtension -notin @('.s7dcl', '.scl')) { throw 'Only .s7dcl or .scl sources are eligible for proposal generation.' }
 if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) { throw "Source does not exist: $sourcePath" }
 
 $original = [IO.File]::ReadAllText($sourcePath)
@@ -105,6 +106,13 @@ $diff += (Prefix-DiffLines $FindText '-') + "`r`n"
 $diff += (Prefix-DiffLines $ReplaceText '+') + "`r`n"
 [IO.File]::WriteAllText($diffPath, $diff, $encoding)
 
+$companionSourcePath = [IO.Path]::ChangeExtension($sourcePath, '.s7res')
+$companionProposedPath = $null
+if (Test-Path -LiteralPath $companionSourcePath -PathType Leaf) {
+    $companionProposedPath = Join-Path $OutputDirectory ([IO.Path]::GetFileName($companionSourcePath))
+    Copy-Item -LiteralPath $companionSourcePath -Destination $companionProposedPath -Force
+}
+
 $proposal = [ordered]@{
     schemaVersion = 1
     status = 'PROPOSED'
@@ -123,6 +131,9 @@ $proposal = [ordered]@{
         originalSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $sourcePath).Hash.ToLowerInvariant()
         proposedSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $proposedSourcePath).Hash.ToLowerInvariant()
         matchCount = $occurrences
+        extension = $sourceExtension
+        companionOriginalPath = if ($companionProposedPath) { $companionSourcePath } else { $null }
+        companionProposedPath = $companionProposedPath
     }
     artifacts = [ordered]@{ diff = $diffPath; markdown = $markdownPath }
     checks = [ordered]@{
