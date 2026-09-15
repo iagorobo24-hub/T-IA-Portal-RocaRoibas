@@ -28,6 +28,11 @@ compartir handles ni abrir una segunda instancia.
    proyecto desechable. Compilar o arrancar una CPU no demuestra todavía el comportamiento del
    programa ni habilita la simulación HMI.
 
+El gate adicional `plcsimVirtualAdapterReady` debe estar a `true`. Si el adaptador
+`Siemens PLCSIM Virtual Ethernet Adapter` aparece como `Not Present`, el configurador de PLCSIM
+debe activarlo con privilegios de administrador; el agente no lo activa silenciosamente porque
+modifica la configuración de red del equipo.
+
 ## Limitaciones deliberadas
 
 - Openness utiliza rutas de ingeniería, no nombres inventados.

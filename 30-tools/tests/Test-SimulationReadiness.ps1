@@ -31,6 +31,7 @@ try {
     $report = Get-Content -Raw -LiteralPath $outputPath | ConvertFrom-Json
     if ($report.readOnly -ne $true) { throw 'Read-only flag is missing.' }
     if ($report.gates.plcToolchainReady -ne $true) { throw 'PLC toolchain should be ready in the fixture.' }
+    if ($null -eq $report.gates.plcsimVirtualAdapterReady) { throw 'PLCSIM virtual adapter gate is missing.' }
     if ($report.gates.hmiRuntimeAdvancedV20Ready -ne $false) { throw 'V17 runtime must not pass the V20 HMI gate.' }
     if ($report.blockers -notcontains 'WinCC Runtime Advanced V20 compatible no está verificado') { throw 'Expected HMI compatibility blocker is missing.' }
     Write-Output 'PASS: simulation readiness report is deterministic and version-gated'
