@@ -22,7 +22,8 @@ con `dryRun=true` y solo después aplicar el mismo plan en una ruta nueva y conf
 ## Concurrencia
 
 TIA Portal es un recurso de escritorio con estado. Antes de conectar, el agente debe comprobar
-si existe una instancia abierta y seguir `Attach` cuando el proyecto abierto sea el objetivo.
+si existe una instancia abierta y seguir `Attach` cuando el proyecto abierto sea el objetivo y el
+servidor lo exponga.
 No debe abrir una segunda instancia ni cerrar/sustituir un proyecto que no haya sido confirmado.
 Un intento de crear un proyecto nuevo mientras una instancia ocupada impide la operación se
 clasifica como **bloqueado**, no como fallo del plan; el siguiente paso es que el usuario libere
