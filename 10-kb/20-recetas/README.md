@@ -71,8 +71,8 @@ Si falla        los modos de fallo conocidos y su arreglo
 |---|---|---|
 | [R13](R13-pantalla-hmi.md) | Pantalla WinCC Unified | 📄 documentada, no verificada |
 | [R14](R14-binding-hmi-plc.md) | Binding de tags HMI ↔ PLC | 📄 documentada, no verificada |
-| R15 | Generar la lista de E/S | ⬜ |
-| R16 | Generar la descripción funcional | ⬜ |
+| [R15](R15-lista-es.md) | Generar la lista de E/S | 📄 herramienta verificada en fixture; requiere tags detalladas en proyecto real |
+| [R16](R16-descripcion-funcional.md) | Generar la descripción funcional | 📄 herramienta verificada en fixture; no sustituye validación funcional |
 
 El orden y su porqué están en [ADR-004](../../00-meta/decisiones/ADR-004-prioridades.md).
 
