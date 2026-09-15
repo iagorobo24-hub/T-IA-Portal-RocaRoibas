@@ -16,5 +16,9 @@ if ([string]::IsNullOrWhiteSpace([string]$spec.projectName)) { throw 'Scaffold s
 if (@($spec.sclSourceFiles).Count -eq 0) { throw 'Scaffold spec lacks SCL source.' }
 if (@($spec.tagTable).Count -eq 0) { throw 'Scaffold spec lacks tag table.' }
 if ($spec.hmiName) { throw 'The acceptance scaffold must remain PLC-only.' }
-if ((Get-Content -Raw -LiteralPath $runner) -notmatch 'dryRun') { throw 'Scaffold runner must enforce dry-run first.' }
+$runnerText = Get-Content -Raw -LiteralPath $runner
+if ($runnerText -notmatch 'dryRun') { throw 'Scaffold runner must enforce dry-run first.' }
+if ($runnerText -notmatch 'Post-apply inspection/export') { throw 'Scaffold runner must inspect and export after apply.' }
+if ($runnerText -notmatch 'Check-TiaStandards') { throw 'Scaffold runner must run the standards checker after apply.' }
+if ($runnerText -notmatch 'visible user instance open') { throw 'Scaffold runner must refuse an occupied GUI TIA instance.' }
 Write-Output 'PASS: agent-demo scaffold fixture is defined for a disposable PLC-only acceptance run'
