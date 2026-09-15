@@ -13,6 +13,19 @@
 9. Compilar con cero errores antes de guardar.
 10. Exportar a `src/` y registrar la evidencia.
 
+### Evidencia de E/S cuando el roster MCP es parcial
+
+`tia-create lite` muestra solo un subconjunto de herramientas. Para leer tags detalladas:
+
+1. `GetPlcTagTables` para obtener los nombres reales.
+2. Si `ExportPlcTagTable` no aparece, `FindTools("export PLC tag table")`.
+3. `CallTool("ExportPlcTagTable", argumentosJson)` con el `softwarePath`, tabla y ruta exactos.
+4. `Convert-TiaTagTableExportToInventory.ps1` y después `New-TiaIoList.ps1`.
+5. Si se parte de dos inventarios, `Merge-TiaTagEvidenceIntoInventory.ps1` exige que el
+   `softwarePath` resuelva un único PLC antes de generar el dossier.
+
+No se acepta una lista construida desde contadores, nombres supuestos o texto resumido del árbol.
+
 Para una secuencia MCP real, usar `30-tools/scripts/Invoke-McpToolSequence.ps1`: mantiene un
 único proceso/una única sesión y adquiere el lease `Local\TIA-Claude-McpSession`. Si otro agente
 está usando TIA, la segunda secuencia espera hasta el timeout y falla explícitamente; no intenta
