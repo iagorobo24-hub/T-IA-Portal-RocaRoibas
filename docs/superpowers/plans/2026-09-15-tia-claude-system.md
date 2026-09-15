@@ -285,7 +285,9 @@ intentionally independent from the green local workspace checks.
 - Produces: verified Runtime Advanced V20 installation or a documented incompatibility/workaround.
 
 - [x] Inspect the current installed runtimes and record the exact V17/V20 mismatch.
-- [ ] Inspect installation media and install only after action-time confirmation.
+- [x] Inspect the available installation locations with a read-only media scanner; no official V20
+  Runtime Advanced medium is currently present.
+- [ ] Install only after a candidate is reviewed and the user confirms the action at that time.
 - [ ] Retry the games simulation and record whether the device is supported.
 
 ## Phase 5: Portable distribution and harnesses

@@ -14,6 +14,7 @@ Herramientas de consola para operar TIA Portal por Openness sin depender de un c
 | [`Export-Sources.ps1`](Export-Sources.ps1) | Exporta el código a `.s7dcl` para git — receta [R03](../../10-kb/20-recetas/R03-exportar-a-git.md) |
 | [`Invoke-TiaStandardsSweep.ps1`](Invoke-TiaStandardsSweep.ps1) | Inventaría todos los `.ap20` V20 y ejecuta el checker en **solo lectura** |
 | [`Write-TiaAcceptanceStatus.ps1`](Write-TiaAcceptanceStatus.ps1) | Genera el estado honesto de aceptación: verificado, no verificado, bloqueado y supuesto |
+| [`Find-TiaRuntimeMedia.ps1`](Find-TiaRuntimeMedia.ps1) | Busca medios de instalación Runtime/TIA sin instalar nada y exige confirmación para el siguiente paso |
 | [`Stop-TiaPortal.ps1`](Stop-TiaPortal.ps1) | Cierra las instancias headless que `Disconnect` **no** cierra |
 
 ---
