@@ -26,7 +26,8 @@ $definitions = @(
     @{ name = 'backup-recovery'; path = '30-tools/tests/Test-TiaBackupRecovery.ps1' },
     @{ name = 'standards-sweep-evidence'; path = '30-tools/tests/Test-StandardsSweepEvidence.ps1' },
     @{ name = 'acceptance-status'; path = '30-tools/tests/Test-TiaAcceptanceStatus.ps1' },
-    @{ name = 'runtime-media-discovery'; path = '30-tools/tests/Test-FindTiaRuntimeMedia.ps1' }
+    @{ name = 'runtime-media-discovery'; path = '30-tools/tests/Test-FindTiaRuntimeMedia.ps1' },
+    @{ name = 'simulation-readiness'; path = '30-tools/tests/Test-SimulationReadiness.ps1' }
 )
 
 $checks = [System.Collections.Generic.List[object]]::new()

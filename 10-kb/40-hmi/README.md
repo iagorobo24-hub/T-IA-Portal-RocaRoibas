@@ -17,5 +17,5 @@ es WinCC Runtime Advanced V17.0 HF8. Por eso el proyecto HMI V20 de los juegos n
 simulable hasta instalar/verificar un runtime compatible; la prueba anterior terminó con
 “The device is not supported and cannot be compiled”.
 
-Referencias: [matriz de versiones](runtime-version-matrix.md), [Comfort/Advanced](comfort-advanced.md)
-y [Unified](unified.md).
+Referencias: [matriz de versiones](runtime-version-matrix.md), [Comfort/Advanced](comfort-advanced.md),
+[Unified](unified.md) y [preflight de simulación](simulation-readiness.md).

@@ -287,6 +287,8 @@ intentionally independent from the green local workspace checks.
 - [x] Inspect the current installed runtimes and record the exact V17/V20 mismatch.
 - [x] Inspect the available installation locations with a read-only media scanner; no official V20
   Runtime Advanced medium is currently present.
+- [x] Add a deterministic simulation-readiness preflight that keeps PLC, HMI, behavior and session
+  safety as separate gates.
 - [ ] Install only after a candidate is reviewed and the user confirms the action at that time.
 - [ ] Retry the games simulation and record whether the device is supported.
 

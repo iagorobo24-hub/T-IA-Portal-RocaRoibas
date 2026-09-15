@@ -15,6 +15,7 @@ Herramientas de consola para operar TIA Portal por Openness sin depender de un c
 | [`Invoke-TiaStandardsSweep.ps1`](Invoke-TiaStandardsSweep.ps1) | Inventaría todos los `.ap20` V20 y ejecuta el checker en **solo lectura** |
 | [`Write-TiaAcceptanceStatus.ps1`](Write-TiaAcceptanceStatus.ps1) | Genera el estado honesto de aceptación: verificado, no verificado, bloqueado y supuesto |
 | [`Find-TiaRuntimeMedia.ps1`](Find-TiaRuntimeMedia.ps1) | Busca medios de instalación Runtime/TIA sin instalar nada y exige confirmación para el siguiente paso |
+| [`Write-TiaSimulationReadiness.ps1`](Write-TiaSimulationReadiness.ps1) | Preflight de simulación: separa disponibilidad PLC, compatibilidad HMI V20 y evidencia conductual |
 | [`Stop-TiaPortal.ps1`](Stop-TiaPortal.ps1) | Cierra las instancias headless que `Disconnect` **no** cierra |
 
 ---
