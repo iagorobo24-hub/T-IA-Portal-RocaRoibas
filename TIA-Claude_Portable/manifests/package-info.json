@@ -27,17 +27,17 @@
     "core": {
       "path": "dist/TIA-Claude_Core",
       "files": 280,
-      "bytes": 21612984,
-      "totalBytesIncludingManifest": 21666810,
+      "bytes": 21613150,
+      "totalBytesIncludingManifest": 21666976,
       "manifest": "dist/TIA-Claude_Core/manifests/package-manifest.json"
     },
     "examples": {
       "path": "dist/TIA-Claude_Examples",
-      "files": 639,
-      "bytes": 189803437,
+      "files": 640,
+      "bytes": 189804865,
       "manifest": "dist/TIA-Claude_Examples/manifests/examples-manifest.json"
     }
   },
   "legacyMonolithicWorkspace": "workspace/",
-  "generatedUtc": "2026-09-15T12:36:57Z"
+  "generatedUtc": "2026-09-15T12:39:39Z"
 }

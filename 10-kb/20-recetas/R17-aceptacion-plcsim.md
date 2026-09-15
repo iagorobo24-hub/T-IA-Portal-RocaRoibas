@@ -35,7 +35,8 @@ Usa `Invoke-TiaSimulationAcceptance.ps1` con `-StartVirtualPlc` y `-IoPlanPath`.
   "steps": [
     {
       "command": "write-bool-tag Control_HMI.fromHMI.resetSimulation 1",
-      "expect": { "status": "ok", "op": "write-bool-tag" }
+      "expect": { "status": "ok", "op": "write-bool-tag" },
+      "delayMs": 250
     },
     {
       "command": "read-bool-tag Control_HMI.toHMI.resetStatus",

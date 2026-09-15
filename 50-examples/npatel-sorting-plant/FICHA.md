@@ -167,4 +167,5 @@ deliberado —simula el proceso inverso— o un error de cableado. No está clar
 - [x] **Verificado visualmente en TIA V20**: bloques, LAD y las 4 pantallas HMI intactos
 - [x] Confirmado que el `.s7dcl` exportado es **fiel al LAD gráfico**
 - [ ] Software-in-the-loop con PLCSIM Advanced V6.0 — **prerequisitos presentes, comportamiento aún no demostrado**
+- [ ] Plan candidato de reset HMI preparado en `acceptance/sorting-plant-reset.json`; aún no ejecutado
 - [ ] ~~Modelo 3D en NX MCD~~ — **descartado**, no hay NX con opción MCD

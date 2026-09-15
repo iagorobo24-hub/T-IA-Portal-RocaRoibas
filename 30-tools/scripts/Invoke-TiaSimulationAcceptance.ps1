@@ -140,6 +140,9 @@ function Invoke-IoPlan([Diagnostics.Process]$Process, [string]$Path) {
             }
         }
         $results.Add([ordered]@{ index = $index; command = $command; response = $response })
+        if ($step.delayMs) {
+            Start-Sleep -Milliseconds ([int]$step.delayMs)
+        }
     }
     [ordered]@{
         schemaVersion = 1

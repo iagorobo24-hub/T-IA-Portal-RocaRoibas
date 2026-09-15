@@ -133,7 +133,7 @@ while ($line = [Console]::In.ReadLine()) {
         schemaVersion = 1
         name = 'fixture-io-plan'
         steps = @(
-            [ordered]@{ command = 'write-bit input 0 0 1'; expect = [ordered]@{ status = 'ok'; op = 'write-bit' } },
+            [ordered]@{ command = 'write-bit input 0 0 1'; expect = [ordered]@{ status = 'ok'; op = 'write-bit' }; delayMs = 1 },
             [ordered]@{ command = 'read-bit output 0 0'; expect = [ordered]@{ status = 'ok'; op = 'read-bit' } }
         )
     } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $ioPlanPath -Encoding UTF8

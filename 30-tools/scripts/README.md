@@ -120,8 +120,8 @@ de descarga. Con `-StartVirtualPlc` también mantiene viva la instancia nativa 1
 en `finally`; si no se pasa, la instancia debe estar gestionada externamente. No se debe cambiar
 `-VirtualInterfacePattern` a una NIC física para el acceptance PLC.
 
-Para añadir una aceptación conductual, `-IoPlanPath` recibe un JSON con `steps[].command` y
-`steps[].expect`; exige además `-StartVirtualPlc` y registra todas las respuestas del protocolo
+Para añadir una aceptación conductual, `-IoPlanPath` recibe un JSON con `steps[].command`,
+`steps[].expect` y opcionalmente `steps[].delayMs`; exige además `-StartVirtualPlc` y registra todas las respuestas del protocolo
 nativo. La receta completa está en [`R17`](../../10-kb/20-recetas/R17-aceptacion-plcsim.md).
 
 ## `Invoke-TiaProjectAnalysis.ps1`
