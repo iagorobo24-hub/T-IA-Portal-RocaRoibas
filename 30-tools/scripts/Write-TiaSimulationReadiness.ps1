@@ -38,6 +38,30 @@ function Get-InstalledPlcSim([object]$Environment) {
     }
 }
 
+function Get-PlcSimVirtualAdapter {
+    try {
+        $adapters = @(Get-NetAdapter -IncludeHidden -ErrorAction Stop | Where-Object {
+            $_.InterfaceDescription -match '(?i)Siemens PLCSIM Virtual Ethernet Adapter'
+        })
+        return [ordered]@{
+            found = $adapters.Count -gt 0
+            ready = @($adapters | Where-Object { $_.Status -eq 'Up' }).Count -gt 0
+            adapters = @($adapters | ForEach-Object {
+                [ordered]@{
+                    name = $_.Name
+                    interfaceDescription = $_.InterfaceDescription
+                    ifIndex = $_.ifIndex
+                    status = [string]$_.Status
+                    macAddress = $_.MacAddress
+                }
+            })
+        }
+    }
+    catch {
+        return [ordered]@{ found = $false; ready = $false; adapters = @(); error = $_.Exception.Message }
+    }
+}
+
 function Get-VisibleTiaProcesses {
     @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
         $_.ProcessName -like 'Siemens.Automation.Portal*' -and $_.MainWindowTitle
@@ -117,6 +141,7 @@ $tia20 = $environment -and $environment.tiaMajor -eq 20 -and @($environment.inst
 $inspect = @($environment.mcpServers | Where-Object name -eq 'tia-inspect').Count -gt 0
 $create = @($environment.mcpServers | Where-Object name -eq 'tia-create').Count -gt 0
 $plcsim = Get-InstalledPlcSim $environment
+$plcsimVirtualAdapter = Get-PlcSimVirtualAdapter
 
 $runtimeEntries = @($environment.runtimeAdvanced.installedEntries)
 $runtimeV20 = @($runtimeEntries | Where-Object {
@@ -144,6 +169,10 @@ $nextActions = [System.Collections.Generic.List[string]]::new()
 if (-not $tia20) { $blockers.Add('TIA Portal/Openness V20 no está verificado') }
 if (-not $inspect) { $blockers.Add('tia-inspect no está disponible') }
 if (-not $plcsim.advancedInstalled) { $blockers.Add('PLCSIM Advanced no está instalado') }
+if (-not $plcsimVirtualAdapter.ready) {
+    $blockers.Add('El adaptador virtual Siemens PLCSIM no está operativo')
+    $nextActions.Add('Activar/configurar el adaptador Siemens PLCSIM Virtual Ethernet Adapter con el configurador de PLCSIM y privilegios de administrador')
+}
 if (-not $hmiV20Ready) {
     $blockers.Add('WinCC Runtime Advanced V20 compatible no está verificado')
     $nextActions.Add('Instalar o localizar el medio oficial compatible con V20 y repetir la verificación')
@@ -181,6 +210,7 @@ $result = [ordered]@{
     }
     gates = [ordered]@{
         plcToolchainReady = $plcReady
+        plcsimVirtualAdapterReady = [bool]$plcsimVirtualAdapter.ready
         hmiRuntimeAdvancedV20Ready = $hmiV20Ready
         plcBehaviorVerified = $plcBehaviorVerified
         tiaInstanceSafeForApply = [bool]$tiaSessionSafety.safe
@@ -190,6 +220,7 @@ $result = [ordered]@{
         tiaInspect = $inspect
         tiaCreate = $create
         plcsim = $plcsim
+        plcsimVirtualAdapter = $plcsimVirtualAdapter
     }
     blockers = @($blockers | Select-Object -Unique)
     nextActions = @($nextActions | Select-Object -Unique)

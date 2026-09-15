@@ -298,6 +298,8 @@ intentionally independent from the green local workspace checks.
   Runtime Advanced medium is currently present.
 - [x] Add a deterministic simulation-readiness preflight that keeps PLC, HMI, behavior and session
   safety as separate gates.
+- [x] Add a read-only PLCSIM virtual-adapter gate; the current machine reports the Siemens adapter
+  present but `Not Present`, so no download route is accepted yet.
 - [ ] Install only after a candidate is reviewed and the user confirms the action at that time.
 - [ ] Retry the games simulation and record whether the device is supported.
 
