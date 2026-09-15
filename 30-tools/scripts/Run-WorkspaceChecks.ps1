@@ -31,7 +31,10 @@ $definitions = @(
     @{ name = 'standards-sweep-evidence'; path = '30-tools/tests/Test-StandardsSweepEvidence.ps1' },
     @{ name = 'acceptance-status'; path = '30-tools/tests/Test-TiaAcceptanceStatus.ps1' },
     @{ name = 'runtime-media-discovery'; path = '30-tools/tests/Test-FindTiaRuntimeMedia.ps1' },
-    @{ name = 'simulation-readiness'; path = '30-tools/tests/Test-SimulationReadiness.ps1' }
+    @{ name = 'simulation-readiness'; path = '30-tools/tests/Test-SimulationReadiness.ps1' },
+    @{ name = 'project-analysis'; path = '30-tools/tests/Test-TiaProjectAnalysis.ps1' },
+    @{ name = 'scl-proposal'; path = '30-tools/tests/Test-TiaSclProposal.ps1' },
+    @{ name = 'semantic-workflow'; path = '30-tools/tests/Test-TiaWorkflow.ps1' }
 )
 
 $checks = [System.Collections.Generic.List[object]]::new()

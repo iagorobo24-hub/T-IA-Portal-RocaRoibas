@@ -24,6 +24,12 @@ try {
     if (-not (Test-Path -LiteralPath (Join-Path $core '30-tools\mcp\tia-create\bin\v20\TiaMcpServer.exe') -PathType Leaf)) {
         throw 'Core package is missing the verified tia-create V20 runtime.'
     }
+    foreach ($tool in @('Invoke-TiaProjectAnalysis.ps1', 'New-TiaSclProposal.ps1', 'Invoke-TiaWorkflow.ps1')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $core "30-tools\scripts\$tool") -PathType Leaf)) { throw "Core package is missing semantic tool: $tool" }
+    }
+    foreach ($test in @('Test-TiaProjectAnalysis.ps1', 'Test-TiaSclProposal.ps1', 'Test-TiaWorkflow.ps1')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $core "30-tools\tests\$test") -PathType Leaf)) { throw "Core package is missing semantic test: $test" }
+    }
     foreach ($guide in @('README-INSTALL.md', 'docs\arquitectura.md', 'docs\funcionamiento.md', 'docs\harnesses.md', 'docs\prompt-claude-code.md')) {
         if (-not (Test-Path -LiteralPath (Join-Path $core $guide) -PathType Leaf)) { throw "Core package is missing operational guide: $guide" }
     }

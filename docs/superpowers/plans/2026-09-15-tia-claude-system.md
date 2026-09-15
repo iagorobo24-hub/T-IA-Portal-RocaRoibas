@@ -375,7 +375,60 @@ intentionally independent from the green local workspace checks.
 
 - [x] Write the failing test for an incomplete or unsafe aggregate report.
 - [x] Implement the aggregator.
-- [x] Run it on this machine and record all remaining warnings: 11 PASS, 1 WARN (Git not initialized), 0 BLOCKED.
+- [x] Run it on this machine and record the current aggregate state: 25 PASS, 0 WARN, 0 BLOCKED.
+
+## Phase 7: Semantic engineering workflows
+
+### Task 7.1: Generate a deterministic read-only project dossier
+
+**Files:**
+- Create: `30-tools/scripts/Invoke-TiaProjectAnalysis.ps1`
+- Create: `30-tools/tests/Test-TiaProjectAnalysis.ps1`
+- Modify: `30-tools/scripts/Run-WorkspaceChecks.ps1`
+- Modify: `30-tools/scripts/README.md`
+
+**Interfaces:**
+- Consumes: a `readOnly` inventory from `tia-inspect` and exported `.s7dcl`, `.s7res` and XML sources.
+- Produces: `analysis.json` plus `analysis.md` with PLC/block/language inventory, source coverage,
+  call references, safety/protection findings and next actions.
+
+- [x] Write a test for a clean SCL fixture, an individual XML block export and a protected-block gate.
+- [x] Verify the missing analyzer fails before implementation.
+- [x] Implement the analyzer without connecting to or modifying TIA.
+- [x] Run it against the agent-demo acceptance evidence and correct the XML/export coverage case.
+- [x] Add it to the aggregate workspace checks.
+
+### Task 7.2: Build a proposal-only SCL change workflow
+
+**Files:**
+- Create: `30-tools/scripts/New-TiaSclProposal.ps1`
+- Create: `30-tools/tests/Test-TiaSclProposal.ps1`
+- Modify: `AGENTS.md`
+
+**Interfaces:**
+- Consumes: a read-only project dossier, one complete SCL source and a user objective.
+- Produces: a proposed patch/diff and a human-readable impact report; it must not import, save or
+  download anything. Applying the proposal remains a separate write-gated operation.
+
+- [x] Define the proposal schema and refusal cases (protected, inconsistent, ambiguous or missing source).
+- [x] Add failing tests for a minimal SCL change and for refusal to propose against protected data.
+- [x] Implement deterministic patch generation with no direct TIA side effect.
+- [x] Validate the proposal against the SCL style and naming standards.
+
+### Task 7.3: Add a semantic workflow runner
+
+**Files:**
+- Create: `30-tools/scripts/Invoke-TiaWorkflow.ps1`
+- Create: `30-tools/tests/Test-TiaWorkflow.ps1`
+- Modify: `TIA-Claude_Portable/docs/funcionamiento.md`
+
+**Interfaces:**
+- Consumes: workflow name, project snapshot and explicit profile.
+- Produces: one traceable report linking discovery, dossier, proposal, optional write E2E and export.
+
+- [x] Implement `analyze` as the first workflow and keep `propose`/`apply` explicit.
+- [x] Enforce the `read` profile and keep snapshot workflows free of TIA mutation; live MCP lease enforcement remains required for the future apply workflow.
+- [x] Add a disposable end-to-end workflow test before enabling real project application.
 
 ## Final acceptance gate
 
@@ -387,6 +440,8 @@ The system is complete only when all of the following are evidenced:
 - A failed compile prevents saving.
 - A restore returns the fixture to the baseline hash set.
 - The standards checker evaluates the acceptance project.
+- A read-only semantic dossier can be regenerated from the same inventory and exports.
+- Proposal and apply remain separate operations with a traceable report.
 - `tia-create` is either verified or explicitly excluded with a maintained blocker.
 - PLC simulation has one demonstrated behavioral test.
 - HMI simulation has a version-compatible demonstrated test or a documented missing prerequisite.

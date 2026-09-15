@@ -135,7 +135,7 @@ no se lanzan dos sesiones concurrentes contra TIA.
 ```
 1.  Leer          GetProjectTree → GetSoftwareTree → GetBlockSource
 2.  Comprobar     ¿existe ya en 60-library/? ¿lo cubre una receta de 10-kb/20-recetas/?
-3.  Proponer      qué vas a cambiar, en qué bloques, y por qué
+3.  Proponer      qué vas a cambiar, en qué bloques, y por qué; para SCL usa primero `New-TiaSclProposal.ps1` o `Invoke-TiaWorkflow.ps1 -Workflow propose`
 4.  Backup        copia del .ap20
 5.  Escribir      cambio mínimo, dryRun primero
 6.  Compilar      CompileSoftware → 0 errores, o se revierte
