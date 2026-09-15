@@ -17,8 +17,8 @@
   "distribution": {
     "core": {
       "path": "dist/TIA-Claude_Core",
-      "files": 235,
-      "bytes": 21330579,
+      "files": 236,
+      "bytes": 21335988,
       "manifest": "dist/TIA-Claude_Core/manifests/package-manifest.json"
     },
     "examples": {
@@ -29,5 +29,5 @@
     }
   },
   "legacyMonolithicWorkspace": "workspace/",
-  "generatedUtc": "2026-09-15T08:04:00Z"
+  "generatedUtc": "2026-09-15T08:11:00Z"
 }

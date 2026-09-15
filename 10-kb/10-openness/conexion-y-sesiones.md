@@ -38,11 +38,23 @@ Disconnect             ← suelta la conexión, NO cierra TIA
 |---|---|
 | No hay TIA corriendo | `Connect` — arranca una instancia headless |
 | Hay una instancia headless de una sesión anterior | `Connect` — se reengancha, 0,3 s ✅ *verificado* |
-| El usuario tiene TIA **abierto con interfaz** y un proyecto dentro | **`Attach`** 🔒 |
+| El usuario tiene TIA **abierto con interfaz** y un proyecto dentro | `Attach` solo si el servidor lo expone; en `tia-inspect` actual no existe 🔒 |
 
 🔒 **Nunca abras una segunda instancia sobre un proyecto que el usuario tiene abierto.**
 Dos procesos escribiendo el mismo `.ap20` es una forma excelente de perder trabajo. Está en
 `AGENTS.md` §2.
+
+### Hallazgo verificado: `Connect` no es `Attach`
+
+El roster real de `tia-inspect` V20 contiene `Connect`, pero no contiene una herramienta
+`Attach`. En una prueba con TIA visible, `Connect` respondió correctamente y la siguiente
+`GetProjectTree` devolvió `Failed retrieving project tree`: la conexión no tenía proyecto.
+Por tanto, un agente no puede inferir que ha seleccionado la ventana visible solo porque
+`Connect` haya terminado sin error.
+
+La regla operativa es: si hay una ventana visible y el proyecto objetivo no está confirmado,
+parar. La identificación debe hacerla una interfaz gráfica disponible o el usuario; después se
+repite la secuencia de lectura sobre el proyecto correcto.
 
 ---
 

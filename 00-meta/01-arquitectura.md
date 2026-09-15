@@ -163,7 +163,10 @@ Por tres razones concretas:
 3. **Perímetro de seguridad distinto.** `tia-inspect` puede estar siempre activo sin riesgo.
    `tia-create` escribe; se activa deliberadamente.
 
-⬜ *Decisión abierta: ¿siempre los dos, o perfiles conmutables? → TDD Q7.*
+✅ *Decisión cerrada: perfiles `read`, `write`, `create` y `full` conmutables desde el manifiesto;
+`read` es el estado por defecto y los perfiles con escritura exigen reconocimiento explícito.*
+Ver [ADR-011](decisiones/ADR-011-perfiles-y-proyectos-abiertos.md) y
+[ADR-012](decisiones/ADR-012-connect-no-es-attach.md).
 
 ---
 

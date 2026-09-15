@@ -23,7 +23,7 @@ industrial** y trabaje como lo haría el ingeniero responsable.
 
 ```
 1. Doctor              ← ¿entorno sano? Si no, para y dilo.
-2. Connect / Attach    ← Attach si TIA ya está abierto. Nunca abras una segunda instancia.
+2. Connect / Attach    ← usa Attach solo si el servidor lo expone y corresponde al proyecto objetivo. El `tia-inspect` instalado no expone Attach; con una ventana visible, no uses Connect a ciegas ni abras otra instancia.
 3. GetProjectTree      ← de aquí salen las rutas REALES
 4. leer → cambio mínimo → compilar → guardar
 ```
@@ -77,9 +77,11 @@ para y pregunta.
   servidores y también requiere reconocimiento explícito.
 
 Si TIA Portal ya tiene abierto un proyecto que no es inequívocamente el objetivo, no lo cierres,
-no lo sustituyas y no lances una segunda instancia: intenta `Attach` únicamente si corresponde
-al proyecto pedido; en cualquier otro caso detente y pide al usuario que libere o confirme la
-instancia. Un resultado de `dryRun` nunca se presenta como cambio aplicado.
+no lo sustituyas y no lances una segunda instancia: intenta `Attach` únicamente si el servidor lo
+expone y corresponde al proyecto pedido. En el `tia-inspect` actual no existe `Attach`; usa una
+interacción gráfica disponible para identificar la ventana o detente y pide al usuario que libere
+o confirme la instancia. Un `Connect` correcto sin proyecto no equivale a haber adjuntado la
+ventana visible. Un resultado de `dryRun` nunca se presenta como cambio aplicado.
 
 ### 3.4 Datos de cliente
 
