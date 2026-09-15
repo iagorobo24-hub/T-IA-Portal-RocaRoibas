@@ -108,6 +108,9 @@ while ($line = [Console]::In.ReadLine()) {
         [Console]::Out.Flush()
         break
     }
+    $operation = ($line -split '\s+')[0]
+    [Console]::Out.WriteLine((@{ status = 'ok'; op = $operation; value = $false } | ConvertTo-Json -Compress))
+    [Console]::Out.Flush()
 }
 '@ | Set-Content -LiteralPath $adapterFixture -Encoding UTF8
     $managedReportPath = Join-Path $temp 'managed.json'
@@ -124,6 +127,30 @@ while ($line = [Console]::In.ReadLine()) {
     }
     $global:LASTEXITCODE = 0
     Write-Output 'PASS: simulation acceptance owns virtual PLC startup and cleanup'
+
+    $ioPlanPath = Join-Path $temp 'io-plan.json'
+    [ordered]@{
+        schemaVersion = 1
+        name = 'fixture-io-plan'
+        steps = @(
+            [ordered]@{ command = 'write-bit input 0 0 1'; expect = [ordered]@{ status = 'ok'; op = 'write-bit' } },
+            [ordered]@{ command = 'read-bit output 0 0'; expect = [ordered]@{ status = 'ok'; op = 'read-bit' } }
+        )
+    } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $ioPlanPath -Encoding UTF8
+    $behaviorReportPath = Join-Path $temp 'behavior.json'
+    $behaviorOutput = & $pwsh -NoProfile -NonInteractive -File $script `
+        -ReadinessPath $readyPath -OutputPath $behaviorReportPath -ProjectFile $projectFile `
+        -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
+        -McpExecutablePath $pwsh -McpArguments $fixtureArguments -PlcSimAdapterPath $pwsh `
+        -PlcSimAdapterArguments $managedAdapterArguments -IoPlanPath $ioPlanPath `
+        -StartVirtualPlc -AcknowledgeVirtualTarget -Run 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0) { throw "Behavior fixture failed with exit code $LASTEXITCODE. Output: $behaviorOutput" }
+    $behavior = Get-Content -Raw -LiteralPath $behaviorReportPath | ConvertFrom-Json
+    if ($behavior.status -ne 'VERIFIED' -or $behavior.behavior.verified -ne $true -or @($behavior.behavior.steps).Count -ne 2) {
+        throw 'Behavior plan was not executed and recorded as verified.'
+    }
+    $global:LASTEXITCODE = 0
+    Write-Output 'PASS: simulation acceptance executes and records an I/O behavior plan'
 
     $adapterFailureReportPath = Join-Path $temp 'adapter-failure.json'
     $missingAdapter = Join-Path $temp 'missing-tia-claude-plcsim-adapter.exe'

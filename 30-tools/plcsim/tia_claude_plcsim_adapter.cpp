@@ -99,6 +99,344 @@ bool ContainsInsensitive(const std::wstring& value, const std::wstring& needle)
     return valueLower.find(needleLower) != std::wstring::npos;
 }
 
+bool ParseArea(const std::wstring& text, EArea* output)
+{
+    if (output == nullptr)
+    {
+        return false;
+    }
+    if (ContainsInsensitive(text, L"input"))
+    {
+        *output = EArea::SRA_INPUT;
+        return true;
+    }
+    if (ContainsInsensitive(text, L"output"))
+    {
+        *output = EArea::SRA_OUTPUT;
+        return true;
+    }
+    if (ContainsInsensitive(text, L"marker") || text == L"m")
+    {
+        *output = EArea::SRA_MARKER;
+        return true;
+    }
+    return false;
+}
+
+bool ParseUInt32(const std::wstring& text, UINT32* output)
+{
+    if (output == nullptr || text.empty())
+    {
+        return false;
+    }
+    try
+    {
+        const unsigned long value = std::stoul(text);
+        if (value > UINT32_MAX)
+        {
+            return false;
+        }
+        *output = static_cast<UINT32>(value);
+        return true;
+    }
+    catch (...)
+    {
+        return false;
+    }
+}
+
+bool ParseBitValue(const std::wstring& text, bool* output)
+{
+    if (output == nullptr)
+    {
+        return false;
+    }
+    if (text == L"1" || ContainsInsensitive(text, L"true") || ContainsInsensitive(text, L"on"))
+    {
+        *output = true;
+        return true;
+    }
+    if (text == L"0" || ContainsInsensitive(text, L"false") || ContainsInsensitive(text, L"off"))
+    {
+        *output = false;
+        return true;
+    }
+    return false;
+}
+
+void PrintProtocolFailure(const std::wstring& operation, const std::wstring& reason)
+{
+    std::wcout << L"{\"status\":\"failed\",\"op\":";
+    PrintJsonString(operation);
+    std::wcout << L",\"reason\":";
+    PrintJsonString(reason);
+    std::wcout << L"}\n";
+}
+
+void PrintProtocolCode(const std::wstring& operation, ERuntimeErrorCode code)
+{
+    std::wcout << L"{\"status\":\"failed\",\"op\":";
+    PrintJsonString(operation);
+    std::wcout << L",";
+    PrintCode(L"code", code);
+    std::wcout << L"}\n";
+}
+
+std::wstring NormalizeTagToken(std::wstring tag)
+{
+    if (tag.size() >= 2 && tag.front() == L'"' && tag.back() == L'"')
+    {
+        tag = tag.substr(1, tag.size() - 2);
+    }
+    return tag;
+}
+
+void PrintTagProtocolFailure(const std::wstring& operation, const std::wstring& tag, ERuntimeErrorCode code)
+{
+    std::wcout << L"{\"status\":\"failed\",\"op\":";
+    PrintJsonString(operation);
+    std::wcout << L",\"tag\":";
+    PrintJsonString(tag);
+    std::wcout << L",";
+    PrintCode(L"code", code);
+    std::wcout << L"}\n";
+}
+
+bool HandleSymbolicTagCommand(IInstance* instance, const std::wstring& operation, std::wistringstream& stream)
+{
+    const bool boolTag = operation == L"read-bool-tag" || operation == L"write-bool-tag";
+    const bool uint8Tag = operation == L"read-uint8-tag" || operation == L"write-uint8-tag";
+    const bool floatTag = operation == L"read-float-tag" || operation == L"write-float-tag";
+    if (!boolTag && !uint8Tag && !floatTag)
+    {
+        return false;
+    }
+
+    std::wstring tag;
+    stream >> tag;
+    tag = NormalizeTagToken(tag);
+    if (tag.empty())
+    {
+        PrintProtocolFailure(operation, L"tag is required");
+        return true;
+    }
+    std::vector<wchar_t> buffer(tag.begin(), tag.end());
+    buffer.push_back(L'\0');
+
+    if (operation == L"read-bool-tag")
+    {
+        bool value = false;
+        const ERuntimeErrorCode code = instance->ReadBool(buffer.data(), &value);
+        if (code != SREC_OK) { PrintTagProtocolFailure(operation, tag, code); return true; }
+        std::wcout << L"{\"status\":\"ok\",\"op\":\"read-bool-tag\",\"tag\":";
+        PrintJsonString(tag);
+        std::wcout << L",\"value\":" << (value ? L"true" : L"false") << L"}\n";
+        std::wcout.flush();
+        return true;
+    }
+    if (operation == L"read-uint8-tag")
+    {
+        UINT8 value = 0;
+        const ERuntimeErrorCode code = instance->ReadUInt8(buffer.data(), &value);
+        if (code != SREC_OK) { PrintTagProtocolFailure(operation, tag, code); return true; }
+        std::wcout << L"{\"status\":\"ok\",\"op\":\"read-uint8-tag\",\"tag\":";
+        PrintJsonString(tag);
+        std::wcout << L",\"value\":" << static_cast<unsigned int>(value) << L"}\n";
+        std::wcout.flush();
+        return true;
+    }
+    if (operation == L"read-float-tag")
+    {
+        float value = 0.0F;
+        const ERuntimeErrorCode code = instance->ReadFloat(buffer.data(), &value);
+        if (code != SREC_OK) { PrintTagProtocolFailure(operation, tag, code); return true; }
+        std::wcout << L"{\"status\":\"ok\",\"op\":\"read-float-tag\",\"tag\":";
+        PrintJsonString(tag);
+        std::wcout << L",\"value\":" << value << L"}\n";
+        std::wcout.flush();
+        return true;
+    }
+
+    std::wstring valueText;
+    stream >> valueText;
+    if (operation == L"write-bool-tag")
+    {
+        bool value = false;
+        if (!ParseBitValue(valueText, &value)) { PrintProtocolFailure(operation, L"value must be 0, 1, false, true, off or on"); return true; }
+        const ERuntimeErrorCode code = instance->WriteBool(buffer.data(), value);
+        if (code != SREC_OK) { PrintTagProtocolFailure(operation, tag, code); return true; }
+        std::wcout << L"{\"status\":\"ok\",\"op\":\"write-bool-tag\",\"tag\":";
+        PrintJsonString(tag);
+        std::wcout << L",\"value\":" << (value ? L"true" : L"false") << L"}\n";
+        std::wcout.flush();
+        return true;
+    }
+    if (operation == L"write-uint8-tag")
+    {
+        UINT32 parsed = 0;
+        if (!ParseUInt32(valueText, &parsed) || parsed > 255) { PrintProtocolFailure(operation, L"value must be an integer from 0 to 255"); return true; }
+        const ERuntimeErrorCode code = instance->WriteUInt8(buffer.data(), static_cast<UINT8>(parsed));
+        if (code != SREC_OK) { PrintTagProtocolFailure(operation, tag, code); return true; }
+        std::wcout << L"{\"status\":\"ok\",\"op\":\"write-uint8-tag\",\"tag\":";
+        PrintJsonString(tag);
+        std::wcout << L",\"value\":" << parsed << L"}\n";
+        std::wcout.flush();
+        return true;
+    }
+
+    try
+    {
+        const float value = std::stof(valueText);
+        const ERuntimeErrorCode code = instance->WriteFloat(buffer.data(), value);
+        if (code != SREC_OK) { PrintTagProtocolFailure(operation, tag, code); return true; }
+        std::wcout << L"{\"status\":\"ok\",\"op\":\"write-float-tag\",\"tag\":";
+        PrintJsonString(tag);
+        std::wcout << L",\"value\":" << value << L"}\n";
+    }
+    catch (...)
+    {
+        PrintProtocolFailure(operation, L"value must be a floating-point number");
+    }
+    std::wcout.flush();
+    return true;
+}
+
+bool HandleAcceptanceCommand(IInstance* instance, const std::wstring& command)
+{
+    if (instance == nullptr)
+    {
+        PrintProtocolFailure(L"command", L"instance is null");
+        return true;
+    }
+
+    std::wistringstream stream(command);
+    std::wstring operation;
+    stream >> operation;
+    if (operation.empty())
+    {
+        return true;
+    }
+
+    if (HandleSymbolicTagCommand(instance, operation, stream))
+    {
+        return true;
+    }
+
+    if (operation == L"read-area-size")
+    {
+        std::wstring areaText;
+        stream >> areaText;
+        EArea area{};
+        if (!ParseArea(areaText, &area))
+        {
+            PrintProtocolFailure(operation, L"area must be input, output or marker");
+            return true;
+        }
+        std::wcout << L"{\"status\":\"ok\",\"op\":\"read-area-size\",\"bytes\":"
+                   << instance->GetAreaSize(area) << L"}\n";
+        std::wcout.flush();
+        return true;
+    }
+
+    const bool bitOperation = operation == L"read-bit" || operation == L"write-bit";
+    const bool byteOperation = operation == L"read-byte" || operation == L"write-byte";
+    if (!bitOperation && !byteOperation)
+    {
+        PrintProtocolFailure(operation, L"unknown command; expected read-bit, write-bit, read-byte, write-byte or read-area-size");
+        return true;
+    }
+
+    std::wstring areaText;
+    std::wstring offsetText;
+    stream >> areaText >> offsetText;
+    EArea area{};
+    UINT32 offset = 0;
+    if (!ParseArea(areaText, &area) || !ParseUInt32(offsetText, &offset))
+    {
+        PrintProtocolFailure(operation, L"expected area and unsigned byte offset");
+        return true;
+    }
+
+    if (bitOperation)
+    {
+        std::wstring bitText;
+        stream >> bitText;
+        UINT32 bit = 0;
+        if (!ParseUInt32(bitText, &bit) || bit > 7)
+        {
+            PrintProtocolFailure(operation, L"bit must be an integer from 0 to 7");
+            return true;
+        }
+        if (operation == L"read-bit")
+        {
+            bool value = false;
+            const ERuntimeErrorCode code = instance->ReadBit(area, offset, static_cast<UINT8>(bit), &value);
+            if (code != SREC_OK)
+            {
+                PrintProtocolCode(operation, code);
+                return true;
+            }
+            std::wcout << L"{\"status\":\"ok\",\"op\":\"read-bit\",\"value\":"
+                       << (value ? L"true" : L"false") << L"}\n";
+            std::wcout.flush();
+            return true;
+        }
+
+        std::wstring valueText;
+        stream >> valueText;
+        bool value = false;
+        if (!ParseBitValue(valueText, &value))
+        {
+            PrintProtocolFailure(operation, L"value must be 0, 1, false, true, off or on");
+            return true;
+        }
+        const ERuntimeErrorCode code = instance->WriteBit(area, offset, static_cast<UINT8>(bit), value);
+        if (code != SREC_OK)
+        {
+            PrintProtocolCode(operation, code);
+            return true;
+        }
+        std::wcout << L"{\"status\":\"ok\",\"op\":\"write-bit\",\"value\":"
+                   << (value ? L"true" : L"false") << L"}\n";
+        std::wcout.flush();
+        return true;
+    }
+
+    if (operation == L"read-byte")
+    {
+        BYTE value = 0;
+        const ERuntimeErrorCode code = instance->ReadByte(area, offset, &value);
+        if (code != SREC_OK)
+        {
+            PrintProtocolCode(operation, code);
+            return true;
+        }
+        std::wcout << L"{\"status\":\"ok\",\"op\":\"read-byte\",\"value\":"
+                   << static_cast<unsigned int>(value) << L"}\n";
+        std::wcout.flush();
+        return true;
+    }
+
+    std::wstring valueText;
+    stream >> valueText;
+    UINT32 parsedValue = 0;
+    if (!ParseUInt32(valueText, &parsedValue) || parsedValue > 255)
+    {
+        PrintProtocolFailure(operation, L"byte value must be an integer from 0 to 255");
+        return true;
+    }
+    const ERuntimeErrorCode code = instance->WriteByte(area, offset, static_cast<BYTE>(parsedValue));
+    if (code != SREC_OK)
+    {
+        PrintProtocolCode(operation, code);
+        return true;
+    }
+    std::wcout << L"{\"status\":\"ok\",\"op\":\"write-byte\",\"value\":"
+               << parsedValue << L"}\n";
+    std::wcout.flush();
+    return true;
+}
+
 int RunDisposableProbe(ISimulationRuntimeManager* manager, int argc, wchar_t* argv[])
 {
     const bool registerDisposable = HasArgument(argc, argv, L"--register-disposable");
@@ -311,6 +649,7 @@ int RunAcceptanceInstance(ISimulationRuntimeManager* manager, int argc, wchar_t*
         {
             break;
         }
+        HandleAcceptanceCommand(instance, command);
     }
 
     const ERuntimeErrorCode powerOffCode = instance->PowerOff(timeoutMs);

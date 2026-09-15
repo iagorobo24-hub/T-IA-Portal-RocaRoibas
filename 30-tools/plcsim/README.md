@@ -67,3 +67,25 @@ PLCSIM, enciende la CPU y permanece vivo. Mientras está vivo, TIA puede descarg
 al target virtual. Para terminarlo se envía `stop` por stdin; entonces apaga, desregistra y
 libera la instancia. Si el adaptador no está operativo, el comando termina sin registrar una
 CPU y devuelve las interfaces disponibles. No se debe usar este modo con una interfaz física.
+
+Mientras la instancia está viva acepta comandos de stdin, uno por línea, y devuelve un JSON por
+línea. Las áreas admitidas son `input`, `output` y `marker`; el offset es un byte:
+
+```text
+read-area-size input
+write-bit input 0 0 1
+read-bit output 0 0
+write-byte input 1 255
+read-byte output 0
+write-bool-tag Control_HMI.fromHMI.resetSimulation 1
+read-bool-tag Control_HMI.toHMI.resetStatus
+read-uint8-tag Control_HMI.toHMI.numWorkpieces
+read-float-tag Control_HMI.fromHMI.longConveyor.varSpeedPercentage
+stop
+```
+
+Este protocolo permite que una aceptación escriba sensores virtuales y lea salidas sin tocar un
+PLC físico. Las operaciones `*-tag` usan los símbolos descargados de la CPU y permiten accionar
+controles HMI y observar contadores sin depender de direcciones absolutas. El runner debe comprobar
+`status: ok` y registrar cada respuesta; un error de lectura o escritura invalida la evidencia de
+comportamiento.

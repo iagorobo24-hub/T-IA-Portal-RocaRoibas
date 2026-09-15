@@ -73,6 +73,7 @@ Si falla        los modos de fallo conocidos y su arreglo
 | [R14](R14-binding-hmi-plc.md) | Binding de tags HMI ↔ PLC | 📄 documentada, no verificada |
 | [R15](R15-lista-es.md) | Generar la lista de E/S | ✅ herramienta verificada en fixture y contra exportación XML real V20; requiere tags detalladas |
 | [R16](R16-descripcion-funcional.md) | Generar la descripción funcional | ✅ generada contra ejemplo real; no sustituye validación funcional |
+| [R17](R17-aceptacion-plcsim.md) | Aceptación conductual en PLCSIM Advanced | 🟡 runner y protocolo verificados; comportamiento real pendiente |
 
 El orden y su porqué están en [ADR-004](../../00-meta/decisiones/ADR-004-prioridades.md).
 
