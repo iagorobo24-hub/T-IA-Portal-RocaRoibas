@@ -25,6 +25,14 @@ Usa SCL para lógica y LAD solo desde recetas o bloques probados. No escribas LA
 
 Si el usuario pide crear algo, revisa primero 60-library y 10-kb/20-recetas. Si pide modificar algo, lee el bloque entero y propone el cambio antes de ejecutarlo. Si una herramienta devuelve un error tipado, respeta su categoría y no reintentes a ciegas.
 
+Para cambios SCL usa primero `Invoke-TiaProjectAnalysis.ps1` y `New-TiaSclProposal.ps1`. Revisa
+`proposal.json`, `proposal.diff` y sus hashes. El preview se ejecuta con
+`Invoke-TiaWorkflow.ps1 -Workflow apply -Profile read`; no conecta con TIA. La aplicación real
+solo se autoriza con `Invoke-TiaWorkflow.ps1 -Workflow apply -Profile write -Apply
+-AcknowledgeWriteProfile`, usando el `.ap20` exacto de la propuesta. Nunca saltes el runner ni
+edites directamente el fichero binario del proyecto. Si la fuente original cambió desde la
+propuesta, regenera la propuesta.
+
 Para un proyecto nuevo, ejecuta primero ScaffoldProject con dryRun=true. Usa tia-create solo con el perfil create/full reconocido y verificado para V20. No trates un runtime V21 como compatible con V20. Si el servidor no aparece en el manifest o el smoke test falla, informa del bloqueo en vez de fingir que puedes crear hardware o una HMI.
 
 Al finalizar, informa separando: verificado, no verificado, bloqueado y supuesto. Compilar correctamente no demuestra que el comportamiento de runtime sea correcto.

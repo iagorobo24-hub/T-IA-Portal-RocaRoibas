@@ -52,6 +52,11 @@ Para actualizar una instalación existente hay que indicarlo explícitamente:
 
 La instalación genera un `.mcp.json` con la ruta real de ese ordenador y deja el servidor en modo lectura. Las escrituras requieren lanzar el servidor con `--allow-write` de forma deliberada.
 
+Para una modificación SCL, el flujo recomendado es generar primero el dossier y la propuesta,
+revisar el diff y ejecutar el preview local. La aplicación posterior debe pasar por
+`Invoke-TiaWorkflow.ps1 -Workflow apply` con `-Profile write -Apply -AcknowledgeWriteProfile`;
+el runner crea backup, comprueba que la fuente no haya cambiado, compila y solo entonces guarda.
+
 ## Comprobación
 
 ```powershell
