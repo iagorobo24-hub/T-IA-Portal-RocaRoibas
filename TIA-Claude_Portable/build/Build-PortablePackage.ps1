@@ -17,10 +17,10 @@ $coreRoot = Join-Path $OutputRoot 'TIA-Claude_Core'
 $examplesRoot = Join-Path $OutputRoot 'TIA-Claude_Examples'
 New-Item -ItemType Directory -Path $coreRoot,$examplesRoot -Force | Out-Null
 
-function Copy-WorkspaceItem([string]$RelativePath, [string]$DestinationRoot) {
+function Copy-WorkspaceItem([string]$RelativePath, [string]$DestinationRoot, [string]$DestinationRelativePath = $RelativePath) {
     $source = Join-Path $WorkspaceRoot ($RelativePath -replace '/', '\')
     if (-not (Test-Path -LiteralPath $source)) { throw "Required package input is missing: $RelativePath" }
-    $destination = Join-Path $DestinationRoot ($RelativePath -replace '/', '\')
+    $destination = Join-Path $DestinationRoot ($DestinationRelativePath -replace '/', '\')
     $sourceItem = Get-Item -LiteralPath $source
     if ($sourceItem.PSIsContainer) {
         New-Item -ItemType Directory -Path $destination -Force | Out-Null
@@ -47,6 +47,13 @@ $coreItems = @(
     '30-tools/mcp/tia-create/README.md', '30-tools/mcp/tia-create/bin/v20'
 )
 foreach ($item in $coreItems) { Copy-WorkspaceItem $item $coreRoot }
+
+# Keep the operational guides beside the portable core. They are maintained in
+# the repository package area, not in the generated workspace tree.
+Copy-WorkspaceItem 'TIA-Claude_Portable/README-INSTALL.md' $coreRoot 'README-INSTALL.md'
+foreach ($guide in @('arquitectura.md', 'funcionamiento.md', 'harnesses.md', 'prompt-claude-code.md', 'NOTICE-THIRD-PARTY.md')) {
+    Copy-WorkspaceItem ("TIA-Claude_Portable/docs/$guide") $coreRoot ("docs/$guide")
+}
 
 # Build outputs are local scratch, never part of the source package. The probe
 # source and project file remain portable; Siemens runtime DLLs are intentionally

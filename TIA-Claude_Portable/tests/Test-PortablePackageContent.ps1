@@ -24,6 +24,9 @@ try {
     if (-not (Test-Path -LiteralPath (Join-Path $core '30-tools\mcp\tia-create\bin\v20\TiaMcpServer.exe') -PathType Leaf)) {
         throw 'Core package is missing the verified tia-create V20 runtime.'
     }
+    foreach ($guide in @('README-INSTALL.md', 'docs\arquitectura.md', 'docs\funcionamiento.md', 'docs\harnesses.md', 'docs\prompt-claude-code.md')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $core $guide) -PathType Leaf)) { throw "Core package is missing operational guide: $guide" }
+    }
     $manifest = Get-Content -Raw -LiteralPath $coreManifest | ConvertFrom-Json
     if ($manifest.packageKind -ne 'core' -or $manifest.files.Count -eq 0) { throw 'Core manifest is incomplete.' }
     $exampleManifestObject = Get-Content -Raw -LiteralPath $examplesManifest | ConvertFrom-Json
