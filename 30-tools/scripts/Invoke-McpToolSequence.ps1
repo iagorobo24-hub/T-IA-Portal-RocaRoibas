@@ -17,7 +17,9 @@ param(
     [array]$Calls,
     [string]$CallsJson,
     [string]$OutputPath,
-    [int]$TimeoutSeconds = 120
+    [int]$TimeoutSeconds = 120,
+    [string]$LeaseName = 'Local\TIA-Claude-McpSession',
+    [int]$LeaseTimeoutSeconds = 60
 )
 
 $ErrorActionPreference = 'Stop'
@@ -25,6 +27,21 @@ $ExecutablePath = [IO.Path]::GetFullPath($ExecutablePath)
 if (-not (Test-Path -LiteralPath $ExecutablePath -PathType Leaf)) { throw "Executable does not exist: $ExecutablePath" }
 if ($CallsJson) { $Calls = @($CallsJson | ConvertFrom-Json) }
 if (-not $Calls -or $Calls.Count -eq 0) { throw 'At least one MCP call is required.' }
+
+$mutex = $null
+$leaseAcquired = $false
+$leaseCreated = $false
+try {
+    $mutex = [Threading.Mutex]::new($false, $LeaseName, [ref]$leaseCreated)
+    $leaseAcquired = $mutex.WaitOne([TimeSpan]::FromSeconds($LeaseTimeoutSeconds))
+    if (-not $leaseAcquired) {
+        throw "Could not acquire MCP/TIA session lease '$LeaseName' within $LeaseTimeoutSeconds seconds."
+    }
+}
+catch {
+    if ($mutex) { $mutex.Dispose() }
+    throw
+}
 
 $psi = [Diagnostics.ProcessStartInfo]::new()
 $psi.FileName = $ExecutablePath
@@ -36,8 +53,8 @@ $psi.RedirectStandardInput = $true
 $psi.RedirectStandardOutput = $true
 $psi.RedirectStandardError = $true
 $psi.StandardOutputEncoding = [Text.Encoding]::UTF8
-$process = [Diagnostics.Process]::Start($psi)
-$stderrTask = $process.StandardError.ReadToEndAsync()
+$process = $null
+$stderrTask = $null
 
 function Send-Json([object]$Payload) {
     $process.StandardInput.WriteLine(($Payload | ConvertTo-Json -Depth 30 -Compress))
@@ -63,6 +80,8 @@ function Read-Response([int]$Id) {
 $results = [System.Collections.Generic.List[object]]::new()
 $sequenceSuccess = $true
 try {
+    $process = [Diagnostics.Process]::Start($psi)
+    $stderrTask = $process.StandardError.ReadToEndAsync()
     Send-Json ([ordered]@{
         jsonrpc = '2.0'; id = 1; method = 'initialize'
         params = @{ protocolVersion = '2025-06-18'; capabilities = @{}; clientInfo = @{ name = 'TIA-Claude-sequence'; version = '1.0' }
@@ -94,10 +113,16 @@ try {
     }
 }
 finally {
-    try { $process.StandardInput.Close() } catch { }
-    if (-not $process.WaitForExit(5000)) { try { $process.Kill() } catch { } }
-    try { $null = $stderrTask.GetAwaiter().GetResult() } catch { }
-    $process.Dispose()
+    if ($process) {
+        try { $process.StandardInput.Close() } catch { }
+        if (-not $process.WaitForExit(5000)) { try { $process.Kill() } catch { } }
+        if ($stderrTask) { try { $null = $stderrTask.GetAwaiter().GetResult() } catch { } }
+        $process.Dispose()
+    }
+    if ($leaseAcquired) {
+        try { $mutex.ReleaseMutex() } catch { }
+    }
+    if ($mutex) { $mutex.Dispose() }
 }
 
 $report = [ordered]@{
@@ -106,6 +131,9 @@ $report = [ordered]@{
     success = $sequenceSuccess
     executable = $ExecutablePath
     arguments = $Arguments
+    leaseName = $LeaseName
+    leaseCreated = $leaseCreated
+    leaseAcquired = $leaseAcquired
     initialize = $initialize.result
     calls = @($results)
 }

@@ -22,6 +22,7 @@ $definitions = @(
     @{ name = 'tia-create-availability'; path = '30-tools/tests/Test-TiaCreateAvailability.ps1' },
     @{ name = 'tia-create-runtime'; path = '30-tools/tests/Test-TiaCreateRuntime.ps1' },
     @{ name = 'mcp-tool-sequence'; path = '30-tools/tests/Test-McpToolSequence.ps1' },
+    @{ name = 'mcp-session-lease'; path = '30-tools/tests/Test-McpSessionLease.ps1' },
     @{ name = 'plcsim-api-probe'; path = '30-tools/tests/Test-PlcSimRuntimeApiProbe.ps1' },
     @{ name = 'plcsim-native-adapter'; path = '30-tools/tests/Test-PlcSimNativeAdapter.ps1' },
     @{ name = 'agent-demo-scaffold'; path = '30-tools/tests/Test-AgentDemoScaffoldEvidence.ps1' },
