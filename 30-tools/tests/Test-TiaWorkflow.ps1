@@ -9,6 +9,8 @@ $sourceRoot = Join-Path $temp 'src'
 $inventoryPath = Join-Path $temp 'inventory.json'
 $outputDirectory = Join-Path $temp 'workflow'
 $proposalOutputDirectory = Join-Path $temp 'proposal-workflow'
+$applyOutputDirectory = Join-Path $temp 'apply-workflow'
+$projectFile = Join-Path $temp 'Demo_V20.ap20'
 
 try {
     New-Item -ItemType Directory -Path (Join-Path $sourceRoot 'Program blocks') -Force | Out-Null
@@ -48,15 +50,23 @@ END_FUNCTION_BLOCK
     if (-not (Test-Path -LiteralPath (Join-Path $proposalOutputDirectory 'proposal.json') -PathType Leaf)) { throw 'Propose workflow did not create proposal.json.' }
     Write-Output 'PASS: semantic workflow runs propose without importing the change'
 
-    $applyFailed = $false
-    try {
-        & $script -Workflow apply -OutputDirectory (Join-Path $temp 'apply-workflow') 2>&1 | Out-Null
-    }
-    catch {
-        $applyFailed = $true
-    }
-    if (-not $applyFailed) { throw 'Apply workflow must remain explicitly unavailable.' }
-    Write-Output 'PASS: semantic workflow refuses apply until the write-gated runner exists'
+    'fixture project marker' | Set-Content -LiteralPath $projectFile -Encoding UTF8
+    $proposalPath = Join-Path $proposalOutputDirectory 'proposal.json'
+    $proposalObject = Get-Content -Raw -LiteralPath $proposalPath | ConvertFrom-Json
+    $proposalObject.projectPath = $projectFile
+    $proposalObject | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $proposalPath -Encoding UTF8
+    & $script -Workflow apply -ProposalPath $proposalPath -ProjectFile $projectFile -OutputDirectory $applyOutputDirectory
+    if ($LASTEXITCODE -ne 0) { throw "Apply preview workflow failed with exit code $LASTEXITCODE." }
+    $applyWorkflow = Get-Content -Raw -LiteralPath (Join-Path $applyOutputDirectory 'workflow.json') | ConvertFrom-Json
+    if ($applyWorkflow.workflow -ne 'apply' -or $applyWorkflow.status -ne 'COMPLETED') { throw 'Apply preview workflow did not complete.' }
+    if ($applyWorkflow.readOnly -ne $true -or $applyWorkflow.tiaMutation -ne $false) { throw 'Apply preview workflow must remain read-only.' }
+    if (-not (Test-Path -LiteralPath $applyWorkflow.artifacts.applyReport -PathType Leaf)) { throw 'Apply workflow did not link its apply report.' }
+    Write-Output 'PASS: semantic workflow delegates apply to the local preview runner without TIA mutation'
+
+    $unsafeFailed = $false
+    try { & $script -Workflow apply -ProposalPath $proposalPath -ProjectFile $projectFile -Profile read -Apply 2>&1 | Out-Null } catch { $unsafeFailed = $true }
+    if (-not $unsafeFailed) { throw 'Apply workflow must refuse mutation without the write profile.' }
+    Write-Output 'PASS: semantic workflow refuses mutation without explicit write acknowledgement'
 }
 finally {
     if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Recurse -Force }

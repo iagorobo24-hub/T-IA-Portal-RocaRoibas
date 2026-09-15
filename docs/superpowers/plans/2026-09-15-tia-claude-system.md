@@ -427,7 +427,8 @@ intentionally independent from the green local workspace checks.
 - Produces: one traceable report linking discovery, dossier, proposal, optional write E2E and export.
 
 - [x] Implement `analyze` as the first workflow and keep `propose`/`apply` explicit.
-- [x] Enforce the `read` profile and keep snapshot workflows free of TIA mutation; live MCP lease enforcement remains required for the future apply workflow.
+- [x] Enforce the `read` profile for snapshot workflows; apply remains explicit and delegates its
+  write lease to the gated proposal runner.
 - [x] Add a disposable end-to-end workflow test before enabling real project application.
 
 ## Phase 8: Write-gated semantic proposal application
@@ -454,6 +455,10 @@ intentionally independent from the green local workspace checks.
 - [x] Añadir prueba de selección de la ruta `.scl`/`ImportSources`.
 - [x] Implementar backup, guardia de instancia visible, lease MCP, lectura de paths y bloque,
   importación, compile 0/0, save, export y readback.
+- [x] Verificar el hash de la fuente original para rechazar propuestas obsoletas o cambios
+  concurrentes antes de staging o conexión a TIA.
+- [x] Integrar el runner en `Invoke-TiaWorkflow`: preview con `read`; mutación solo con `write`,
+  `-Apply` y `-AcknowledgeWriteProfile`.
 - [ ] Ejecutar una aplicación real sobre un fixture V20 desechable con TIA sin ventana visible.
 - [ ] Registrar el informe real y actualizar la aceptación solo después de verificar el hash y
   la compilación del proyecto.

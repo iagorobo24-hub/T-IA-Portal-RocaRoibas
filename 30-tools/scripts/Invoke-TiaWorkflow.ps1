@@ -5,8 +5,8 @@
 .DESCRIPTION
     Coordina operaciones sobre snapshots sin mezclar analisis, propuesta y aplicacion.
     `analyze` consume un inventario MCP readOnly y fuentes exportadas. `propose` consume un
-    dossier y produce una propuesta SCL. `apply` se rechaza expresamente hasta que exista un
-    runner de escritura que implemente todos los gates de AGENTS.md.
+    dossier y produce una propuesta SCL. `apply` delega en el runner de escritura con preview
+    local por defecto y mutacion solo con perfil write, -Apply y confirmacion de perfil.
 ##>
 [CmdletBinding()]
 param(
@@ -17,6 +17,8 @@ param(
     [string]$InventoryPath,
     [string]$SourceRoot,
     [string]$AnalysisPath,
+    [string]$ProposalPath,
+    [string]$ProjectFile,
     [string]$BlockName,
     [string]$FindText,
     [string]$ReplaceText,
@@ -25,6 +27,8 @@ param(
     [string]$Profile = 'read',
     [string]$Objective = '',
     [switch]$Force,
+    [switch]$Apply,
+    [switch]$AcknowledgeWriteProfile,
     [switch]$Help
 )
 
@@ -33,16 +37,19 @@ $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 
 if ($Help) {
     Write-Output @'
-Invoke-TiaWorkflow.ps1: workflows snapshot-only de TIA-Claude.
+Invoke-TiaWorkflow.ps1: workflows semanticos de TIA-Claude.
   analyze: inventory MCP readOnly + fuentes -> analysis.json/md
   propose: analysis + reemplazo SCL -> proposal.json/copia/diff
-  apply: rechazado hasta disponer de un runner de escritura con todos los gates
+  apply: proposal.json + .ap20 -> preview o aplicacion con gates completos
 '@
     exit 0
 }
 
-if ($Profile -ne 'read') { throw "Workflow '$Workflow' currently only accepts profile 'read'." }
-if ($Workflow -eq 'apply') { throw 'Workflow apply is intentionally unavailable: use the explicit backup/preview/compile/save/export write loop first.' }
+if ($Workflow -ne 'apply' -and $Profile -ne 'read') { throw "Workflow '$Workflow' only accepts profile 'read'." }
+if ($Workflow -eq 'apply' -and $Apply) {
+    if ($Profile -ne 'write') { throw 'Applying a workflow requires -Profile write.' }
+    if (-not $AcknowledgeWriteProfile) { throw 'Applying a workflow requires -AcknowledgeWriteProfile.' }
+}
 
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $root ('70-runs\workflows\' + $Workflow + '-' + (Get-Date -Format 'yyyyMMdd-HHmmss')) }
 $OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
@@ -55,7 +62,12 @@ New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 
 $analysisScript = Join-Path $PSScriptRoot 'Invoke-TiaProjectAnalysis.ps1'
 $proposalScript = Join-Path $PSScriptRoot 'New-TiaSclProposal.ps1'
+$applyScript = Join-Path $PSScriptRoot 'Invoke-TiaSclProposalApply.ps1'
 $artifacts = [ordered]@{}
+$workflowReadOnly = $true
+$workflowMutation = $false
+$leaseRequired = $false
+$leaseAcquired = $false
 
 if ($Workflow -eq 'analyze') {
     if (-not $InventoryPath -or -not $SourceRoot) { throw 'Analyze requires InventoryPath and SourceRoot.' }
@@ -75,6 +87,28 @@ elseif ($Workflow -eq 'propose') {
     $artifacts.diff = Join-Path $OutputDirectory 'proposal.diff'
     $artifacts.markdown = Join-Path $OutputDirectory 'proposal.md'
 }
+elseif ($Workflow -eq 'apply') {
+    if (-not $ProposalPath -or -not $ProjectFile) { throw 'Apply requires ProposalPath and ProjectFile.' }
+    if (-not (Test-Path -LiteralPath $applyScript -PathType Leaf)) { throw "Apply runner is missing: $applyScript" }
+    $applyReportRoot = Join-Path $OutputDirectory 'apply'
+    $applyArguments = @{
+        ProposalPath = $ProposalPath
+        ProjectFile = $ProjectFile
+        ReportRoot = $applyReportRoot
+    }
+    if ($Apply) { $applyArguments.Apply = $true }
+    & $applyScript @applyArguments
+    if ($LASTEXITCODE -ne 0) { throw "Apply workflow failed with exit code $LASTEXITCODE." }
+    $applyReport = Get-ChildItem -LiteralPath $applyReportRoot -Recurse -File -Filter 'apply-report.json' -ErrorAction Stop |
+        Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if (-not $applyReport) { throw 'Apply workflow did not create apply-report.json.' }
+    $applyObject = Get-Content -Raw -LiteralPath $applyReport.FullName | ConvertFrom-Json
+    $artifacts.applyReport = $applyReport.FullName
+    $workflowReadOnly = [bool]$applyObject.readOnly
+    $workflowMutation = [bool]$applyObject.tiaMutation
+    $leaseRequired = [bool]$Apply
+    $leaseAcquired = ($Apply -and $applyObject.tiaMutation -eq $true)
+}
 
 $report = [ordered]@{
     schemaVersion = 1
@@ -82,14 +116,14 @@ $report = [ordered]@{
     status = 'COMPLETED'
     generatedAt = [DateTimeOffset]::Now.ToString('o')
     profile = $Profile
-    readOnly = $true
-    tiaMutation = $false
-    leaseRequired = $false
-    leaseAcquired = $false
+    readOnly = $workflowReadOnly
+    tiaMutation = $workflowMutation
+    leaseRequired = $leaseRequired
+    leaseAcquired = $leaseAcquired
     outputDirectory = $OutputDirectory
     objective = $Objective
     artifacts = $artifacts
-    nextStep = 'Revisar los artefactos y, si procede, iniciar una operacion separada con el ciclo de escritura de AGENTS.md.'
+    nextStep = if ($Workflow -eq 'apply' -and -not $Apply) { 'Revisar apply-report.json y, si procede, repetir con -Profile write -Apply -AcknowledgeWriteProfile.' } else { 'Revisar los artefactos y la evidencia registrada.' }
 }
 $workflowPath = Join-Path $OutputDirectory 'workflow.json'
 $report | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $workflowPath -Encoding UTF8

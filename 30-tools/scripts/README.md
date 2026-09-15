@@ -19,7 +19,7 @@ Herramientas de consola para operar TIA Portal por Openness sin depender de un c
 | [`Write-TiaSimulationReadiness.ps1`](Write-TiaSimulationReadiness.ps1) | Preflight de simulación: separa disponibilidad PLC, compatibilidad HMI V20 y evidencia conductual |
 | [`Invoke-TiaProjectAnalysis.ps1`](Invoke-TiaProjectAnalysis.ps1) | Genera un dossier semántico de solo lectura desde un inventario MCP y fuentes exportadas |
 | [`New-TiaSclProposal.ps1`](New-TiaSclProposal.ps1) | Genera una propuesta SCL, copia, diff y hashes sin modificar el original ni TIA |
-| [`Invoke-TiaWorkflow.ps1`](Invoke-TiaWorkflow.ps1) | Orquesta `analyze` y `propose`; mantiene `apply` separado y rechazado hasta completar sus gates |
+| [`Invoke-TiaWorkflow.ps1`](Invoke-TiaWorkflow.ps1) | Orquesta `analyze`, `propose` y `apply` con preview local y perfil de escritura explícito |
 | [`Stop-TiaPortal.ps1`](Stop-TiaPortal.ps1) | Cierra las instancias headless que `Disconnect` **no** cierra |
 
 ---
@@ -134,7 +134,7 @@ advertencias, guardado, exportación y lectura posterior. Las fuentes `.s7dcl` u
 
 ## `Invoke-TiaWorkflow.ps1`
 
-Punto de entrada semántico para snapshots. Los dos workflows disponibles no mutan TIA:
+Punto de entrada semántico para snapshots y aplicación controlada:
 
 ```powershell
 .\Invoke-TiaWorkflow.ps1 -Workflow analyze `
@@ -144,12 +144,20 @@ Punto de entrada semántico para snapshots. Los dos workflows disponibles no mut
   -AnalysisPath "...\analysis.json" -BlockName "FB_Motor" `
   -FindText '#Run := #CmdStart AND #Interlock;' `
   -ReplaceText '#Run := #CmdStart AND #Interlock AND #Ready;'
+
+.\Invoke-TiaWorkflow.ps1 -Workflow apply `
+  -ProposalPath "...\proposal.json" -ProjectFile "...\Proyecto_V20.ap20" `
+  -Profile read                                      # preview local
+
+.\Invoke-TiaWorkflow.ps1 -Workflow apply `
+  -ProposalPath "...\proposal.json" -ProjectFile "...\Proyecto_V20.ap20" `
+  -Profile write -Apply -AcknowledgeWriteProfile       # aplicación real
 ```
 
 Cada ejecución deja `workflow.json` con estado, perfil, artefactos y la afirmación explícita de
-que no hubo mutación de TIA. `-Workflow apply` sigue rechazado deliberadamente: la aplicación se
-hace con `Invoke-TiaSclProposalApply.ps1`, que adquiere el lease MCP mediante el runner de
-secuencias y mantiene el gate de escritura separado.
+que corresponde a la operación realizada. El preview no conecta con TIA; la aplicación real se
+delega en `Invoke-TiaSclProposalApply.ps1`, que adquiere el lease MCP mediante el runner de
+secuencias y mantiene los gates de backup, proyecto exacto, compilación y guardado.
 
 ---
 
