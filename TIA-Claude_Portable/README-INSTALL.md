@@ -30,6 +30,13 @@ Desde la carpeta `dist\TIA-Claude_Core`:
 .\install\Install-CorePackage.ps1 -DestinationRoot 'C:\TIA-Claude'
 ```
 
+El instalador deja también `C:\TIA-Claude\install\Verify-CorePackage.ps1` en el destino. Después
+de copiar el núcleo a otro ordenador se puede repetir la comprobación desde allí:
+
+```powershell
+.\install\Verify-CorePackage.ps1 -PackageRoot 'C:\TIA-Claude'
+```
+
 El instalador genera el perfil MCP de lectura con rutas relativas al ordenador destino. Para usar
 los ejemplos, copia `dist\TIA-Claude_Examples\50-examples` aparte; no se mezclan automáticamente
 con proyectos de trabajo.

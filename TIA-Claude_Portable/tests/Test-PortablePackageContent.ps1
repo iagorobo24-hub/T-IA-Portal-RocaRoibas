@@ -33,6 +33,11 @@ try {
     foreach ($guide in @('README-INSTALL.md', 'docs\arquitectura.md', 'docs\funcionamiento.md', 'docs\harnesses.md', 'docs\prompt-claude-code.md')) {
         if (-not (Test-Path -LiteralPath (Join-Path $core $guide) -PathType Leaf)) { throw "Core package is missing operational guide: $guide" }
     }
+    $prompt = Get-Content -Raw -LiteralPath (Join-Path $core 'docs\prompt-claude-code.md')
+    if ($prompt -match 'Pega este prompt en `workspace/`') { throw 'Portable Claude prompt still targets the legacy monolithic workspace.' }
+    foreach ($requiredPromptText in @('AGENTS.md', 'Doctor', 'GetProjectTree', 'Profile read', 'AcknowledgeWriteProfile')) {
+        if ($prompt -notmatch [regex]::Escape($requiredPromptText)) { throw "Portable Claude prompt is missing: $requiredPromptText" }
+    }
     $manifest = Get-Content -Raw -LiteralPath $coreManifest | ConvertFrom-Json
     if ($manifest.packageKind -ne 'core' -or $manifest.files.Count -eq 0) { throw 'Core manifest is incomplete.' }
     $exampleManifestObject = Get-Content -Raw -LiteralPath $examplesManifest | ConvertFrom-Json

@@ -35,6 +35,7 @@ $definitions = @(
     @{ name = 'runtime-media-discovery'; path = '30-tools/tests/Test-FindTiaRuntimeMedia.ps1' },
     @{ name = 'simulation-readiness'; path = '30-tools/tests/Test-SimulationReadiness.ps1' },
     @{ name = 'simulation-acceptance-runner'; path = '30-tools/tests/Test-InvokeTiaSimulationAcceptance.ps1' },
+    @{ name = 'portable-install-relocation'; path = 'TIA-Claude_Portable/tests/Test-PortableInstallRelocation.ps1' },
     @{ name = 'project-analysis'; path = '30-tools/tests/Test-TiaProjectAnalysis.ps1' },
     @{ name = 'scl-proposal'; path = '30-tools/tests/Test-TiaSclProposal.ps1' },
     @{ name = 'scl-proposal-apply'; path = '30-tools/tests/Test-TiaSclProposalApply.ps1' },
