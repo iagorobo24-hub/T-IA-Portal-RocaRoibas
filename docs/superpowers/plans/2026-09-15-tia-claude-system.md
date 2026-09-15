@@ -263,9 +263,9 @@
 - Consumes: TIA V20, PLCSIM Advanced V6.0, migrated sorting project.
 - Produces: evidence for compile, virtual PLC startup, HMI connection and at least one sequence transition; NX MCD remains explicitly out of scope unless installed.
 
-- [ ] Write the acceptance checklist first.
+- [x] Write the acceptance checklist first.
 - [ ] Run the project through the safe TIA/Computer Use workflow.
-- [ ] Record exact failures rather than marking simulation successful from compilation alone.
+- [x] Record the current blocker and keep behavioral simulation unverified rather than marking it successful from compilation alone.
 
 ### Task 4.3: Resolve or document WinCC Runtime Advanced V20
 
@@ -278,8 +278,8 @@
 - Consumes: official TIA V20 installation media if available.
 - Produces: verified Runtime Advanced V20 installation or a documented incompatibility/workaround.
 
-- [ ] Inspect installation media and current installed runtimes.
-- [ ] Install only after action-time confirmation.
+- [x] Inspect the current installed runtimes and record the exact V17/V20 mismatch.
+- [ ] Inspect installation media and install only after action-time confirmation.
 - [ ] Retry the games simulation and record whether the device is supported.
 
 ## Phase 5: Portable distribution and harnesses
@@ -335,9 +335,9 @@
 - Consumes: the decision in `00-meta/03-tdd.md` about public/private workspace and customer data.
 - Produces: a repository where `_ref`, `70-runs`, `90-tmp`, binary TIA projects and customer projects are excluded by default.
 
-- [ ] Verify no customer project is staged before the first commit.
-- [ ] Add the ignore rules and a staged-file audit script.
-- [ ] Run the audit and commit only after the boundary passes.
+- [x] Verify no customer project is staged before the first commit.
+- [x] Add the ignore rules and a staged-file audit script.
+- [x] Run the audit and commit only after the boundary passes.
 
 ### Task 6.2: Add CI-independent local release checks
 
