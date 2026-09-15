@@ -42,9 +42,24 @@ foreach ($definition in $definitions) {
 }
 
 $standardsInventory = Join-Path $WorkspaceRoot '70-runs\standards\iot-baseline-inventory.json'
-$standardsExport = Join-Path $WorkspaceRoot '70-runs\e2e\20260915-082218\export'
+$latestE2EReport = Get-ChildItem -LiteralPath (Join-Path $WorkspaceRoot '70-runs\e2e') -Recurse -Filter 'report.json' -File -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+$standardsExport = $null
+if ($latestE2EReport) {
+    try {
+        $latestE2E = Get-Content -LiteralPath $latestE2EReport.FullName -Raw | ConvertFrom-Json
+        if ($latestE2E.export.success -eq $true -and $latestE2E.export.path) {
+            $standardsExport = [IO.Path]::GetFullPath([string]$latestE2E.export.path)
+        }
+    }
+    catch {
+        $standardsExport = $null
+    }
+}
 $standardsChecker = Join-Path $WorkspaceRoot '30-tools\scripts\Check-TiaStandards.ps1'
 if ((Test-Path -LiteralPath $standardsInventory -PathType Leaf) -and
+    $standardsExport -and
     (Test-Path -LiteralPath $standardsExport -PathType Container) -and
     (Test-Path -LiteralPath $standardsChecker -PathType Leaf)) {
     $standardsOutput = (& $pwsh -NoProfile -NonInteractive -File $standardsChecker -InventoryPath $standardsInventory -ExportPath $standardsExport 2>&1 | Out-String).Trim()

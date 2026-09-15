@@ -9,18 +9,18 @@ ingeniería.
 | Fase | Estado |
 |---|---|
 | Análisis de los 7 repos de referencia | ✅ |
-| Arquitectura propuesta | ✅ pendiente de aprobar |
+| Arquitectura propuesta | ✅ documentada en `00-meta/01-arquitectura.md` |
 | Plan con hitos verificables | ✅ |
 | TDD — decisiones | ✅ **7 cerradas** (ADR-001…007) |
 | **M0 — entorno** | ✅ **COMPLETO** — grupo Openness OK, SDK instalado, servidor compilado |
 | **M1 — `tia-inspect` operativo** | ✅ **conecta con TIA Portal V20**, 59 herramientas |
-| **Fase 0 — estado reproducible** | 🟢 informe de entorno generado; configuración de perfiles pendiente |
-| M4 — estándares | 🟢 nomenclatura **cerrada**; falta aplicarla a un proyecto real |
+| **Fase 0 — estado reproducible** | ✅ informe de entorno y perfiles generados |
+| M4 — estándares | 🟢 nomenclatura **cerrada** y checker implementado; falta aplicarlo a los 7 ejemplos |
 | **M5 — ejemplos** | ✅ **los 7 migrados a V20, inventariados y exportados a texto** |
-| M3 — base de conocimiento | 🟢 **R01-R12** escritas y validadas: paths, límites, sesiones, errores, lógica |
+| M3 — base de conocimiento | 🟢 **R01-R14** escritas y validadas: paths, límites, sesiones, errores, lógica y HMI |
 | **`60-library/`** | ✅ **5 bloques SCL compilando con 0 errores y 0 advertencias en TIA V20** |
-| M1b — `tia-create` (bulaofen V20) | ⬜ |
-| Pruebas en PLCSIM | ⬜ **compilar no es funcionar** |
+| M1b — `tia-create` | ⬜ **no instalado; bloqueo explícito y comprobable** |
+| Pruebas en PLCSIM/HMI | ⬜ **compilar no es funcionar; gates preparados, comportamiento pendiente** |
 
 ## ✅ Funciona
 
@@ -54,6 +54,16 @@ Connect: 27,7 s en frío · 0,3 s en caliente
 
 `.mcp.json` registra `tia-inspect` **en solo lectura**. Reinicia la sesión para que cargue.
 Para escritura hay que relanzar el servidor con `--allow-write` ([ADR-006](00-meta/decisiones/ADR-006-limites-seguridad.md)).
+
+### Comprobación diaria
+
+```powershell
+30-tools\scripts\Run-WorkspaceChecks.ps1
+```
+
+El último informe verificó **13 PASS, 0 WARN y 0 BLOCKED**. La prueba E2E de escritura completa
+está en [`70-runs/e2e/20260915-082218/report.json`](70-runs/e2e/20260915-082218/report.json) y el
+estado de entorno en [`70-runs/environment/latest.json`](70-runs/environment/latest.json).
 
 ## Empieza por aquí
 
@@ -94,7 +104,7 @@ Para escritura hay que relanzar el servidor con `--allow-write` ([ADR-006](00-me
 | .NET Framework | 4.8.1 ✅ |
 | .NET SDK | **10.0.401** ✅ (instalado hoy) |
 | Dev Pack .NET Framework | **4.8.1** ✅ (instalado hoy) |
-| Grupo `Siemens TIA Openness` | ❌ **vacío** |
+| Grupo `Siemens TIA Openness` | ✅ miembro verificado |
 | Grupo `Siemens TIA Engineer` | ✅ eres miembro |
 
 ## Repos de referencia
