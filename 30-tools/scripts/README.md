@@ -99,6 +99,25 @@ Es una operación de solo lectura: solo ejecuta el handshake y `tools/list`. No 
 no abre proyectos y no modifica red, PLC ni archivos de proyecto. La salida es la fuente de verdad
 para construir el JSON de `CallTool` y evita inventar nombres o parámetros.
 
+## `Invoke-TiaSimulationAcceptance.ps1`
+
+El modo predeterminado solo genera un preview. La ejecución real exige que el preflight tenga
+operativos el toolchain PLC, el adaptador virtual y la sesión TIA, además de los datos exactos del
+proyecto y `-AcknowledgeVirtualTarget`. La herramienta inspecciona `CheckDownloadReadiness` y
+rechaza la descarga si ninguna ruta contiene el adaptador PLCSIM solicitado.
+
+```powershell
+.\Invoke-TiaSimulationAcceptance.ps1 `
+  -ProjectFile "...\\Sorting Plant Control_V20.ap20" `
+  -ProjectName "Sorting Plant Control_V20" `
+  -SoftwarePath "Sorting Plant Controller" `
+  -TargetIpAddress "192.168.0.1" `
+  -AcknowledgeVirtualTarget -Run
+```
+
+El runner utiliza por defecto `tia-create` V20 con el perfil `full` para disponer de los esquemas
+de descarga. No se debe cambiar `-VirtualInterfacePattern` a una NIC física para el acceptance PLC.
+
 ## `Invoke-TiaProjectAnalysis.ps1`
 
 Construye un dossier JSON y Markdown sin abrir ni modificar TIA. Consume un inventario `readOnly`

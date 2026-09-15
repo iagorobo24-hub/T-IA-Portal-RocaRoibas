@@ -40,6 +40,63 @@ try {
     }
     $global:LASTEXITCODE = 0
     Write-Output 'PASS: simulation acceptance refuses to run before all readiness gates are true'
+
+    $fixtureServer = Join-Path $temp 'mcp-fixture.ps1'
+    @'
+$ErrorActionPreference = 'Stop'
+while ($line = [Console]::In.ReadLine()) {
+    if ([string]::IsNullOrWhiteSpace($line)) { continue }
+    $request = $line | ConvertFrom-Json
+    if ($request.method -eq 'notifications/initialized') { continue }
+    if ($request.method -eq 'initialize') {
+        $result = [ordered]@{ protocolVersion = '2025-06-18'; capabilities = @{}; serverInfo = @{ name = 'tia-claude-fixture'; version = '1.0' } }
+    }
+    elseif ($request.method -eq 'tools/call') {
+        $name = [string]$request.params.name
+        switch ($name) {
+            'GetProjectTree' { $payload = [ordered]@{ tree = "Fixture Project`n└── Fixture PLC [PLC Program]"; message = 'Project tree retrieved' } }
+            'CheckDownloadReadiness' { $payload = [ordered]@{ Ready = $true; IsConsistent = $true; Message = 'ready'; Meta = @{ downloadRoutes = @(@{ pgPcInterface = 'Siemens PLCSIM Virtual Ethernet Adapter'; preferred = $true; targetInterface = '1 X1' }) } } }
+            'DownloadToPlc' { $payload = [ordered]@{ State = 'Success'; Message = 'downloaded to virtual target' } }
+            'GetOnlineState' { $payload = [ordered]@{ State = 'Online'; Message = 'online' } }
+            default { $payload = [ordered]@{ success = $true; message = $name } }
+        }
+        $result = [ordered]@{ content = @(@{ type = 'text'; text = ($payload | ConvertTo-Json -Depth 20 -Compress) }) }
+    }
+    else { $result = [ordered]@{ content = @(@{ type = 'text'; text = '{"success":true}' }) } }
+    [ordered]@{ jsonrpc = '2.0'; id = $request.id; result = $result } | ConvertTo-Json -Depth 30 -Compress
+}
+'@ | Set-Content -LiteralPath $fixtureServer -Encoding UTF8
+
+    $readyPath = Join-Path $temp 'ready.json'
+    [ordered]@{
+        schemaVersion = 1
+        status = 'READY_WITH_BLOCKERS'
+        gates = [ordered]@{
+            plcToolchainReady = $true
+            plcsimVirtualAdapterReady = $true
+            hmiRuntimeAdvancedV20Ready = $false
+            plcBehaviorVerified = $false
+            tiaInstanceSafeForApply = $true
+        }
+        blockers = @()
+        nextActions = @()
+    } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $readyPath -Encoding UTF8
+    $projectFile = Join-Path $temp 'Fixture.ap20'
+    'fixture project' | Set-Content -LiteralPath $projectFile -Encoding UTF8
+    $positiveReportPath = Join-Path $temp 'positive.json'
+    $fixtureArguments = ' -NoProfile -NonInteractive -File "' + $fixtureServer + '"'
+    $fixtureOutput = & $pwsh -NoProfile -NonInteractive -File $script `
+        -ReadinessPath $readyPath -OutputPath $positiveReportPath -ProjectFile $projectFile `
+        -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
+        -McpExecutablePath $pwsh -McpArguments $fixtureArguments -AcknowledgeVirtualTarget -Run 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0) { throw "Fixture acceptance run failed with exit code $LASTEXITCODE. Output: $fixtureOutput" }
+    $positive = Get-Content -Raw -LiteralPath $positiveReportPath | ConvertFrom-Json
+    if ($positive.status -ne 'VERIFIED' -or $positive.mutationAttempted -ne $true) { throw 'Fixture acceptance did not reach verified download state.' }
+    $downloadCall = @($positive.calls | Where-Object name -eq 'DownloadToPlc')
+    if ($downloadCall.Count -ne 1) { throw 'Fixture acceptance did not execute exactly one DownloadToPlc call.' }
+    if (@($positive.preflight.selectedRoutes).Count -ne 1) { throw 'Fixture acceptance did not record the selected PLCSIM route.' }
+    $global:LASTEXITCODE = 0
+    Write-Output 'PASS: simulation acceptance validates the virtual route before one guarded download'
 }
 finally {
     if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Recurse -Force }

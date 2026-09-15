@@ -20,6 +20,7 @@ param(
     [string]$TargetIpAddress,
     [string]$VirtualInterfacePattern = 'PLCSIM',
     [string]$McpExecutablePath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path '30-tools\mcp\tia-create\bin\v20\TiaMcpServer.exe'),
+    [string]$McpArguments = '--tia-major-version 20 --profile full --allow-write',
     [int]$TimeoutSeconds = 900,
     [switch]$Run,
     [switch]$AcknowledgeVirtualTarget
@@ -117,7 +118,6 @@ if (-not (Test-Path -LiteralPath $McpExecutablePath -PathType Leaf)) {
 $sequenceScript = Join-Path $WorkspaceRoot '30-tools\scripts\Invoke-McpToolSequence.ps1'
 $pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
 if (-not $pwsh) { $pwsh = (Get-Command powershell -ErrorAction Stop).Source }
-$sessionArguments = '--tia-major-version 20 --profile full --allow-write'
 $preflightSequencePath = Join-Path ([IO.Path]::GetTempPath()) ('tia-claude-acceptance-preflight-' + [guid]::NewGuid().ToString('N') + '.json')
 $downloadSequencePath = Join-Path ([IO.Path]::GetTempPath()) ('tia-claude-acceptance-download-' + [guid]::NewGuid().ToString('N') + '.json')
 
@@ -132,7 +132,7 @@ try {
         @{ name = 'Disconnect'; args = @{} }
     )
     $callsJson = $preflightCalls | ConvertTo-Json -Depth 20 -Compress
-    & $pwsh -NoProfile -NonInteractive -File $sequenceScript -ExecutablePath $McpExecutablePath -Arguments $sessionArguments -CallsJson $callsJson -OutputPath $preflightSequencePath -TimeoutSeconds $TimeoutSeconds | Out-Null
+    & $pwsh -NoProfile -NonInteractive -File $sequenceScript -ExecutablePath $McpExecutablePath -Arguments $McpArguments -CallsJson $callsJson -OutputPath $preflightSequencePath -TimeoutSeconds $TimeoutSeconds | Out-Null
     $preflight = if (Test-Path -LiteralPath $preflightSequencePath) { Read-Json $preflightSequencePath } else { $null }
     $report.calls = @($preflight.calls)
     $treeCall = @($preflight.calls | Where-Object name -eq 'GetProjectTree' | Select-Object -Last 1)
@@ -157,7 +157,7 @@ try {
     )
     $report.mutationAttempted = $true
     $downloadJson = $downloadCalls | ConvertTo-Json -Depth 20 -Compress
-    & $pwsh -NoProfile -NonInteractive -File $sequenceScript -ExecutablePath $McpExecutablePath -Arguments $sessionArguments -CallsJson $downloadJson -OutputPath $downloadSequencePath -TimeoutSeconds $TimeoutSeconds | Out-Null
+    & $pwsh -NoProfile -NonInteractive -File $sequenceScript -ExecutablePath $McpExecutablePath -Arguments $McpArguments -CallsJson $downloadJson -OutputPath $downloadSequencePath -TimeoutSeconds $TimeoutSeconds | Out-Null
     $download = if (Test-Path -LiteralPath $downloadSequencePath) { Read-Json $downloadSequencePath } else { $null }
     $report.calls += @($download.calls)
     if (-not $download.success) { throw "Download sequence failed; inspect calls in the report." }

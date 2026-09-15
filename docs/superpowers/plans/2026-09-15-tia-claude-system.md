@@ -300,6 +300,8 @@
   with available-interface evidence when the Siemens virtual adapter is absent.
 - [x] Add `Invoke-TiaSimulationAcceptance.ps1` with preview mode, readiness gates, exact MCP
   schemas, PLCSIM route verification and explicit virtual-target acknowledgement before download.
+- [x] Verify its full preflight/download state machine against a deterministic MCP fixture;
+  retain the real PLCSIM behavioral acceptance as an environment-dependent gate.
 - [ ] Register a disposable virtual CPU, download only to that virtual target, observe a sequence
   transition, and write verified behavioral evidence.
 - [x] Record the current blocker and keep behavioral simulation unverified rather than marking it successful from compilation alone.
