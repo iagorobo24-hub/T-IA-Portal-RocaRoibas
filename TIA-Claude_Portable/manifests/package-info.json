@@ -15,17 +15,17 @@
   "distribution": {
     "core": {
       "path": "dist/TIA-Claude_Core",
-      "files": 146,
-      "bytes": 7297993,
+      "files": 151,
+      "bytes": 7309963,
       "manifest": "dist/TIA-Claude_Core/manifests/package-manifest.json"
     },
     "examples": {
       "path": "dist/TIA-Claude_Examples",
       "files": 605,
-      "bytes": 192429939,
+      "bytes": 192430082,
       "manifest": "dist/TIA-Claude_Examples/manifests/examples-manifest.json"
     }
   },
   "legacyMonolithicWorkspace": "workspace/",
-  "generatedUtc": "2026-09-15T06:38:10Z"
+  "generatedUtc": "2026-09-15T06:53:16Z"
 }
