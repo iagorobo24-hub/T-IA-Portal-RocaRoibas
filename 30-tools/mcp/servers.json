@@ -7,11 +7,13 @@
       "purpose": "Inspect and, only in the write profile, modify TIA Portal V20 projects"
     },
     "tia-create": {
-      "status": "not-installed",
-      "commandRelative": "30-tools/mcp/tia-create/bin/v20/TiaCreateMcpServer.exe",
-      "baseArgs": ["--tia-major-version", "20"],
+      "status": "installed",
+      "commandRelative": "30-tools/mcp/tia-create/bin/v20/TiaMcpServer.exe",
+      "baseArgs": ["--tia-major-version", "20", "--profile", "lite"],
       "purpose": "Create V20 PLC, network and HMI scaffolds when a verified runtime is available",
-      "blocker": "No verified V20 tia-create runtime is installed on this machine; do not expose it in a harness profile."
+      "version": "2.7.2",
+      "source": "bulaofen0036-coder/TIA_Portal_Openness_MCP TiaMcpServer.V20.csproj",
+      "buildEvidence": "dotnet build Release: 0 errors, 2 warnings; Doctor initialized Openness V20 and confirmed Siemens TIA Openness membership."
     }
   },
   "profiles": {
@@ -23,8 +25,24 @@
     },
     "write": {
       "description": "Explicit write session; requires backup, preview, compile and save gates",
+      "requiresAcknowledgement": true,
       "servers": {
         "tia-inspect": { "extraArgs": ["--allow-write"] }
+      }
+    },
+    "create": {
+      "description": "Explicit project-creation session using tia-create lite profile",
+      "requiresAcknowledgement": true,
+      "servers": {
+        "tia-create": { "extraArgs": [] }
+      }
+    },
+    "full": {
+      "description": "All verified servers; explicit acknowledgement required",
+      "requiresAcknowledgement": true,
+      "servers": {
+        "tia-inspect": { "extraArgs": ["--allow-write"] },
+        "tia-create": { "extraArgs": [] }
       }
     }
   }

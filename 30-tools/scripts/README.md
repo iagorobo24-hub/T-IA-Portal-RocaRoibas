@@ -6,8 +6,14 @@ Herramientas de consola para operar TIA Portal por Openness sin depender de un c
 | Script | Qué hace |
 |---|---|
 | [`Invoke-TiaMcp.ps1`](Invoke-TiaMcp.ps1) | Cliente MCP mínimo por stdio. La base de todo lo demás |
+| [`Invoke-McpToolsSmoke.ps1`](Invoke-McpToolsSmoke.ps1) | Comprueba transporte stdio y roster de herramientas sin tocar TIA |
+| [`Invoke-McpToolCall.ps1`](Invoke-McpToolCall.ps1) | Ejecuta una llamada MCP aislada para fixtures y pruebas |
+| [`Invoke-AgentDemoScaffold.ps1`](Invoke-AgentDemoScaffold.ps1) | Dry-run y scaffold controlado del proyecto PLC de aceptación |
+| [`Export-HarnessAdapter.ps1`](Export-HarnessAdapter.ps1) | Exporta perfiles a Claude Code, Codex u OpenCode sin tocar sus configuraciones |
 | [`Migrate-Examples.ps1`](Migrate-Examples.ps1) | Migra, compila e inventaría los proyectos de `50-examples` |
 | [`Export-Sources.ps1`](Export-Sources.ps1) | Exporta el código a `.s7dcl` para git — receta [R03](../../10-kb/20-recetas/R03-exportar-a-git.md) |
+| [`Invoke-TiaStandardsSweep.ps1`](Invoke-TiaStandardsSweep.ps1) | Inventaría todos los `.ap20` V20 y ejecuta el checker en **solo lectura** |
+| [`Write-TiaAcceptanceStatus.ps1`](Write-TiaAcceptanceStatus.ps1) | Genera el estado honesto de aceptación: verificado, no verificado, bloqueado y supuesto |
 | [`Stop-TiaPortal.ps1`](Stop-TiaPortal.ps1) | Cierra las instancias headless que `Disconnect` **no** cierra |
 
 ---
@@ -79,6 +85,23 @@ Compila (obligatorio: TIA no exporta objetos inconsistentes) y exporta a
 
 El informe separa **`.s7dcl`** de **`.xml`**. Esa proporción es el dato que importa: los `.s7dcl`
 diffean en git, los `.xml` no.
+
+---
+
+## `Invoke-TiaStandardsSweep.ps1`
+
+```powershell
+.\Invoke-TiaStandardsSweep.ps1
+.\Invoke-TiaStandardsSweep.ps1 -ProjectPath "...\\Proyecto_V20.ap20"
+```
+
+Abre cada proyecto V20 de `50-examples`, obtiene el árbol, el resumen y los bloques con el
+perfil read de `tia-inspect`, y ejecuta `Check-TiaStandards.ps1` sobre las fuentes `src` que ya
+existen. **No compila, no guarda, no importa y no modifica proyectos.** Los resultados se dejan
+en `70-runs\\standards\\sweep-<fecha>\\`.
+
+Los ejemplos pueden tener hallazgos intencionados: por defecto el barrido los registra sin
+fallar; usa `-FailOnFindings` si quieres convertirlos en código de salida 1.
 
 ---
 

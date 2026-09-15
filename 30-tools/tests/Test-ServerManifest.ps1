@@ -31,5 +31,16 @@ $absoluteCommand = Join-Path $WorkspaceRoot ($relativeCommand -replace '/', '\')
 if (-not (Test-Path -LiteralPath $absoluteCommand -PathType Leaf)) {
     throw "Manifest command does not exist: $absoluteCommand"
 }
+$create = $manifest.servers.'tia-create'
+$createCommand = Join-Path $WorkspaceRoot ([string]$create.commandRelative -replace '/', '\')
+if ([string]$create.status -ne 'installed' -or -not (Test-Path -LiteralPath $createCommand -PathType Leaf)) {
+    throw 'Installed tia-create manifest entry does not resolve to an executable.'
+}
+if ($null -eq $manifest.profiles.create.servers.'tia-create') {
+    throw 'Create profile must expose tia-create explicitly.'
+}
+if ($null -ne $manifest.profiles.read.servers.'tia-create') {
+    throw 'Read profile must not expose tia-create.'
+}
 
 Write-Output 'PASS: server manifest contract'

@@ -1,7 +1,7 @@
 # Arquitectura propuesta de `C:\Users\jose.mellid\TIA-Claude`
 
 > Propuesta en ejecución. El estado comprobado de la instalación se mantiene en
-> `decisiones/ADR-009-estado-real-2026-09.md`.
+> `decisiones/ADR-010-estado-real-2026-09-15.md`.
 
 ## Principio rector
 

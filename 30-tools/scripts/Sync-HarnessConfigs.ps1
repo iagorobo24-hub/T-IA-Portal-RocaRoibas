@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$WorkspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path,
-    [ValidateSet('read', 'write')]
+    [ValidateSet('read', 'write', 'create', 'full')]
     [string]$Profile = 'read',
     [string]$OutputPath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path '.mcp.json'),
     [string]$LocalManifestPath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path '30-tools\mcp\servers.local.json'),
@@ -13,10 +13,6 @@ $WorkspaceRoot = [IO.Path]::GetFullPath($WorkspaceRoot)
 $OutputPath = [IO.Path]::GetFullPath($OutputPath)
 $LocalManifestPath = [IO.Path]::GetFullPath($LocalManifestPath)
 
-if ($Profile -eq 'write' -and -not $AcknowledgeWriteProfile) {
-    throw "Generating the write profile requires -AcknowledgeWriteProfile. This profile exposes project-mutating MCP tools."
-}
-
 $manifestPath = Join-Path $WorkspaceRoot '30-tools\mcp\servers.json'
 if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
     throw "Missing server manifest: $manifestPath"
@@ -27,12 +23,16 @@ $profileObject = $manifest.profiles.PSObject.Properties[$Profile].Value
 if ($null -eq $profileObject) {
     throw "Unknown MCP profile '$Profile'."
 }
+if ($profileObject.requiresAcknowledgement -eq $true -and -not $AcknowledgeWriteProfile) {
+    throw "Generating profile '$Profile' requires -AcknowledgeWriteProfile. It exposes project-mutating MCP tools."
+}
 
 $mcpServers = [ordered]@{}
 foreach ($serverProperty in $profileObject.servers.PSObject.Properties) {
     $name = $serverProperty.Name
     $serverDefinition = $manifest.servers.PSObject.Properties[$name].Value
     if ($null -eq $serverDefinition) { throw "Profile '$Profile' references undefined server '$name'." }
+    if ([string]$serverDefinition.status -eq 'not-installed') { throw "Profile '$Profile' references unavailable server '$name'." }
 
     $command = Join-Path $WorkspaceRoot ($serverDefinition.commandRelative -replace '/', '\')
     if (-not (Test-Path -LiteralPath $command -PathType Leaf)) {

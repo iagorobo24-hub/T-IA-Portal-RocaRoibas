@@ -17,10 +17,15 @@ $definitions = @(
     @{ name = 'hmi-knowledge'; path = '30-tools/tests/Test-HmiKnowledgeState.ps1' },
     @{ name = 'server-manifest'; path = '30-tools/tests/Test-ServerManifest.ps1' },
     @{ name = 'harness-config'; path = '30-tools/tests/Test-HarnessConfigDocs.ps1' },
+    @{ name = 'harness-adapters'; path = '30-tools/tests/Test-ExportHarnessAdapter.ps1' },
     @{ name = 'public-boundary'; path = '30-tools/tests/Test-PublicBoundary.ps1' },
     @{ name = 'tia-create-availability'; path = '30-tools/tests/Test-TiaCreateAvailability.ps1' },
+    @{ name = 'tia-create-runtime'; path = '30-tools/tests/Test-TiaCreateRuntime.ps1' },
+    @{ name = 'agent-demo-scaffold'; path = '30-tools/tests/Test-AgentDemoScaffoldEvidence.ps1' },
     @{ name = 'write-e2e-evidence'; path = '30-tools/tests/Test-TiaWriteE2E.ps1' },
-    @{ name = 'backup-recovery'; path = '30-tools/tests/Test-TiaBackupRecovery.ps1' }
+    @{ name = 'backup-recovery'; path = '30-tools/tests/Test-TiaBackupRecovery.ps1' },
+    @{ name = 'standards-sweep-evidence'; path = '30-tools/tests/Test-StandardsSweepEvidence.ps1' },
+    @{ name = 'acceptance-status'; path = '30-tools/tests/Test-TiaAcceptanceStatus.ps1' }
 )
 
 $checks = [System.Collections.Generic.List[object]]::new()

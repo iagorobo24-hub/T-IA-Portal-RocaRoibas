@@ -27,6 +27,16 @@ try {
         throw "Generated MCP command does not exist: $($server.command)"
     }
 
+    $createConfigPath = Join-Path $tempRoot 'create.json'
+    & pwsh -NoProfile -NonInteractive -File $scriptPath -WorkspaceRoot $WorkspaceRoot -Profile create -OutputPath $createConfigPath 2>$null
+    if ($LASTEXITCODE -eq 0) { throw 'Create profile was generated without explicit acknowledgement.' }
+    & $scriptPath -WorkspaceRoot $WorkspaceRoot -Profile create -AcknowledgeWriteProfile -OutputPath $createConfigPath
+    if ($LASTEXITCODE -ne 0) { throw 'Create profile failed with explicit acknowledgement.' }
+    $createConfig = Get-Content -Raw -LiteralPath $createConfigPath | ConvertFrom-Json
+    $createServer = $createConfig.mcpServers.'tia-create'
+    if ($null -eq $createServer) { throw 'Generated create config lacks tia-create.' }
+    if (@($createServer.args) -notcontains '--profile') { throw 'Create config must pin the lite profile.' }
+
     Write-Output 'PASS: harness config synchronization contract'
 }
 finally {

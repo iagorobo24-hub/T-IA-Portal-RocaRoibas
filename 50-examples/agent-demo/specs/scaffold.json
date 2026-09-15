@@ -1,0 +1,29 @@
+{
+  "_comment": "Plantilla portable. El runner sustituye __WORKSPACE__ y directoryPath por una carpeta desechable.",
+  "projectName": "AgentDemo",
+  "directoryPath": "",
+  "plcName": "PLC_1",
+  "plcFamily": "S7-1500",
+  "tagTable": [
+    {
+      "tableName": "Agent_Signals",
+      "tags": [
+        {
+          "name": "Cmd_Enable",
+          "dataTypeName": "Bool",
+          "logicalAddress": "%M0.0"
+        },
+        {
+          "name": "Status_Active",
+          "dataTypeName": "Bool",
+          "logicalAddress": "%M0.1"
+        }
+      ]
+    }
+  ],
+  "sclSourceFiles": [
+    "__WORKSPACE__\\50-examples\\agent-demo\\sources\\FB_AgentDemo.scl"
+  ],
+  "compile": true,
+  "save": true
+}

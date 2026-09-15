@@ -15,11 +15,11 @@ ingeniería.
 | **M0 — entorno** | ✅ **COMPLETO** — grupo Openness OK, SDK instalado, servidor compilado |
 | **M1 — `tia-inspect` operativo** | ✅ **conecta con TIA Portal V20**, 59 herramientas |
 | **Fase 0 — estado reproducible** | ✅ informe de entorno y perfiles generados |
-| M4 — estándares | 🟢 nomenclatura **cerrada** y checker implementado; falta aplicarlo a los 7 ejemplos |
+| M4 — estándares | ✅ checker aplicado en solo lectura a los **7 ejemplos**; 3 hallazgos bloqueantes documentados |
 | **M5 — ejemplos** | ✅ **los 7 migrados a V20, inventariados y exportados a texto** |
 | M3 — base de conocimiento | 🟢 **R01-R14** escritas y validadas: paths, límites, sesiones, errores, lógica y HMI |
 | **`60-library/`** | ✅ **5 bloques SCL compilando con 0 errores y 0 advertencias en TIA V20** |
-| M1b — `tia-create` | ⬜ **no instalado; bloqueo explícito y comprobable** |
+| M1b — `tia-create` | ✅ **V20 2.7.2 compilado y smoke-test MCP: 55 herramientas lite** |
 | Pruebas en PLCSIM/HMI | ⬜ **compilar no es funcionar; gates preparados, comportamiento pendiente** |
 
 ## ✅ Funciona
@@ -64,6 +64,9 @@ Para escritura hay que relanzar el servidor con `--allow-write` ([ADR-006](00-me
 El último informe verificó **13 PASS, 0 WARN y 0 BLOCKED**. La prueba E2E de escritura completa
 está en [`70-runs/e2e/20260915-082218/report.json`](70-runs/e2e/20260915-082218/report.json) y el
 estado de entorno en [`70-runs/environment/latest.json`](70-runs/environment/latest.json).
+El barrido de estándares de los siete ejemplos está en
+[`70-runs/standards/sweep-20260915-all/sweep-report.json`](70-runs/standards/sweep-20260915-all/sweep-report.json):
+7/7 proyectos leídos, sin modificar ninguno.
 
 ## Empieza por aquí
 

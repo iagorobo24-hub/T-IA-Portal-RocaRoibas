@@ -21,6 +21,9 @@ try {
     if (@(Get-ChildItem -LiteralPath $core -Recurse -File -Include '*.ap16','*.ap17','*.ap18','*.ap19','*.ap20','*.ap21').Count -gt 0) {
         throw 'Core package contains a TIA project artifact.'
     }
+    if (-not (Test-Path -LiteralPath (Join-Path $core '30-tools\mcp\tia-create\bin\v20\TiaMcpServer.exe') -PathType Leaf)) {
+        throw 'Core package is missing the verified tia-create V20 runtime.'
+    }
     $manifest = Get-Content -Raw -LiteralPath $coreManifest | ConvertFrom-Json
     if ($manifest.packageKind -ne 'core' -or $manifest.files.Count -eq 0) { throw 'Core manifest is incomplete.' }
     $exampleManifestObject = Get-Content -Raw -LiteralPath $examplesManifest | ConvertFrom-Json
