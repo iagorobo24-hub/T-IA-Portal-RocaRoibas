@@ -20,15 +20,15 @@
     "apiDll": "C:\\Program Files (x86)\\Common Files\\Siemens\\PLCSIMADV\\API\\6.0\\Siemens.Simatic.Simulation.Runtime.Api.x64.dll",
     "redistributed": false,
     "nativeAdapter": "source-included; build requires LLVM clang-cl, Visual Studio C++ Build Tools and Windows SDK",
-    "lifecycle": "register-disposable then unregister verified; no PowerOn or download performed",
+    "lifecycle": "register-disposable, PowerOn, PowerOff, then unregister verified; no project download performed",
     "note": "Siemens runtime binaries remain installed locally; the portable package ships source and tests, not vendor DLLs."
   },
   "distribution": {
     "core": {
       "path": "dist/TIA-Claude_Core",
       "files": 245,
-      "bytes": 21357854,
-      "totalBytesIncludingManifest": 21405397,
+      "bytes": 21363056,
+      "totalBytesIncludingManifest": 21410599,
       "manifest": "dist/TIA-Claude_Core/manifests/package-manifest.json"
     },
     "examples": {
@@ -39,5 +39,5 @@
     }
   },
   "legacyMonolithicWorkspace": "workspace/",
-  "generatedUtc": "2026-09-15T09:26:14Z"
+  "generatedUtc": "2026-09-15T09:31:50Z"
 }
