@@ -1,0 +1,180 @@
+<#
+.SYNOPSIS
+    Ejecuta la aceptación PLC sobre PLCSIM con gates explícitos y trazabilidad.
+
+.DESCRIPTION
+    El modo predeterminado solo genera un preview. El modo -Run exige todos los
+    datos del proyecto y una confirmación explícita de que el destino es virtual.
+    Abre el proyecto indicado, recompila, consulta CheckDownloadReadiness y solo
+    entonces descarga si la ruta PG/PC contiene el adaptador PLCSIM solicitado.
+    Nunca elige una NIC por heurística cuando el destino es ambiguo.
+#>
+[CmdletBinding()]
+param(
+    [string]$WorkspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path,
+    [string]$ReadinessPath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path '70-runs\simulation\readiness-latest.json'),
+    [string]$OutputPath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path '70-runs\simulation\acceptance-latest.json'),
+    [string]$ProjectFile,
+    [string]$ProjectName,
+    [string]$SoftwarePath,
+    [string]$TargetIpAddress,
+    [string]$VirtualInterfacePattern = 'PLCSIM',
+    [string]$McpExecutablePath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path '30-tools\mcp\tia-create\bin\v20\TiaMcpServer.exe'),
+    [int]$TimeoutSeconds = 900,
+    [switch]$Run,
+    [switch]$AcknowledgeVirtualTarget
+)
+
+$ErrorActionPreference = 'Stop'
+$WorkspaceRoot = [IO.Path]::GetFullPath($WorkspaceRoot)
+$ReadinessPath = [IO.Path]::GetFullPath($ReadinessPath)
+$OutputPath = [IO.Path]::GetFullPath($OutputPath)
+
+function Read-Json([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "JSON file does not exist: $Path" }
+    Get-Content -Raw -LiteralPath $Path | ConvertFrom-Json
+}
+
+function Write-Report([hashtable]$Report, [int]$ExitCode) {
+    New-Item -ItemType Directory -Path (Split-Path -Parent $OutputPath) -Force | Out-Null
+    ($Report | ConvertTo-Json -Depth 30) | Set-Content -LiteralPath $OutputPath -Encoding UTF8
+    Write-Output (Get-Content -Raw -LiteralPath $OutputPath)
+    if ($ExitCode -ne 0) { exit $ExitCode }
+}
+
+function Get-ToolPayload([object]$Call) {
+    if (-not $Call) { return $null }
+    $text = [string]$Call.text
+    if ([string]::IsNullOrWhiteSpace($text)) { return $null }
+    try { $value = $text | ConvertFrom-Json } catch { return $null }
+    if ($value.message -is [string]) {
+        try { return ([string]$value.message | ConvertFrom-Json) } catch { }
+    }
+    return $value
+}
+
+function New-BaseReport([object]$Readiness) {
+    [ordered]@{
+        schemaVersion = 1
+        generatedAt = [DateTimeOffset]::Now.ToString('o')
+        readOnly = (-not $Run)
+        mode = if ($Run) { 'run' } else { 'preview' }
+        status = 'PREVIEW'
+        phase = 'PREFLIGHT'
+        mutationAttempted = $false
+        project = [ordered]@{ file = $ProjectFile; name = $ProjectName; softwarePath = $SoftwarePath; targetIpAddress = $TargetIpAddress }
+        virtualTarget = [ordered]@{ acknowledged = [bool]$AcknowledgeVirtualTarget; interfacePattern = $VirtualInterfacePattern }
+        blockers = @()
+        nextActions = @()
+        calls = @()
+        readiness = $Readiness
+    }
+}
+
+$readiness = Read-Json $ReadinessPath
+$report = New-BaseReport $readiness
+$requiredGates = @('plcToolchainReady', 'plcsimVirtualAdapterReady', 'tiaInstanceSafeForApply')
+$gateBlockers = [System.Collections.Generic.List[string]]::new()
+foreach ($gate in $requiredGates) {
+    if (-not [bool]$readiness.gates.$gate) { $gateBlockers.Add("Readiness gate '$gate' is false.") }
+}
+if (@($readiness.blockers).Count -gt 0) {
+    foreach ($blocker in @($readiness.blockers)) { $gateBlockers.Add([string]$blocker) }
+}
+
+if (-not $Run) {
+    $report.nextActions = @('Revisar este preview; para ejecutar, proporcionar proyecto, softwarePath, IP objetivo y -AcknowledgeVirtualTarget -Run.')
+    Write-Report $report 0
+}
+
+if ($gateBlockers.Count -gt 0) {
+    $report.status = 'BLOCKED'
+    $report.blockers = @($gateBlockers | Select-Object -Unique)
+    $report.nextActions = @($readiness.nextActions | ForEach-Object { [string]$_ })
+    Write-Report $report 2
+}
+
+$missing = @(
+    @{ name = 'ProjectFile'; value = $ProjectFile },
+    @{ name = 'ProjectName'; value = $ProjectName },
+    @{ name = 'SoftwarePath'; value = $SoftwarePath },
+    @{ name = 'TargetIpAddress'; value = $TargetIpAddress }
+) | Where-Object { [string]::IsNullOrWhiteSpace([string]$_.value) }
+if ($missing.Count -gt 0 -or -not $AcknowledgeVirtualTarget) {
+    $report.status = 'BLOCKED'
+    $report.blockers = @($missing | ForEach-Object { "Falta el parámetro obligatorio '$($_.name)'." })
+    if (-not $AcknowledgeVirtualTarget) { $report.blockers += 'Falta -AcknowledgeVirtualTarget; no se permite descargar sin declarar que el destino es PLCSIM.' }
+    $report.nextActions = @('Revisar el destino y repetir con los parámetros obligatorios.')
+    Write-Report $report 2
+}
+
+if (-not (Test-Path -LiteralPath $McpExecutablePath -PathType Leaf)) {
+    $report.status = 'BLOCKED'
+    $report.blockers = @("No existe el servidor MCP: $McpExecutablePath")
+    Write-Report $report 2
+}
+
+$sequenceScript = Join-Path $WorkspaceRoot '30-tools\scripts\Invoke-McpToolSequence.ps1'
+$pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
+if (-not $pwsh) { $pwsh = (Get-Command powershell -ErrorAction Stop).Source }
+$sessionArguments = '--tia-major-version 20 --profile full --allow-write'
+$preflightSequencePath = Join-Path ([IO.Path]::GetTempPath()) ('tia-claude-acceptance-preflight-' + [guid]::NewGuid().ToString('N') + '.json')
+$downloadSequencePath = Join-Path ([IO.Path]::GetTempPath()) ('tia-claude-acceptance-download-' + [guid]::NewGuid().ToString('N') + '.json')
+
+try {
+    $preflightCalls = @(
+        @{ name = 'Bootstrap'; args = @{} },
+        @{ name = 'Connect'; args = @{} },
+        @{ name = 'OpenProject'; args = @{ path = $ProjectFile; closeForeignProject = $false } },
+        @{ name = 'GetProjectTree'; args = @{} },
+        @{ name = 'CompileSoftware'; args = @{ softwarePath = $SoftwarePath; password = '' } },
+        @{ name = 'CheckDownloadReadiness'; args = @{ softwarePath = $SoftwarePath } },
+        @{ name = 'Disconnect'; args = @{} }
+    )
+    $callsJson = $preflightCalls | ConvertTo-Json -Depth 20 -Compress
+    & $pwsh -NoProfile -NonInteractive -File $sequenceScript -ExecutablePath $McpExecutablePath -Arguments $sessionArguments -CallsJson $callsJson -OutputPath $preflightSequencePath -TimeoutSeconds $TimeoutSeconds | Out-Null
+    $preflight = if (Test-Path -LiteralPath $preflightSequencePath) { Read-Json $preflightSequencePath } else { $null }
+    $report.calls = @($preflight.calls)
+    $treeCall = @($preflight.calls | Where-Object name -eq 'GetProjectTree' | Select-Object -Last 1)
+    $treePayload = Get-ToolPayload $treeCall
+    $treeText = if ($treePayload.tree) { [string]$treePayload.tree } else { [string]$treeCall.text }
+    if ($treeText -notmatch [regex]::Escape($ProjectName)) { throw "Project tree does not contain the expected project '$ProjectName'." }
+    $readinessCall = @($preflight.calls | Where-Object name -eq 'CheckDownloadReadiness' | Select-Object -Last 1)
+    $downloadReadiness = Get-ToolPayload $readinessCall
+    if (-not $downloadReadiness.Ready) { throw "CheckDownloadReadiness did not return Ready=true: $($readinessCall.text)" }
+    $routes = @($downloadReadiness.Meta.downloadRoutes)
+    $virtualRoutes = @($routes | Where-Object { [string]$_.pgPcInterface -match $VirtualInterfacePattern })
+    if ($virtualRoutes.Count -eq 0) { throw "No download route matches the virtual interface pattern '$VirtualInterfacePattern'." }
+    $report.preflight = [ordered]@{ readiness = $downloadReadiness; selectedRoutes = $virtualRoutes }
+
+    $downloadCalls = @(
+        @{ name = 'Bootstrap'; args = @{} },
+        @{ name = 'Connect'; args = @{} },
+        @{ name = 'AttachToOpenProject'; args = @{ projectName = $ProjectName } },
+        @{ name = 'DownloadToPlc'; args = @{ softwarePath = $SoftwarePath; consistentBlocksOnly = $true; keepActualValues = $true; startAfterDownload = $true; stopBeforeDownload = $true; password = ''; pgPcInterface = $VirtualInterfacePattern; targetIpAddress = $TargetIpAddress } },
+        @{ name = 'GetOnlineState'; args = @{ softwarePath = $SoftwarePath } },
+        @{ name = 'Disconnect'; args = @{} }
+    )
+    $report.mutationAttempted = $true
+    $downloadJson = $downloadCalls | ConvertTo-Json -Depth 20 -Compress
+    & $pwsh -NoProfile -NonInteractive -File $sequenceScript -ExecutablePath $McpExecutablePath -Arguments $sessionArguments -CallsJson $downloadJson -OutputPath $downloadSequencePath -TimeoutSeconds $TimeoutSeconds | Out-Null
+    $download = if (Test-Path -LiteralPath $downloadSequencePath) { Read-Json $downloadSequencePath } else { $null }
+    $report.calls += @($download.calls)
+    if (-not $download.success) { throw "Download sequence failed; inspect calls in the report." }
+    $report.status = 'VERIFIED'
+    $report.phase = 'DOWNLOAD_AND_ONLINE_CHECK'
+    $report.nextActions = @('Registrar el comportamiento observable de la planta y, si procede, iniciar una aceptación HMI separada.')
+    Write-Report $report 0
+}
+catch {
+    $report.status = 'FAILED'
+    $report.phase = if ($report.mutationAttempted) { 'DOWNLOAD_AND_ONLINE_CHECK' } else { 'PREFLIGHT' }
+    $report.blockers = @($_.Exception.Message)
+    $report.nextActions = @('No reintentar a ciegas: revisar calls, la ruta PG/PC y el mensaje exacto de Openness.')
+    Write-Report $report 1
+}
+finally {
+    foreach ($path in @($preflightSequencePath, $downloadSequencePath)) {
+        if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
+    }
+}

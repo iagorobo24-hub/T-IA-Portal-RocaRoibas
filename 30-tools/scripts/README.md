@@ -18,6 +18,7 @@ Herramientas de consola para operar TIA Portal por Openness sin depender de un c
 | [`Write-TiaAcceptanceStatus.ps1`](Write-TiaAcceptanceStatus.ps1) | Genera el estado honesto de aceptación: verificado, no verificado, bloqueado y supuesto |
 | [`Find-TiaRuntimeMedia.ps1`](Find-TiaRuntimeMedia.ps1) | Busca medios de instalación Runtime/TIA sin instalar nada y exige confirmación para el siguiente paso |
 | [`Write-TiaSimulationReadiness.ps1`](Write-TiaSimulationReadiness.ps1) | Preflight de simulación: separa disponibilidad PLC, compatibilidad HMI V20 y evidencia conductual |
+| [`Invoke-TiaSimulationAcceptance.ps1`](Invoke-TiaSimulationAcceptance.ps1) | Preflight y aceptación PLC en PLCSIM: compila, valida rutas y descarga solo con confirmación virtual explícita |
 | [`Invoke-TiaProjectAnalysis.ps1`](Invoke-TiaProjectAnalysis.ps1) | Genera un dossier semántico de solo lectura desde un inventario MCP y fuentes exportadas |
 | [`New-TiaIoList.ps1`](New-TiaIoList.ps1) | Genera lista JSON/CSV/Markdown de E/S solo si hay tags detalladas verificables |
 | [`New-TiaFunctionalDescription.ps1`](New-TiaFunctionalDescription.ps1) | Compone una descripción funcional trazable desde dossier e I/O |
