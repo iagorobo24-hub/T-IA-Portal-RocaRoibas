@@ -58,6 +58,13 @@ if (-not $applyOk -and $tiaProcesses.Count -gt 0) {
 $runtimeDoc = Join-Path $WorkspaceRoot '70-runs\simulation\runtime-advanced-v20.md'
 if (Test-Path -LiteralPath $runtimeDoc -PathType Leaf) { $notVerified.Add('HMI Runtime Advanced V20 compatible y probado') }
 else { $notVerified.Add('HMI Runtime Advanced V20 compatible y probado') }
+$readinessPath = Join-Path $WorkspaceRoot '70-runs\simulation\readiness-latest.json'
+$readiness = Read-JsonIfPresent $readinessPath
+if ($readiness -and $readiness.readOnly -eq $true -and $readiness.gates) {
+    $verified.Add('preflight determinista de preparación para simulación')
+} else {
+    $notVerified.Add('preflight determinista de preparación para simulación')
+}
 $notVerified.Add('comportamiento funcional PLC probado en PLCSIM')
 $notVerified.Add('PA-1 ejecutada dos veces desde sesión fría en dos harnesses')
 $assumptions.Add('La compilación y el smoke MCP no demuestran comportamiento de runtime')
@@ -73,6 +80,7 @@ $result = [ordered]@{
     evidence = [ordered]@{
         checks = Join-Path $WorkspaceRoot '70-runs\checks\latest.json'
         environment = Join-Path $WorkspaceRoot '70-runs\environment\latest.json'
+        simulationReadiness = if (Test-Path -LiteralPath $readinessPath -PathType Leaf) { $readinessPath } else { $null }
         scaffold = if ($scaffoldFiles) { $scaffoldFiles[0].FullName } else { $null }
     }
 }
