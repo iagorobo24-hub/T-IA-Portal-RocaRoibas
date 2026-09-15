@@ -33,7 +33,7 @@ Esto es lo más interesante que hay en toda la colección desde el punto de vist
 |---|---|
 | TIA Portal | ✅ V20 |
 | **PLCSIM Advanced** | ✅ **Sí — V6.0**, en `C:\Program Files (x86)\Siemens\Automation\PLCSIMADV` |
-| WinCC RT Advanced (para el HMI) | ✅ Runtime Advanced V17 instalado |
+| WinCC RT Advanced (para el HMI) | ⚠️ Solo V17 HF8 instalado; el proyecto es V20 |
 | **NX con opción MCD** | ❌ **No** |
 
 Así que **sí puedes hacer software-in-the-loop**: PLC virtual en PLCSIM Advanced + HMI simulado,
@@ -52,6 +52,14 @@ confirma que existe una configuración de descarga; todavía no demuestra que la
 CPU virtual de PLCSIM. Las dos rutas detectadas apuntan a la interfaz inalámbrica Realtek y a
 `1 X1`/`1 X2`, por lo que no se debe ejecutar `DownloadToPlc` hasta crear/seleccionar
 explícitamente la instancia virtual y confirmar la ruta PLCSIM.
+
+La inspección de topología posterior sí confirmó que el dispositivo exacto es
+`S71500/ET200MP station_1`, con `X1=192.168.0.1` en `PN/IE_1` y `X2=192.168.1.1` sin subnet
+conectada. La evidencia completa está en
+[`sorting-target-discovery-latest.json`](../../70-runs/simulation/sorting-target-discovery-latest.json).
+La instancia temporal creada por la API nativa de PLCSIM V6.0 usa `Softbus`, no tiene IP antes de
+la descarga y ha pasado un ciclo PowerOn/PowerOff limpio; esto verifica el runtime, pero todavía
+no prueba el enlace de descarga TIA ni el comportamiento del programa.
 
 ## Lo más valioso: la documentación SCE
 
