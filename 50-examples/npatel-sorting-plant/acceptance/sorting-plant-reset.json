@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "status": "candidate-not-verified",
+  "name": "sorting-plant-reset",
+  "objective": "Comprobar el reset HMI y que los tres contadores vuelven a cero",
+  "sourceEvidence": [
+    "src/Program blocks/Main.s7dcl",
+    "src/Program blocks/ResetSimulation.s7dcl",
+    "src/Program blocks/Control_HMI.s7dcl"
+  ],
+  "steps": [
+    {
+      "command": "write-bool-tag Control_HMI.fromHMI.resetSimulation 1",
+      "expect": { "status": "ok", "op": "write-bool-tag", "value": "true" },
+      "delayMs": 250
+    },
+    {
+      "command": "read-bool-tag Control_HMI.toHMI.resetStatus",
+      "expect": { "status": "ok", "op": "read-bool-tag", "value": "true" }
+    },
+    {
+      "command": "read-uint8-tag Control_HMI.toHMI.numWorkpieces",
+      "expect": { "status": "ok", "op": "read-uint8-tag", "value": "0" }
+    },
+    {
+      "command": "read-uint8-tag Control_HMI.toHMI.numCylinders",
+      "expect": { "status": "ok", "op": "read-uint8-tag", "value": "0" }
+    },
+    {
+      "command": "read-uint8-tag Control_HMI.toHMI.numCubes",
+      "expect": { "status": "ok", "op": "read-uint8-tag", "value": "0" }
+    },
+    {
+      "command": "write-bool-tag Control_HMI.fromHMI.resetSimulation 0",
+      "expect": { "status": "ok", "op": "write-bool-tag", "value": "false" },
+      "delayMs": 100
+    }
+  ]
+}
