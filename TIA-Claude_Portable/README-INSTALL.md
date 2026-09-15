@@ -15,6 +15,8 @@ Paquete portable para preparar un ordenador con TIA Portal V20 para trabajar des
 2. WinCC/PLCSIM instalados si se van a simular HMI o PLC.
 3. Permisos de administrador para pertenecer al grupo `Siemens TIA Openness`.
 4. Windows con una sesión nueva después de modificar el grupo.
+5. Para el probe nativo de PLCSIM: LLVM `clang-cl`, Visual Studio C++ Build Tools con Windows
+   SDK y PLCSIM Advanced V6.0; es opcional para instalar el core y no se distribuyen DLL de Siemens.
 
 ## Instalación en otro ordenador
 
