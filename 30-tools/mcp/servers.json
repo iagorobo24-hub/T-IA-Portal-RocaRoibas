@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "servers": {
+    "tia-inspect": {
+      "commandRelative": "30-tools/mcp/tia-inspect/bin/v20/TiaMcpServer.exe",
+      "baseArgs": ["--tia-major-version", "20"],
+      "purpose": "Inspect and, only in the write profile, modify TIA Portal V20 projects"
+    },
+    "tia-create": {
+      "status": "not-installed",
+      "commandRelative": "30-tools/mcp/tia-create/bin/v20/TiaCreateMcpServer.exe",
+      "baseArgs": ["--tia-major-version", "20"],
+      "purpose": "Create V20 PLC, network and HMI scaffolds when a verified runtime is available",
+      "blocker": "No verified V20 tia-create runtime is installed on this machine; do not expose it in a harness profile."
+    }
+  },
+  "profiles": {
+    "read": {
+      "description": "Read-only inventory, analysis and export",
+      "servers": {
+        "tia-inspect": { "extraArgs": [] }
+      }
+    },
+    "write": {
+      "description": "Explicit write session; requires backup, preview, compile and save gates",
+      "servers": {
+        "tia-inspect": { "extraArgs": ["--allow-write"] }
+      }
+    }
+  }
+}

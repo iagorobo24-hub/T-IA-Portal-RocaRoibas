@@ -1,0 +1,57 @@
+# ==========================================================================
+# ADR-005: este repo es PUBLICO. Los proyectos de cliente van en repos
+# privados aparte. 40-projects/ entero queda fuera, no por excepciones.
+# ==========================================================================
+40-projects/
+!40-projects/_template/
+!40-projects/README.md
+
+# Clones de referencia: se recrean con git clone
+_ref/
+
+# Temporal y artefactos de ejecucion
+90-tmp/
+70-runs/
+
+# Herramientas: binarios y fuentes upstream. El build es reproducible
+# desde build.ps1 + patches/, asi que no se versionan.
+30-tools/bin/
+30-tools/mcp/*/upstream/
+30-tools/mcp/*/bin/
+30-tools/mcp/*/runtime/
+
+# Ejemplos de terceros: se versionan FICHA.md y el codigo legible.
+# Los proyectos TIA son binarios (~110 MB) y se recrean desde _ref/.
+50-examples/**/IM/
+50-examples/**/System/
+50-examples/**/XRef/
+50-examples/**/Vci/
+50-examples/**/Logs/
+50-examples/**/*.ap1*
+50-examples/**/*.ap2*
+50-examples/**/*.zap1*
+50-examples/**/*.zap2*
+50-examples/**/*.pdf
+50-examples/**/*.docx
+50-examples/**/*.zip
+50-examples/**/*_V20/
+50-examples/**/*.backup/
+
+# .NET
+bin/
+obj/
+*.user
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# Distribuciones generadas: se reconstruyen con
+# TIA-Claude_Portable/build/Build-PortablePackage.ps1.
+TIA-Claude_Portable/workspace/
+TIA-Claude_Portable/dist/
+TIA-Claude_Portable/manifests/sha256.json
+
+# Configuración local generada con rutas absolutas de cada ordenador.
+.mcp.json
+30-tools/mcp/servers.local.json

@@ -1,0 +1,150 @@
+FUNCTION_BLOCK "FB_SequenceTemplate"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+AUTHOR : JMellid
+FAMILY : Sequence
+//==============================================================================
+// PLANTILLA de secuencia. No se usa tal cual: se copia y se rellenan los pasos.
+//
+// Es el esqueleto de cualquier maquina de estados de proceso: numeracion por
+// decenas, vigilancia de tiempo por paso, aborto limpio y paso de fallo.
+// El ejemplo implementa Reposo -> Avanzar -> Trabajar -> Retroceder -> Reposo.
+//
+// Por que SCL y no GRAPH: GRAPH necesita licencia aparte y no se exporta como
+// texto legible. Un CASE hace lo mismo, diffea en git y se lee sin abrir TIA.
+//
+// Ver 10-kb/20-recetas/R10-secuencia.md
+//==============================================================================
+   VAR_INPUT
+      Enable      : Bool;                 // Permiso general (modo automatico)
+      CmdStart    : Bool;                 // Arranque del ciclo
+      CmdAbort    : Bool;                 // Aborto: va a Reposo por el camino corto
+      CmdReset    : Bool;                 // Rearme del paso de fallo
+      // --- condiciones de transicion. Una por paso. ---
+      AtForward   : Bool;                 // Llego a la posicion avanzada
+      AtBackward  : Bool;                 // Llego a la posicion retrasada
+      WorkDone    : Bool;                 // Termino el trabajo
+      // --- parametros ---
+      StepTimeout : Time := T#30S;        // Tiempo maximo de cualquier paso
+   END_VAR
+
+   VAR_OUTPUT
+      // --- ordenes a los actuadores. Una por paso activo. ---
+      DoForward  : Bool;                  // Mandar avanzar
+      DoBackward : Bool;                  // Mandar retroceder
+      DoWork     : Bool;                  // Mandar trabajar
+      // --- estado ---
+      Step       : Int;                   // Paso actual
+      Running    : Bool;                  // Ciclo en marcha
+      Done       : Bool;                  // Ciclo completado
+      Fault      : Bool;                  // Paso de fallo activo
+      FaultStep  : Int;                   // Paso en el que se produjo el fallo
+   END_VAR
+
+   VAR
+      statStep      : Int;                // Paso actual
+      statPrevStep  : Int;                // Para detectar el cambio de paso
+      statFaultStep : Int;                // Paso donde salto el timeout
+      tonStep : TON_TIME;                 // Vigilancia de tiempo del paso
+   END_VAR
+
+   VAR_TEMP
+      tempStepChanged : Bool;             // Ha cambiado de paso este ciclo
+   END_VAR
+
+   VAR CONSTANT
+      // Numeracion por DECENAS: deja sitio para intercalar un paso sin
+      // renumerar los siguientes, que es lo que siempre acaba pasando.
+      S_IDLE     : Int := 0;
+      S_FORWARD  : Int := 10;
+      S_WORK     : Int := 20;
+      S_BACKWARD : Int := 30;
+      S_DONE     : Int := 40;
+      S_FAULT    : Int := 900;            // El fallo, bien lejos y reconocible
+   END_VAR
+
+BEGIN
+
+   REGION 1 - Aborto, rearme y perdida de permiso
+      // Va ANTES del CASE: lo que aborta manda sobre lo que el paso quiera hacer.
+      IF #CmdAbort OR NOT #Enable THEN
+         #statStep := #S_IDLE;
+      ELSIF #CmdReset AND #statStep = #S_FAULT THEN
+         #statStep := #S_IDLE;
+      END_IF;
+   END_REGION
+
+   REGION 2 - Vigilancia de tiempo de paso
+      // El temporizador se rearma solo al cambiar de paso. En reposo, en
+      // completado y en fallo no se vigila: no son pasos con transicion pendiente.
+      #tempStepChanged := #statStep <> #statPrevStep;
+      #statPrevStep    := #statStep;
+
+      #tonStep(IN := NOT #tempStepChanged
+                     AND #statStep <> #S_IDLE
+                     AND #statStep <> #S_DONE
+                     AND #statStep <> #S_FAULT,
+               PT := #StepTimeout);
+
+      IF #tonStep.Q THEN
+         #statFaultStep := #statStep;
+         #statStep      := #S_FAULT;
+      END_IF;
+   END_REGION
+
+   REGION 3 - La secuencia
+      // Un CASE, un paso por rama, y la transicion SIEMPRE al final de la rama.
+      // Nunca se escribe una salida aqui: las salidas se derivan del paso en la
+      // region 4. Asi es imposible que dos pasos peleen por la misma salida.
+      CASE #statStep OF
+
+         #S_IDLE:
+            IF #CmdStart AND #Enable THEN
+               #statStep := #S_FORWARD;
+            END_IF;
+
+         #S_FORWARD:
+            IF #AtForward THEN
+               #statStep := #S_WORK;
+            END_IF;
+
+         #S_WORK:
+            IF #WorkDone THEN
+               #statStep := #S_BACKWARD;
+            END_IF;
+
+         #S_BACKWARD:
+            IF #AtBackward THEN
+               #statStep := #S_DONE;
+            END_IF;
+
+         #S_DONE:
+            // Un ciclo mas y vuelve a reposo. Done queda visible ese ciclo.
+            #statStep := #S_IDLE;
+
+         #S_FAULT:
+            // Se sale solo con CmdReset, tratado en la region 1.
+            ;
+
+      ELSE
+         // Paso desconocido: no deberia pasar nunca, pero si pasa no se queda
+         // colgado en un estado que nadie programo.
+         #statFaultStep := #statStep;
+         #statStep      := #S_FAULT;
+      END_CASE;
+   END_REGION
+
+   REGION 4 - Salidas derivadas del paso
+      // Cada salida se escribe UNA vez y su valor depende solo del paso actual.
+      #DoForward  := #statStep = #S_FORWARD;
+      #DoBackward := #statStep = #S_BACKWARD;
+      #DoWork     := #statStep = #S_WORK;
+
+      #Step      := #statStep;
+      #Running   := #statStep <> #S_IDLE AND #statStep <> #S_FAULT;
+      #Done      := #statStep = #S_DONE;
+      #Fault     := #statStep = #S_FAULT;
+      #FaultStep := #statFaultStep;
+   END_REGION
+
+END_FUNCTION_BLOCK
