@@ -69,7 +69,9 @@
 
 **Interfaces:**
 - Consumes: the environment report and the existing audit findings.
-- Produces: a dated source of truth stating that `tia-inspect` read mode is verified, write mode is command-line-only, `tia-create` is absent, Runtime Advanced V20 is absent, and no Git repository exists yet.
+- Produces: a dated source of truth for the initial baseline. The current operational state is
+  maintained by ADR-010 and the acceptance-status report; it supersedes the initial claims about
+  absent `tia-create` and Git.
 
 - [x] Write the ADR with evidence paths and explicit non-claims.
 - [x] Link it from architecture and plan documents.
@@ -228,7 +230,8 @@
 
 - [x] Write the fixture assertions before scaffold implementation.
 - [x] Verify the original failure while `tia-create` was absent; retain the availability gate.
-- [ ] Implement the smallest scaffold supported by the selected server.
+- [x] Implement the smallest scaffold supported by the selected server, including a hard guard
+  against replacing a visible user TIA instance and a post-apply verification pipeline.
 - [ ] Compile, inspect and export the generated project.
 - [ ] Verify the project opens in TIA V20 and the standards checker passes.
 
