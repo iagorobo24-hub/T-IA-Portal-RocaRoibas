@@ -152,6 +152,22 @@ while ($line = [Console]::In.ReadLine()) {
     $global:LASTEXITCODE = 0
     Write-Output 'PASS: simulation acceptance executes and records an I/O behavior plan'
 
+    $weakPlanPath = Join-Path $temp 'weak-io-plan.json'
+    [ordered]@{ schemaVersion = 1; name = 'weak-plan'; steps = @([ordered]@{ command = 'read-bit output 0 0' }) } |
+        ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $weakPlanPath -Encoding UTF8
+    $weakReportPath = Join-Path $temp 'weak-plan-report.json'
+    $weakOutput = & $pwsh -NoProfile -NonInteractive -File $script `
+        -ReadinessPath $readyPath -OutputPath $weakReportPath -ProjectFile $projectFile `
+        -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
+        -McpExecutablePath $pwsh -McpArguments $fixtureArguments -PlcSimAdapterPath $pwsh `
+        -PlcSimAdapterArguments $managedAdapterArguments -IoPlanPath $weakPlanPath `
+        -StartVirtualPlc -AcknowledgeVirtualTarget -Run 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 1) { throw "Weak behavior plan must fail with exit code 1. Output: $weakOutput" }
+    $weak = Get-Content -Raw -LiteralPath $weakReportPath | ConvertFrom-Json
+    if ($weak.status -ne 'FAILED' -or $weak.phase -ne 'BEHAVIOR') { throw 'Weak behavior plan was not rejected in BEHAVIOR phase.' }
+    $global:LASTEXITCODE = 0
+    Write-Output 'PASS: simulation acceptance rejects behavior plans without explicit expectations'
+
     $adapterFailureReportPath = Join-Path $temp 'adapter-failure.json'
     $missingAdapter = Join-Path $temp 'missing-tia-claude-plcsim-adapter.exe'
     $adapterOutput = & $pwsh -NoProfile -NonInteractive -File $script `
