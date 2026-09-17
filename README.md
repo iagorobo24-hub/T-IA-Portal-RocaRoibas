@@ -95,12 +95,14 @@ limpia, guardado, exportación y readback.
 2. **[`20-standards/`](20-standards/)** — propuesta de estándares, **necesita tu revisión**
    (15 min: las 5 dudas del final de `naming.md` + el árbol de `estructura-proyecto.md`)
 3. **[`60-library/blocks/`](60-library/blocks/)** — 5 bloques SCL listos y probados
-4. **[`50-examples/`](50-examples/)** — los 7 proyectos TIA, con ficha de qué enseña cada uno
-5. [`10-kb/`](10-kb/) — la base de conocimiento
-5. [`00-meta/00-analisis-repos.md`](00-meta/00-analisis-repos.md) — qué aporta cada repo
-6. [`00-meta/01-arquitectura.md`](00-meta/01-arquitectura.md) — cómo queda organizada la carpeta
-7. [`00-meta/02-plan.md`](00-meta/02-plan.md) — hitos M0→M6 y la prueba de aceptación
-8. [`00-meta/03-tdd.md`](00-meta/03-tdd.md) — el TDD original, con lo que queda abierto
+4. **[`10-kb/10-openness/capacidades-y-alcance-por-conexion.md`](10-kb/10-openness/capacidades-y-alcance-por-conexion.md)**
+   — qué puede hacer cada conexión (`read`/`write`/`create`/`full`, PLCSIM vs hardware físico)
+5. **[`50-examples/`](50-examples/)** — los 7 proyectos TIA, con ficha de qué enseña cada uno
+6. [`10-kb/`](10-kb/) — la base de conocimiento
+7. [`00-meta/00-analisis-repos.md`](00-meta/00-analisis-repos.md) — qué aporta cada repo
+8. [`00-meta/01-arquitectura.md`](00-meta/01-arquitectura.md) — cómo queda organizada la carpeta
+9. [`00-meta/02-plan.md`](00-meta/02-plan.md) — hitos M0→M6 y la prueba de aceptación
+10. [`00-meta/03-tdd.md`](00-meta/03-tdd.md) — el TDD original, con lo que queda abierto
 
 ## Decisiones cerradas
 
@@ -114,6 +116,7 @@ limpia, guardado, exportación y readback.
 | [006](00-meta/decisiones/ADR-006-limites-seguridad.md) | PLCSIM libre; **hardware físico solo con confirmación explícita en el momento** |
 | [007](00-meta/decisiones/ADR-007-estandares.md) | Estándares propuestos desde cero sobre SCE + PLCopen + ISA-5.1 |
 | [008](00-meta/decisiones/ADR-008-nomenclatura-cerrada.md) | Las 5 dudas de nomenclatura, cerradas con la evidencia de los 7 ejemplos |
+| [014](00-meta/decisiones/ADR-014-version-v21.md) | Receta V21 lista para `tia-inspect` y `tia-create` (`build.ps1 -TiaMajor 21`); **sin verificar en esta máquina**, pendiente de que un compañero con V21 la confirme |
 
 ## Entorno detectado
 

@@ -24,6 +24,11 @@ La fuente de verdad es Markdown y scripts portables. Las configuraciones de cada
 - `full`: combinación explícita de `write` y `create`; todos los perfiles no-`read` requieren
   reconocimiento.
 
+Detalle exacto de qué puede y qué no puede hacer cada perfil — herramientas concretas,
+excepciones y el eje independiente PLCSIM/hardware físico — en
+[`10-kb/10-openness/capacidades-y-alcance-por-conexion.md`](../../10-kb/10-openness/capacidades-y-alcance-por-conexion.md)
+(se copia entero al instalar el paquete: queda en `10-kb/10-openness/` del destino).
+
 V20 es la versión canónica porque permite exportar documentos SIMATIC SD. V19 puede usarse como compatibilidad limitada, pero no debe considerarse equivalente.
 
 ## Separación de datos

@@ -28,6 +28,10 @@ industrial** y trabaje como lo haría el ingeniero responsable.
 4. leer → cambio mínimo → compilar → guardar
 ```
 
+Excepción única: `tia-inspect --isolated` crea una instancia Openness sin interfaz exclusivamente
+para un fixture desechable previamente identificado. Requiere una orden explícita del runner y no
+se puede usar con un proyecto de cliente ni como atajo para evitar el attach normal.
+
 **Nunca inventes una ruta.** Openness navega por *paths* de objetos de ingeniería, no por
 nombres bonitos. `PLC_1`, `PC-System_1/Software PLC_1`, `Group/Subgroup/FB_Motor`. Si no la has
 leído de `GetProjectTree` o `GetSoftwareTree`, no existe. Este es el error nº1 de los modelos
@@ -197,7 +201,7 @@ adaptador virtual de Siemens y el target debe ser una instancia virtual desechab
 
 | | |
 |---|---|
-| TIA Portal | **V20** (V19 instalado pero no soportado — ADR-002) |
+| TIA Portal | **V20** (V19 instalado pero no soportado — ADR-002; receta V21 preparada y sin verificar en esta máquina — ADR-014) |
 | PLCSIM | V19 |
 | PLCSIM Advanced | **V6.0.0.1**; API nativa V6 inicializada por probe de solo lectura; la conducta runtime sigue pendiente |
 | `tia-inspect` | `30-tools/mcp/tia-inspect/bin/v20/TiaMcpServer.exe --tia-major-version 20` |

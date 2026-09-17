@@ -10,13 +10,16 @@
 2. **[`10-openness/limites.md`](10-openness/limites.md)** — lo que la API sencillamente **no
    puede hacer**. Ahorra horas de intentar algo imposible y culpar al servidor MCP.
 3. **[`50-errores/README.md`](50-errores/README.md)** — catálogo síntoma → causa → arreglo.
+4. **[`10-openness/capacidades-y-alcance-por-conexion.md`](10-openness/capacidades-y-alcance-por-conexion.md)**
+   — matriz de qué puede hacer cada perfil de conexión (`read`/`write`/`create`/`full`) y el eje
+   PLCSIM/hardware. Útil para decidir con qué perfil arrancar antes de tocar nada.
 
 ## Mapa
 
 | Carpeta | Contenido | Estado |
 |---|---|---|
 | [`00-fundamentos/`](00-fundamentos/) | [Interfaz de TIA y computer use](00-fundamentos/tia-interfaz-y-computer-use.md) ✅ · versiones, licencias ⬜ | 🟡 |
-| [`10-openness/`](10-openness/) | [Concepto de path](10-openness/path-concept.md) ✅ · [Límites duros](10-openness/limites.md) ✅ · [Conexión y sesiones](10-openness/conexion-y-sesiones.md) ✅ | 🟢 núcleo listo |
+| [`10-openness/`](10-openness/) | [Concepto de path](10-openness/path-concept.md) ✅ · [Límites duros](10-openness/limites.md) ✅ · [Conexión y sesiones](10-openness/conexion-y-sesiones.md) ✅ · [Capacidades por conexión](10-openness/capacidades-y-alcance-por-conexion.md) ✅ | 🟢 núcleo listo |
 | [`20-recetas/`](20-recetas/) | **Runbooks**: R01-R04 ✅ · R05-R07 📄/fixture · R08-R12 ✅ · R13-R14 📄 no verificadas · R15-R16 ✅ · R17 🟡 runner verificado, runtime pendiente | 🟡 |
 | `30-lenguajes/` | SCL, LAD, FBD, STL, GRAPH: sintaxis, patrones, antipatrones | ⬜ |
 | `40-hmi/` | WinCC Unified y Comfort/Advanced | 📄 documentado; runtime V20 pendiente |

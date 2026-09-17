@@ -1,5 +1,10 @@
 # Funcionamiento operativo
 
+> Antes de elegir perfil, consulta
+> [`10-kb/10-openness/capacidades-y-alcance-por-conexion.md`](../../10-kb/10-openness/capacidades-y-alcance-por-conexion.md):
+> es la matriz de qué puede y qué no puede hacer cada conexión (`read`/`write`/`create`/`full` y
+> el destino PLCSIM/hardware) sin tener que deducirlo de la lista de herramientas MCP.
+
 ## Arranque obligatorio
 
 1. Ejecutar `Doctor`.

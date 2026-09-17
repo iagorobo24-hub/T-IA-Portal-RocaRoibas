@@ -5,7 +5,9 @@ param(
     [string]$Profile = 'read',
     [string]$OutputPath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path '.mcp.json'),
     [string]$LocalManifestPath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path '30-tools\mcp\servers.local.json'),
-    [switch]$AcknowledgeWriteProfile
+    [switch]$AcknowledgeWriteProfile,
+    [ValidateSet(20, 21)]
+    [int]$TiaMajorVersion = 20
 )
 
 $ErrorActionPreference = 'Stop'
@@ -34,12 +36,26 @@ foreach ($serverProperty in $profileObject.servers.PSObject.Properties) {
     if ($null -eq $serverDefinition) { throw "Profile '$Profile' references undefined server '$name'." }
     if ([string]$serverDefinition.status -eq 'not-installed') { throw "Profile '$Profile' references unavailable server '$name'." }
 
-    $command = Join-Path $WorkspaceRoot ($serverDefinition.commandRelative -replace '/', '\')
-    if (-not (Test-Path -LiteralPath $command -PathType Leaf)) {
-        throw "Server executable does not exist: $command"
+    $commandRelative = [string]$serverDefinition.commandRelative
+    $baseArgs = @($serverDefinition.baseArgs)
+    if ($TiaMajorVersion -ne 20) {
+        $versionOverride = $serverDefinition.versions.PSObject.Properties["$TiaMajorVersion"].Value
+        if ($null -eq $versionOverride) {
+            throw "Server '$name' has no '$TiaMajorVersion' entry in servers.json versions."
+        }
+        if ($versionOverride.verified -ne $true) {
+            Write-Warning "TIA V$TiaMajorVersion for '$name' is not verified on this machine yet ($($versionOverride.note)). See ADR-014."
+        }
+        $commandRelative = [string]$versionOverride.commandRelative
+        $baseArgs = @($versionOverride.baseArgs)
     }
 
-    $args = @($serverDefinition.baseArgs) + @($serverProperty.Value.extraArgs)
+    $command = Join-Path $WorkspaceRoot ($commandRelative -replace '/', '\')
+    if (-not (Test-Path -LiteralPath $command -PathType Leaf)) {
+        throw "Server executable does not exist: $command. Build it first (e.g. 30-tools/mcp/$name/build.ps1 -TiaMajor $TiaMajorVersion)."
+    }
+
+    $args = @($baseArgs) + @($serverProperty.Value.extraArgs)
     $mcpServers[$name] = [ordered]@{
         command = $command
         args = $args
@@ -57,6 +73,7 @@ $local = [ordered]@{
     schemaVersion = 1
     generatedAt = [DateTimeOffset]::Now.ToString('o')
     profile = $Profile
+    tiaMajorVersion = $TiaMajorVersion
     mcpServers = $mcpServers
 }
 $local | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $LocalManifestPath -Encoding UTF8

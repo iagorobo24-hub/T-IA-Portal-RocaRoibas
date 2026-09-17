@@ -18,11 +18,19 @@ try {
     foreach ($path in @($core, $examples, $coreManifest, $examplesManifest)) {
         if (-not (Test-Path -LiteralPath $path)) { throw "Portable output is missing: $path" }
     }
-    if (@(Get-ChildItem -LiteralPath $core -Recurse -File -Include '*.ap16','*.ap17','*.ap18','*.ap19','*.ap20','*.ap21').Count -gt 0) {
+    # -Include silently no-ops when combined with -LiteralPath/-Recurse on a non-wildcard path in
+    # Windows PowerShell 5.1 (verified: it returns every file, not just the matched extensions).
+    # -Path with a trailing '\*' is required for -Include to actually filter.
+    if (@(Get-ChildItem -Path (Join-Path $core '*') -Recurse -File -Include '*.ap16','*.ap17','*.ap18','*.ap19','*.ap20','*.ap21').Count -gt 0) {
         throw 'Core package contains a TIA project artifact.'
     }
     if (-not (Test-Path -LiteralPath (Join-Path $core '30-tools\mcp\tia-create\bin\v20\TiaMcpServer.exe') -PathType Leaf)) {
         throw 'Core package is missing the verified tia-create V20 runtime.'
+    }
+    foreach ($v21Item in @('30-tools\mcp\tia-inspect\build.ps1', '30-tools\mcp\tia-create\build.ps1', '00-meta\decisiones\ADR-014-version-v21.md', '10-kb\10-openness\capacidades-y-alcance-por-conexion.md')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $core $v21Item) -PathType Leaf)) {
+            throw "Core package is missing V21-enablement item: $v21Item"
+        }
     }
     foreach ($tool in @('Invoke-TiaProjectAnalysis.ps1', 'New-TiaSclProposal.ps1', 'Invoke-TiaWorkflow.ps1', 'Invoke-TiaSclProposalApply.ps1', 'New-TiaIoList.ps1', 'New-TiaFunctionalDescription.ps1', 'Convert-TiaTagTableExportToInventory.ps1', 'Merge-TiaTagEvidenceIntoInventory.ps1', 'Inspect-McpToolSchemas.ps1', 'Invoke-TiaSimulationAcceptance.ps1')) {
         if (-not (Test-Path -LiteralPath (Join-Path $core "30-tools\scripts\$tool") -PathType Leaf)) { throw "Core package is missing semantic tool: $tool" }
