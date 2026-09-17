@@ -3,7 +3,6 @@
 # privados aparte. 40-projects/ entero queda fuera, no por excepciones.
 # ==========================================================================
 40-projects/*
-!40-projects/.gitignore
 !40-projects/_template/
 !40-projects/README.md
 

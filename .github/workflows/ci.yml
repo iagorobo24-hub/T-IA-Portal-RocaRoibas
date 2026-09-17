@@ -10,6 +10,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Bootstrap local-only boundary marker
+        shell: pwsh
+        run: |
+          # 40-projects/.gitignore is required to exist locally (Test-PublicBoundary.ps1) but must
+          # never be tracked in git (ADR-005: 40-projects/ is excluded with no exceptions). A real
+          # dev machine creates it once and leaves it gitignored forever; a fresh CI checkout has
+          # to recreate the same content every run instead.
+          @'
+          # Los proyectos de cliente viven en repositorios privados separados.
+          *
+          !.gitignore
+          !README.md
+          !_template/
+          !_template/**
+          '@ | Set-Content -LiteralPath '40-projects\.gitignore' -Encoding UTF8
+
       - name: Run CI-safe workspace checks
         shell: pwsh
         run: |
