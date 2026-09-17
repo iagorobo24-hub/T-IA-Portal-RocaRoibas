@@ -134,6 +134,14 @@ limpia, guardado, exportación y readback.
 | Grupo `Siemens TIA Openness` | ✅ miembro verificado |
 | Grupo `Siemens TIA Engineer` | ✅ eres miembro |
 
+## Licencia
+
+El código propio de este workspace (Markdown, PowerShell, SCL) se distribuye bajo
+[MIT](LICENSE). Los binarios compilados de `tia-inspect`/`tia-create` en
+`30-tools/mcp/*/bin/` siguen gitignorados y no se distribuyen — se reconstruyen desde
+`build.ps1` contra las licencias propias de sus repos de origen (ver
+[`TIA-Claude_Portable/docs/NOTICE-THIRD-PARTY.md`](TIA-Claude_Portable/docs/NOTICE-THIRD-PARTY.md)).
+
 ## Repos de referencia
 
 Clonados en `_ref/` (solo lectura; no se versionan, se recrean con `git clone`):

@@ -18,6 +18,8 @@ punto y diga **dónde** se ha quedado colgada cuando se cuelgue.
 Si ya tienes licencia de GRAPH y tu equipo lo usa, úsalo — es mejor para secuencias de 40 pasos
 con ramas paralelas. Para lo demás, el `CASE` gana por mantenibilidad.
 
+Ver también: [`10-kb/30-lenguajes/graph.md`](../30-lenguajes/graph.md).
+
 ---
 
 ## El patrón, en cuatro regiones

@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  workspace-checks:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run CI-safe workspace checks
+        shell: pwsh
+        run: |
+          .\30-tools\scripts\Run-WorkspaceChecks.ps1 -CiSafe -OutputPath .\70-runs\checks\ci-latest.json
+
+      - name: Upload check report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workspace-checks-report
+          path: 70-runs/checks/ci-latest.json

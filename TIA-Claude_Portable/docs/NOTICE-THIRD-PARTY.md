@@ -10,3 +10,6 @@ El directorio `workspace/_ref/` contiene clones fijados a commits concretos para
 - bulaofen0036-coder/TIA_Portal_Openness_MCP: MIT.
 
 No publiques automáticamente `workspace/_ref/`, proyectos TIA, PDFs, binarios ni material sin licencia clara. Este paquete está pensado para uso privado entre ordenadores del usuario.
+
+La licencia del código propio de este workspace (no de los terceros de arriba) está en
+[`LICENSE`](../../LICENSE) en la raíz del repositorio: MIT.
