@@ -9,6 +9,11 @@ Paquete portable para preparar un ordenador con TIA Portal V20 para trabajar des
 - `manifests/`: versiones, commits y hashes del paquete.
 - `docs/`: arquitectura, funcionamiento y guía de uso.
 
+Para saber exactamente qué puede hacer cada forma de conectar un agente a TIA Portal (perfiles
+`read`/`write`/`create`/`full`, y el destino PLCSIM/hardware físico), consulta
+`10-kb/10-openness/capacidades-y-alcance-por-conexion.md` una vez instalado — viaja dentro del
+paquete porque `10-kb/` se copia entero.
+
 ## Prerrequisitos que no puede transportar este paquete
 
 1. TIA Portal V20 instalado y licenciado por Siemens.

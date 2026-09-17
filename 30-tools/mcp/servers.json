@@ -4,7 +4,20 @@
     "tia-inspect": {
       "commandRelative": "30-tools/mcp/tia-inspect/bin/v20/TiaMcpServer.exe",
       "baseArgs": ["--tia-major-version", "20"],
-      "purpose": "Inspect and, only in the write profile, modify TIA Portal V20 projects"
+      "purpose": "Inspect and, only in the write profile, modify TIA Portal V20 projects",
+      "versions": {
+        "20": {
+          "commandRelative": "30-tools/mcp/tia-inspect/bin/v20/TiaMcpServer.exe",
+          "baseArgs": ["--tia-major-version", "20"],
+          "verified": true
+        },
+        "21": {
+          "commandRelative": "30-tools/mcp/tia-inspect/bin/v21/TiaMcpServer.exe",
+          "baseArgs": ["--tia-major-version", "21"],
+          "verified": false,
+          "note": "Build with 30-tools/mcp/tia-inspect/build.ps1 -TiaMajor 21 on a machine with TIA Portal V21. Not verified here — see ADR-014."
+        }
+      }
     },
     "tia-create": {
       "status": "installed",
@@ -13,7 +26,20 @@
       "purpose": "Create V20 PLC, network and HMI scaffolds when a verified runtime is available",
       "version": "2.7.2",
       "source": "bulaofen0036-coder/TIA_Portal_Openness_MCP TiaMcpServer.V20.csproj",
-      "buildEvidence": "dotnet build Release: 0 errors, 2 warnings; Doctor initialized Openness V20 and confirmed Siemens TIA Openness membership."
+      "buildEvidence": "dotnet build Release: 0 errors, 2 warnings; Doctor initialized Openness V20 and confirmed Siemens TIA Openness membership.",
+      "versions": {
+        "20": {
+          "commandRelative": "30-tools/mcp/tia-create/bin/v20/TiaMcpServer.exe",
+          "baseArgs": ["--tia-major-version", "20", "--profile", "lite"],
+          "verified": true
+        },
+        "21": {
+          "commandRelative": "30-tools/mcp/tia-create/bin/v21/TiaMcpServer.exe",
+          "baseArgs": ["--tia-major-version", "21", "--profile", "lite"],
+          "verified": false,
+          "note": "Build with 30-tools/mcp/tia-create/build.ps1 -TiaMajor 21 on a machine with TIA Portal V21. Not verified here — see ADR-014."
+        }
+      }
     }
   },
   "profiles": {
