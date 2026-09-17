@@ -2,7 +2,7 @@
 # ADR-005: este repo es PUBLICO. Los proyectos de cliente van en repos
 # privados aparte. 40-projects/ entero queda fuera, no por excepciones.
 # ==========================================================================
-40-projects/
+40-projects/*
 !40-projects/.gitignore
 !40-projects/_template/
 !40-projects/README.md
