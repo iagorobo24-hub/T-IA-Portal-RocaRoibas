@@ -1,7 +1,16 @@
 [CmdletBinding()]
 param(
     [string]$WorkspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path,
-    [string]$OutputPath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path '70-runs\checks\latest.json')
+    [string]$OutputPath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path '70-runs\checks\latest.json'),
+    [switch]$CiSafe
+)
+
+# Checks that do not require TIA Portal/Openness/PLCSIM installed or a live MCP session. Safe to
+# run on a clean GitHub Actions windows-latest runner. See .github/workflows/ci.yml.
+$ciSafeCheckNames = @(
+    'knowledge', 'server-manifest', 'harness-config', 'harness-adapters', 'public-boundary',
+    'runtime-media-discovery', 'tag-export-converter', 'semantic-workflow', 'sync-harness-configs',
+    'check-tia-standards', 'eval-freshness', 'portable-package-content'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -44,8 +53,18 @@ $definitions = @(
     @{ name = 'tag-export-converter'; path = '30-tools/tests/Test-ConvertTiaTagTableExport.ps1' },
     @{ name = 'tag-evidence-merge'; path = '30-tools/tests/Test-MergeTiaTagEvidence.ps1' },
     @{ name = 'creation-recipes'; path = '30-tools/tests/Test-TiaCreationRecipes.ps1' },
-    @{ name = 'semantic-workflow'; path = '30-tools/tests/Test-TiaWorkflow.ps1' }
+    @{ name = 'semantic-workflow'; path = '30-tools/tests/Test-TiaWorkflow.ps1' },
+    @{ name = 'sync-harness-configs'; path = '30-tools/tests/Test-SyncHarnessConfigs.ps1' },
+    @{ name = 'check-tia-standards'; path = '30-tools/tests/Test-CheckTiaStandards.ps1' },
+    @{ name = 'workspace-checks-selftest'; path = '30-tools/tests/Test-WorkspaceChecks.ps1' },
+    @{ name = 'eval-freshness'; path = '30-tools/scripts/Check-EvalFreshness.ps1' },
+    @{ name = 'portable-package'; path = 'TIA-Claude_Portable/tests/Test-PortablePackage.ps1' },
+    @{ name = 'portable-package-content'; path = 'TIA-Claude_Portable/tests/Test-PortablePackageContent.ps1' }
 )
+
+if ($CiSafe) {
+    $definitions = @($definitions | Where-Object { $ciSafeCheckNames -contains $_.name })
+}
 
 $checks = [System.Collections.Generic.List[object]]::new()
 foreach ($definition in $definitions) {
@@ -65,6 +84,7 @@ foreach ($definition in $definitions) {
     })
 }
 
+if (-not $CiSafe) {
 $standardsInventory = Join-Path $WorkspaceRoot '70-runs\standards\iot-baseline-inventory.json'
 $latestE2EReport = Get-ChildItem -LiteralPath (Join-Path $WorkspaceRoot '70-runs\e2e') -Recurse -Filter 'report.json' -File -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending |
@@ -106,6 +126,7 @@ else {
 
 $gitStatus = if (Test-Path -LiteralPath (Join-Path $WorkspaceRoot '.git') -PathType Container) { 'present' } else { 'not-initialized' }
 $checks.Add([ordered]@{ name = 'git'; status = $(if ($gitStatus -eq 'present') { 'PASS' } else { 'WARN' }); message = "Git repository: $gitStatus. No automatic initialization is performed." })
+}
 
 $blocked = @($checks | Where-Object { $_.status -eq 'BLOCKED' })
 $warnings = @($checks | Where-Object { $_.status -eq 'WARN' })

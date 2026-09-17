@@ -68,6 +68,16 @@ al target virtual. Para terminarlo se envía `stop` por stdin; entonces apaga, d
 libera la instancia. Si el adaptador no está operativo, el comando termina sin registrar una
 CPU y devuelve las interfaces disponibles. No se debe usar este modo con una interfaz física.
 
+⚠️ **Bloqueo conocido, sin resolver (2026-09-17):** con el adaptador `Up` en Windows y el
+binario nativo recién reconstruido (`--inspect`/`--register-inspect` en `status: ready`, todos
+los códigos `0x0`), este paso concreto (`configure`) falla con `mappingCode: 0xffffffed` /
+`ipCode: 0xfffffff2` / `bindingCode: 0xffffffed`. Probado con y sin elevación, y con la UI de
+PLCSIM Advanced cerrada: mismo resultado. Son códigos de la API de runtime de PLCSIM Advanced,
+sin documentación en este repo — no se ha identificado la causa raíz. Antes de reintentar a
+ciegas, consultar documentación oficial de Siemens sobre estos códigos, probar con el perfil de
+red del adaptador en Privado, o con una IP distinta de `192.168.0.1`. Evidencia completa del
+intento: `70-runs/acceptance/plcsim-ip-binding-20260917.json` (no versionado, local).
+
 Mientras la instancia está viva acepta comandos de stdin, uno por línea, y devuelve un JSON por
 línea. Las áreas admitidas son `input`, `output` y `marker`; el offset es un byte:
 
