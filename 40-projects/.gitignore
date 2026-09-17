@@ -1,6 +1,0 @@
-# Los proyectos de cliente viven en repositorios privados separados.
-*
-!.gitignore
-!README.md
-!_template/
-!_template/**
