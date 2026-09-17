@@ -17,6 +17,7 @@ jobs:
           # never be tracked in git (ADR-005: 40-projects/ is excluded with no exceptions). A real
           # dev machine creates it once and leaves it gitignored forever; a fresh CI checkout has
           # to recreate the same content every run instead.
+          New-Item -ItemType Directory -Path '40-projects' -Force | Out-Null
           @'
           # Los proyectos de cliente viven en repositorios privados separados.
           *
