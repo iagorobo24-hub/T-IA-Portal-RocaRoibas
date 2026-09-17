@@ -5,12 +5,17 @@ param(
     [switch]$CiSafe
 )
 
-# Checks that do not require TIA Portal/Openness/PLCSIM installed or a live MCP session. Safe to
-# run on a clean GitHub Actions windows-latest runner. See .github/workflows/ci.yml.
+# Checks that need neither TIA Portal/Openness/PLCSIM installed, a live MCP session, nor the
+# compiled tia-inspect/tia-create binaries (gitignored; built from Siemens-licensed Openness
+# NuGet packages, not reproducible on a public CI runner). Safe on a clean GitHub Actions
+# windows-latest checkout. See .github/workflows/ci.yml.
+#
+# Excluded on purpose even though they pass on a dev machine with the binaries already built:
+# server-manifest, harness-config, harness-adapters, sync-harness-configs, portable-package-content
+# (all resolve 30-tools/mcp/*/bin/v20/TiaMcpServer.exe or the gitignored .mcp.json/servers.local.json).
 $ciSafeCheckNames = @(
-    'knowledge', 'server-manifest', 'harness-config', 'harness-adapters', 'public-boundary',
-    'runtime-media-discovery', 'tag-export-converter', 'semantic-workflow', 'sync-harness-configs',
-    'check-tia-standards', 'eval-freshness', 'portable-package-content'
+    'knowledge', 'public-boundary', 'runtime-media-discovery', 'tag-export-converter',
+    'semantic-workflow', 'check-tia-standards', 'eval-freshness'
 )
 
 $ErrorActionPreference = 'Stop'
