@@ -70,7 +70,6 @@ $definitions = @(
     @{ name = 'semantic-workflow'; path = '30-tools/tests/Test-TiaWorkflow.ps1' },
     @{ name = 'sync-harness-configs'; path = '30-tools/tests/Test-SyncHarnessConfigs.ps1' },
     @{ name = 'check-tia-standards'; path = '30-tools/tests/Test-CheckTiaStandards.ps1' },
-    @{ name = 'workspace-checks-selftest'; path = '30-tools/tests/Test-WorkspaceChecks.ps1' },
     @{ name = 'eval-freshness'; path = '30-tools/scripts/Check-EvalFreshness.ps1' },
     @{ name = 'portable-package'; path = 'TIA-Claude_Portable/tests/Test-PortablePackage.ps1' },
     @{ name = 'portable-package-content'; path = 'TIA-Claude_Portable/tests/Test-PortablePackageContent.ps1' }

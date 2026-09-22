@@ -124,6 +124,11 @@ control nativo. No asumas que el acceso a Computer Use de una sesión Codex est�
 Claude Code, OpenCode u otro agente del mismo ordenador; cada host debe verificar su integración,
 política y permiso de la aplicación.
 
+Preferencia de trabajo del usuario: cuando TIA Portal esté abierto mediante Computer Use, mantenlo
+maximizado para que el proyecto y sus paneles sean legibles. Verifica el tamaño de la ventana después
+de abrirla o restaurarla y déjala maximizada al terminar la operación, salvo que una acción concreta
+requiera temporalmente otra disposición.
+
 Si el inventario nativo no devuelve una ventana TIA, refresca el inventario y revisa Doctor/procesos.
 Solo si se confirma que no hay otra instancia de TIA ni proyecto abierto, y la aplicación exacta está
 identificada, puedes lanzarla con Computer Use; después vuelve a enumerar y selecciona el ID nuevo
