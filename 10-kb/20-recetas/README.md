@@ -82,6 +82,7 @@ Si falla        los modos de fallo conocidos y su arreglo
 | [R18](R18-medidas-analogicas.md) | Medidas y señales analógicas | 📄 procedimiento documentado; requiere módulo/canal identificados y banco de prueba |
 | [R19](R19-diagnostico-comunicaciones.md) | Diagnóstico de comunicaciones | 📄 procedimiento documentado; handshake solo en endpoint aislado |
 | [R20](R20-aceptacion-hmi-por-modelo.md) | Aceptación HMI según modelo y Runtime | 📄 matriz documentada; Runtime/licencia local pendiente |
+| [R21](R21-preflight-offline-release.md) | Preflight de la suite offline de release | ✅ preflight ejecutable; paquete de golden fixtures externo aún bloqueado |
 
 El orden y su porqué están en [ADR-004](../../00-meta/decisiones/ADR-004-prioridades.md).
 
