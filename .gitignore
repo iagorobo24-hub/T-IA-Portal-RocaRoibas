@@ -26,6 +26,7 @@ _ref/
 50-examples/**/System/
 50-examples/**/XRef/
 50-examples/**/Vci/
+50-examples/**/AdditionalFiles/
 50-examples/**/Logs/
 50-examples/**/*.ap1*
 50-examples/**/*.ap2*
