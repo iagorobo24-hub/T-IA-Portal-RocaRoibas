@@ -200,7 +200,8 @@ no se lanzan dos sesiones concurrentes contra TIA.
 4.  Backup        copia del .ap20
 5.  Escribir      cambio mínimo, dryRun primero
 6.  Compilar      CompileSoftware → 0 errores, o se revierte
-7.  Guardar       SaveProject  (o SaveSession si hay Multiuser)
+7.  Guardar       SaveProject  (o SaveSession si hay Multiuser), fuera de la transacción Openness
+                    de la mutación; el servidor usa `SaveGuarded` y mantiene la barrera F/Safety.
 8.  Exportar      export textual a 40-projects/<x>/src/
 9.  Commit        con mensaje que diga QUÉ cambió funcionalmente, no "update"
 ```

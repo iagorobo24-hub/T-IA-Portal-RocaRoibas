@@ -77,7 +77,7 @@ evidencia de apertura gráfica más abajo. Volver a ejecutar Doctor antes de cad
 | Openness Siemens V20 | Base de automatización que usan TIA y las herramientas locales; el probe independiente [direct-openness-20260922-final.json](../../../70-runs/environment/direct-openness-20260922-final.json) inicializó el resolver V20 desde un proyecto .NET Framework separado, comprobó el grupo y ejecutó `TiaPortal.GetProcesses()` en solo lectura. | El probe no adjuntó ni abrió proyecto y no valida todavía cada acción del API ni las operaciones de proyecto. |
 | Computer Use/UI | Nativo disponible en esta sesión por `node_repl` + `@oai/sky`; `mcp__cua_repl` solo expone navegador y su `apps: []` no mide Windows. TIA V20 se abrió con los clones exactos de los fixtures, se mantuvo maximizado (1920×1040) y se navegó visualmente al PLC y al HMI. | La edición PLC y la edición visual HMI quedan verificadas solo en clones; el compile HMI se intentó y quedó bloqueado con 1 error porque TIA reportó el dispositivo no soportado; el runtime sigue sin evidencia. El acceso depende de la sesión, el permiso de la app y políticas de workspace. |
 | PLC fixture | En un clon IOT2050 aislado, el preview de `PlcBuildAndImport` pasó pero su apply falló por cultura, sin importación y con integridad confirmada. En una secuencia separada, el import de fuente SCL generó un bloque probe, compiló 0/0, guardó, exportó, se releyó y luego se borró/restauró el clon. Evidencia bajo `90-tmp/e2e/20260921-iot2050-agent-probe-clean/`. | La ruta de fuente externa no demuestra `Invoke-TiaSclProposalApply`; tampoco valida acciones ajenas a la secuencia ni comportamiento PLCSIM/HMI. La instancia original no se modificó. |
-| Runtime | [status-20260922-final13.json](../../../70-runs/acceptance/status-20260922-final13.json) y `status-latest.json` mantienen `accepted=false`; el scaffold live y la fase gráfica de clones están verificados, mientras PLCSIM y Runtime Advanced V20 siguen pendientes/bloqueados. El JSON ya incorpora el bloque `computerUse` y sus cinco evidencias nativas. | El informe de aceptación separa compilación/mocks de comportamiento real; no autoriza descarga ni runtime. |
+| Runtime | [status-20260922-final14.json](../../../70-runs/acceptance/status-20260922-final14.json) y `status-latest.json` mantienen `accepted=false`; el scaffold live, el ciclo de tags y la fase gráfica de clones están verificados, mientras PLCSIM y Runtime Advanced V20 siguen pendientes/bloqueados. El JSON incorpora el bloque `computerUse` y la evidencia del ciclo MCP de tags. | El informe de aceptación separa compilación/mocks de comportamiento real; no autoriza descarga ni runtime. |
 
 ### Estado actualizado antes de la fase gráfica final — 2026-09-22
 
@@ -133,7 +133,7 @@ para la capacidad de Siemens, MCP para la herramienta de cada servidor y UI para
 | Sesión y proyecto | Doctor, Connect, GetState, GetOpenProjects, OpenProject, AttachToOpenProject, CloseProject, SaveProject/SaveSession, SaveAs | Openness abre/cierra/guarda, conecta instancias con/sin UI y puede acceder a procesos activos. Attach depende del servidor; UI identifica ventana si el objetivo es ambiguo. | Doctor verificado; Attach documentado en esquema full guardado, no en tia-inspect read. |
 | Árbol y lectura | GetProjectTree, GetSoftwareTree, GetBlocks, GetTypes, GetBlockSource, FindInCode, WhereUsed, ResolvePath | Lectura/navegación del modelo de objetos. UI ayuda a ver editores, no sustituye paths exactos. | El roster live de inspect está catalogado; no se ha ejecutado cada método del roster ni se debe elevar su presencia a capacidad probada. |
 | PLC blocks y tipos | ImportBlock/ImportFromDocuments, CreateFB/CreateInstanceDB, DeletePlcBlock/DeletePlcType, export, compile, readback | Siemens V20 documenta import/export y creación/borrado de objetos de proyecto. Revisar diferencias por tipo/versión. | La ruta experimental de fuente externa sigue acotada al clon IOT2050. En el fixture `AgentDemo_V20`, `CreateFB` aparece en el roster write (84 herramientas) pero falla con `CreateFB failed` para SCL y LAD, tanto en raíz como en grupos; el `.ap20` conserva el hash de backup. Computer Use sí creó FC1 y FB2, los guardó, leyó de nuevo y borró en otro clon; además compiló `CU_Compile_Probe [FB2]` en LAD con 0/0. El lenguaje del FB inicial no quedó probado como SCL. |
-| Tags, UDT, DB, tablas y watch | GetPlcTagTables/GetTags, import/export de tags/UDT/DB, watch/force discovery y SetWatchTableModifyValue | Tags PLC, constantes y objetos HMI import/export según modelo. Force/write online implica riesgo físico. UI para tabla/force sólo lectura en este plan. | El scaffold `AgentDemo_V20` creó `Agent_Signals` con dos tags y la inspección posterior exportó la tabla. La exportación se normalizó con `Convert-TiaTagTableExportToInventory.ps1` y se unió al inventario con evidencia detallada (`agent-signals-tag-inventory.json`, `inventory-with-tags.json`). No se probó `CreateTag`/`ImportPlcTagTable` independiente, UDT/DB ni operaciones online. El apply bloquea tags Safety o clasificación incompleta. |
+| Tags, UDT, DB, tablas y watch | GetPlcTagTables/GetTags, import/export de tags/UDT/DB, watch/force discovery y SetWatchTableModifyValue | Tags PLC, constantes y objetos HMI import/export según modelo. Force/write online implica riesgo físico. UI para tabla/force sólo lectura en este plan. | El scaffold `AgentDemo_V20` creó `Agent_Signals` con dos tags y la inspección posterior exportó la tabla. Después se verificó en un clon el ciclo estándar `CreateTag` → `GetTagInfo/GetTags` → `UpdateTag` (renombre y dirección) → `ExportTagTable` → `CompileSoftware` 0/0 → `SaveProject` → `DeleteTag` → compile/save → readback independiente sin el tag y export restaurado. La evidencia es [mcp-tag-lifecycle-20260922-save-boundary.json](../../../70-runs/e2e/mcp-tag-lifecycle-20260922-save-boundary.json). Siguen sin probarse importación de tablas, UDT/DB y operaciones online. El apply bloquea tags Safety o clasificación incompleta. |
 | Hardware e IO | SearchHardwareCatalog, AddDevice/PlugDeviceItem, direcciones IO, CPU settings, compilación | Openness documenta dispositivos, CAx, subredes e IO con requisitos por objeto/modelo. UI revisa Devices & Networks y modelo exacto. | Esquemas catalogados; mutaciones en copia pendientes; no hay descarga física. |
 | Redes y comunicaciones | PROFINET/subnet/node, OPC UA, MQTT, HMI connections, diagnostics; usar FindTools si falta nombre en lite | La presencia de un objeto connection no demuestra tráfico ni autenticación. Runtime requiere endpoint de test; certificados/detalles pueden requerir UI. | Receta R19 documentada tras auditoría; no hubo mutación de comunicación ni handshake/tráfico real. |
 | HMI | Classic/Basic/Comfort/RT Advanced/Unified: screens, templates, tags, bindings, alarms, actions, scripts, dynamizations, compile | Openness soporta conjuntos de objetos según el modelo; los exports son internos y dependientes de versión. Siemens indica que Openness con UI no puede usar el editor HMI. Computer Use/runtime prueba apariencia e interacción. | Receta R20 separa las familias/modelos; no se ejecutó ni aceptó runtime HMI. Computer Use nativo disponible; falta runtime HMI compatible. |
@@ -454,6 +454,14 @@ proyecto clonado y su backup. Hash del `.ap20` original/backup: `D5FA9E103B16E35
    `CU_Compile_Probe [FB2]` en LAD, se compiló desde el botón de TIA con 0 errores/0 avisos, se borró
    y se guardó. El clon se dejó con el proyecto cerrado y TIA maximizado. Evidencia:
    `70-runs/environment/computer-use-20260922-tia-gui-create-delete.json`.
+9. En un fixture aislado `AgentDemo_V20` se ejecutó el ciclo MCP de tags estándar: creación de
+   `CU_MCP_Tag_Probe`, lectura de metadata no Safety, renombre y cambio de dirección, exportación
+   antes/después/restaurada, compilación 0/0, guardado, borrado, segundo compile/save y readback
+   independiente con cero restos. El primer intento reveló que `SaveProject` dentro de la
+   transacción Openness fallaba con `The operation is not permitted within a transaction`; se corrigió
+   con `SaveGuarded`, que mantiene el escaneo F/Safety y guarda fuera de la transacción. El test
+   estructural y el parche upstream están en [Test-TiaMcpSaveBoundary.ps1](../../../30-tools/tests/Test-TiaMcpSaveBoundary.ps1)
+   y la evidencia completa en [mcp-tag-lifecycle-20260922-save-boundary.json](../../../70-runs/e2e/mcp-tag-lifecycle-20260922-save-boundary.json).
 
 Los artefactos completos están en `90-tmp/e2e/20260921-iot2050-agent-probe-clean/`, en especial
 `artifacts/01-prewrite-preflight.json`, `06-create-compile-save.json`, `16-import-external-source-root.json`,
@@ -462,7 +470,7 @@ Los artefactos completos están en `90-tmp/e2e/20260921-iot2050-agent-probe-clea
 `24-create-export-xml-delete-preview.json`, `26-create-delete-compile-save.json`,
 `27-independent-delete-readback.json` y `28-restore-report.json`.
 
-**No probado por acción:** escritura independiente de tags/UDT/DB, modificación de hardware,
+**No probado por acción:** importación de tablas de tags, escritura de UDT/DB, modificación de hardware,
 módulos, redes, HMI, medición física, comunicación con una CPU, online/watch, descarga y runtime.
 Las guardas offline de hardware/red y los planes read-only de monitorización/OPC UA sí quedaron
 verificados en la auditoría final; no elevan ninguna de esas acciones a nivel Fixture.
@@ -545,8 +553,8 @@ partir del compile offline.
   pendiente de ejecutarse en ese host, pero el contrato local de arranque y el binario V20 están
   verificados en [doctor-20260922-final.json](../../../70-runs/environment/doctor-20260922-final.json)
   y [Test-TiaIsolatedMode](../../../30-tools/tests/Test-TiaIsolatedMode.ps1).
-- [x] Ejecutar la suite final de guards, el runner de propuesta SCL en modo negativo y
-  `Write-TiaAcceptanceStatus.ps1`; el informe fechado [status-20260922-final13.json](../../../70-runs/acceptance/status-20260922-final13.json)
+- [x] Ejecutar la suite final de guards, el runner de propuesta SCL en modo negativo, el ciclo MCP
+  de tags y `Write-TiaAcceptanceStatus.ps1`; el informe fechado [status-20260922-final14.json](../../../70-runs/acceptance/status-20260922-final14.json)
   y `status-latest.json` mantienen correctamente `accepted=false`, incorporan el inventario
   `computerUse` y conservan los bloqueos de runtime y recetas.
 - [ ] Completar acciones permitidas por familia en fixture y actualizar los niveles de evidencia de
@@ -1199,13 +1207,14 @@ las llamadas y operaciones observadas en `90-tmp/e2e/20260921-iot2050-agent-prob
 ### Límites y acciones siguientes
 
 - El perfil `tia-create / lite` no fue usado para todos sus métodos; `full` solo ejecutó el lote offline y el self-test, sin abrir proyecto.
-- No se probaron modificación de hardware, red/protocolos, escritura independiente de tags/UDT/DB,
+- No se probaron modificación de hardware, red/protocolos, importación de tablas de tags, escritura de UDT/DB,
   binding HMI, alarmas, mediciones físicas, watch/force, descarga, comportamiento PLC en PLCSIM,
   Runtime ni escritura online. La interfaz de edición SCL y la edición visual de un objeto HMI ya
   están verificadas en clones; el compile HMI está bloqueado por dispositivo no soportado y el runtime sigue sin verificar. La auditoría final
   también verificó sin conexión las guardas de hardware/red y la planificación read-only de
-  monitorización/OPC UA; la tabla de tags del scaffold fue exportada, normalizada y leída de vuelta
-  como evidencia de inventario.
+  monitorización/OPC UA; además, el ciclo de tags estándar fue exportado, compilado, guardado,
+  borrado y leído de vuelta independientemente. La evidencia no cubre importación de tablas ni
+  UDT/DB.
 - La línea base y el test de fixture acreditan `GetBlocks.isFailsafe=false` antes/después del probe.
   Los tests de barrera acreditan rechazo sintético de safety o metadata incompleta; no se hizo una
   escritura real F ni se usó una F-CPU.
@@ -1216,7 +1225,7 @@ las llamadas y operaciones observadas en `90-tmp/e2e/20260921-iot2050-agent-prob
   en una aplicación .NET independiente; todavía no se mapeó cada MCP tool a un miembro concreto de
   `Siemens.Engineering` ni se probó CRUD de proyecto desde ese cliente.
 - El informe global de aceptación permanece `accepted=false`; PLCSIM/Runtime siguen pendientes o
-  bloqueados. Consultar [status-20260922-final13.json](../../../70-runs/acceptance/status-20260922-final13.json)
+  bloqueados. Consultar [status-20260922-final14.json](../../../70-runs/acceptance/status-20260922-final14.json)
   para el estado actual y volver a generarlo después de cada cambio relevante.
 - La suite `RunOfflineReleaseValidationSuite` es una validación de release separada del workspace
   TIA-Claude. Antes de llamarla, ejecutar [R21](../../../10-kb/20-recetas/R21-preflight-offline-release.md)
@@ -1233,7 +1242,8 @@ El trabajo que no necesita Computer Use debe cerrarse primero y conservar su evi
 2. repetir, si cambia el binario o el harness, `Doctor`, `tools/list`, `FindTools` y la sesión
    aislada read; completar el probe directo de Openness solo de lectura si se necesita distinguir
    la API .NET del wrapper MCP;
-3. completar únicamente en fixtures las familias que tengan precondiciones reales: tags/UDT/DB,
+3. completar únicamente en fixtures las familias que tengan precondiciones reales: importación de tags,
+   UDT/DB,
    hardware/E/S, redes/comunicaciones, medidas analógicas y compilación HMI. Si falta catálogo,
    licencia, runtime o una clasificación segura, registrar `Bloqueado` y no improvisar una
    importación;
