@@ -19,6 +19,7 @@ param(
     [string]$AnalysisPath,
     [string]$ProposalPath,
     [string]$ProjectFile,
+    [string]$FixtureRoot,
     [string]$BlockName,
     [string]$FindText,
     [string]$ReplaceText,
@@ -49,6 +50,7 @@ if ($Workflow -ne 'apply' -and $Profile -ne 'read') { throw "Workflow '$Workflow
 if ($Workflow -eq 'apply' -and $Apply) {
     if ($Profile -ne 'write') { throw 'Applying a workflow requires -Profile write.' }
     if (-not $AcknowledgeWriteProfile) { throw 'Applying a workflow requires -AcknowledgeWriteProfile.' }
+    if ([string]::IsNullOrWhiteSpace($FixtureRoot)) { throw 'Applying a workflow requires -FixtureRoot for the disposable isolated fixture.' }
 }
 
 if (-not $OutputDirectory) { $OutputDirectory = Join-Path $root ('70-runs\workflows\' + $Workflow + '-' + (Get-Date -Format 'yyyyMMdd-HHmmss')) }
@@ -94,9 +96,12 @@ elseif ($Workflow -eq 'apply') {
     $applyArguments = @{
         ProposalPath = $ProposalPath
         ProjectFile = $ProjectFile
+        FixtureRoot = $FixtureRoot
         ReportRoot = $applyReportRoot
+        Profile = $Profile
     }
     if ($Apply) { $applyArguments.Apply = $true }
+    if ($AcknowledgeWriteProfile) { $applyArguments.AcknowledgeWriteProfile = $true }
     & $applyScript @applyArguments
     if ($LASTEXITCODE -ne 0) { throw "Apply workflow failed with exit code $LASTEXITCODE." }
     $applyReport = Get-ChildItem -LiteralPath $applyReportRoot -Recurse -File -Filter 'apply-report.json' -ErrorAction Stop |
@@ -123,7 +128,7 @@ $report = [ordered]@{
     outputDirectory = $OutputDirectory
     objective = $Objective
     artifacts = $artifacts
-    nextStep = if ($Workflow -eq 'apply' -and -not $Apply) { 'Revisar apply-report.json y, si procede, repetir con -Profile write -Apply -AcknowledgeWriteProfile.' } else { 'Revisar los artefactos y la evidencia registrada.' }
+    nextStep = if ($Workflow -eq 'apply' -and -not $Apply) { 'Revisar apply-report.json y, si procede, repetir con -Profile write -Apply -AcknowledgeWriteProfile -FixtureRoot <fixture-run-dir>.' } else { 'Revisar los artefactos y la evidencia registrada.' }
 }
 $workflowPath = Join-Path $OutputDirectory 'workflow.json'
 $report | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $workflowPath -Encoding UTF8

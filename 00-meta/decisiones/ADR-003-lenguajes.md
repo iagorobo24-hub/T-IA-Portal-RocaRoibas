@@ -11,7 +11,8 @@
 | Cálculo, escalado, tratamiento de datos, comunicaciones | **SCL** | Texto plano: el agente lo genera bien y diffea en git |
 | Secuencias, máquinas de estado, gestión de modos | **SCL** | Un `CASE` legible vale más que 30 networks de contactos |
 | Lógica que un mantenedor mira y fuerza delante de la máquina | **LAD** | Enclavamientos, mandos de motor/válvula, condiciones de marcha |
-| Seguridad (si aplica) | **LAD** | Convención del sector y trazabilidad en auditoría |
+| Permisos e interlocks estándar de proceso | **LAD** | El mantenedor puede seguirlos en planta; no son una función de seguridad certificada |
+| Funciones de seguridad certificadas (F/Safety, SIL/PL) | **Fuera del alcance del agente** | Requieren ingeniería, herramientas, validación y responsabilidad de seguridad específicas |
 
 ## Consecuencias para el agente
 

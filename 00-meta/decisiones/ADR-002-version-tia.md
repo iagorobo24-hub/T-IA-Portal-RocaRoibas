@@ -34,7 +34,9 @@ Es decir: un `tia-inspect` para V19 sería un `tia-inspect` **sin la razón prin
 ## Consecuencias
 
 - Todo el workspace (estándares, plantillas, recetas) se escribe asumiendo **V20**.
-- Los ejemplos V16 se migran a **V20**.
+- Los ejemplos V16 se pretenden llevar a **V20**. Solo `npatel-basement-light` tiene evidencia
+  local de actualización por `OpenWithUpgrade`; los otros ejemplos siguen pendientes y se procesan
+  en copias independientes.
 - **V19 queda como trabajo pendiente explícito**, no como algo olvidado: hay que envolver la
   funcionalidad de documentos en `#if TIA_V20_PLUS` (~10 puntos de llamada en 3 ficheros) y
   hacer que esas herramientas devuelvan `NotSupported` en V19. Estimación: 2-3 h.

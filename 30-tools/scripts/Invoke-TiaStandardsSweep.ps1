@@ -151,7 +151,11 @@ foreach ($project in $projects) {
                     programmingLanguage = [string]$_.programmingLanguage
                     isConsistent = [bool]$_.isConsistent
                     isKnowHowProtected = [bool]$_.isKnowHowProtected
-                    comment = [bool](-not [string]::IsNullOrWhiteSpace([string]$_.headerName))
+                    # GetBlocks.headerName is a user-defined header ID, not the block comment.
+                    # This read-only sweep does not export each block XML, so comment state is unknown.
+                    comment = $null
+                    commentEvidence = 'not-collected'
+                    commentEncodingStatus = 'unknown'
                 }
             })
             $plcInventories.Add([ordered]@{

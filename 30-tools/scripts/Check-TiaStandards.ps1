@@ -49,9 +49,23 @@ if ($blocks.Count -gt 0 -and $blockExportFiles.Count -eq 0) {
     Add-Finding 'MISSING_EXPORT' 'error' 'The export contains no reviewable Program blocks source files.' $ExportPath
 }
 
-$commentless = @($blocks | Where-Object { $null -ne $_.comment -and $_.comment -eq $false })
+$commentless = @($blocks | Where-Object {
+    $_.PSObject.Properties['commentEvidence'] -and $_.commentEvidence -eq 'block-export-xml' -and $_.comment -eq $false
+})
 foreach ($block in $commentless) {
-    Add-Finding 'MISSING_BLOCK_COMMENT' 'warning' "Block '$($block.name)' has no recorded header comment." ([string]$block.path)
+    Add-Finding 'MISSING_BLOCK_COMMENT' 'warning' "Block '$($block.name)' has no comment in its block XML export." ([string]$block.path)
+}
+$commentUnverified = @($blocks | Where-Object {
+    -not $_.PSObject.Properties['commentEvidence'] -or $_.commentEvidence -ne 'block-export-xml' -or $null -eq $_.comment
+})
+foreach ($block in $commentUnverified) {
+    Add-Finding 'BLOCK_COMMENT_UNVERIFIED' 'warning' "Block '$($block.name)' comment was not verified from a block-level XML export." ([string]$block.path)
+}
+$commentEncodingIssues = @($blocks | Where-Object {
+    $_.PSObject.Properties['commentEncodingStatus'] -and $_.commentEncodingStatus -eq 'suspect'
+})
+foreach ($block in $commentEncodingIssues) {
+    Add-Finding 'BLOCK_COMMENT_ENCODING_SUSPECT' 'warning' "Block '$($block.name)' comment export contains signs of encoding damage." ([string]$block.path)
 }
 
 $errors = @($findings | Where-Object { $_.severity -in @('error', 'blocked') })

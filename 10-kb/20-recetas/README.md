@@ -75,6 +75,14 @@ Si falla        los modos de fallo conocidos y su arreglo
 | [R16](R16-descripcion-funcional.md) | Generar la descripción funcional | ✅ generada contra ejemplo real; no sustituye validación funcional |
 | [R17](R17-aceptacion-plcsim.md) | Aceptación conductual en PLCSIM Advanced | 🟡 runner y protocolo verificados; comportamiento real pendiente |
 
+### Tanda 5 — diagnóstico y aceptación por familia
+
+| # | Receta | Estado |
+|---|---|---|
+| [R18](R18-medidas-analogicas.md) | Medidas y señales analógicas | 📄 procedimiento documentado; requiere módulo/canal identificados y banco de prueba |
+| [R19](R19-diagnostico-comunicaciones.md) | Diagnóstico de comunicaciones | 📄 procedimiento documentado; handshake solo en endpoint aislado |
+| [R20](R20-aceptacion-hmi-por-modelo.md) | Aceptación HMI según modelo y Runtime | 📄 matriz documentada; Runtime/licencia local pendiente |
+
 El orden y su porqué están en [ADR-004](../../00-meta/decisiones/ADR-004-prioridades.md).
 
 ## Dónde probar todo esto

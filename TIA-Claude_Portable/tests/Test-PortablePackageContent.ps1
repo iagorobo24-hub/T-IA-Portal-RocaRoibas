@@ -7,7 +7,12 @@ $ErrorActionPreference = 'Stop'
 $builder = Join-Path $WorkspaceRoot 'TIA-Claude_Portable\build\Build-PortablePackage.ps1'
 if (-not (Test-Path -LiteralPath $builder -PathType Leaf)) { throw 'Build-PortablePackage.ps1 is missing.' }
 
-$outputRoot = Join-Path $WorkspaceRoot ('90-tmp\portable-content-test-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff'))
+$runStamp = Get-Date -Format 'yyyyMMdd-HHmmss-fff'
+$outputRoot = [IO.Path]::GetFullPath((Join-Path $WorkspaceRoot "90-tmp\portable-content-test-$runStamp"))
+$scratchRoot = [IO.Path]::GetFullPath((Join-Path $WorkspaceRoot '90-tmp'))
+if (-not $outputRoot.StartsWith($scratchRoot.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) {
+    throw "Portable content test output escapes scratch directory: $outputRoot"
+}
 try {
     & $builder -WorkspaceRoot $WorkspaceRoot -OutputRoot $outputRoot
     if ($LASTEXITCODE -ne 0) { throw 'Portable package builder returned a failure exit code.' }
@@ -32,10 +37,10 @@ try {
             throw "Core package is missing V21-enablement item: $v21Item"
         }
     }
-    foreach ($tool in @('Invoke-TiaProjectAnalysis.ps1', 'New-TiaSclProposal.ps1', 'Invoke-TiaWorkflow.ps1', 'Invoke-TiaSclProposalApply.ps1', 'New-TiaIoList.ps1', 'New-TiaFunctionalDescription.ps1', 'Convert-TiaTagTableExportToInventory.ps1', 'Merge-TiaTagEvidenceIntoInventory.ps1', 'Inspect-McpToolSchemas.ps1', 'Invoke-TiaSimulationAcceptance.ps1')) {
+    foreach ($tool in @('Invoke-TiaProjectAnalysis.ps1', 'New-TiaSclProposal.ps1', 'Invoke-TiaWorkflow.ps1', 'Invoke-TiaSclProposalApply.ps1', 'New-TiaIoList.ps1', 'New-TiaFunctionalDescription.ps1', 'Convert-TiaTagTableExportToInventory.ps1', 'Merge-TiaTagEvidenceIntoInventory.ps1', 'Inspect-McpToolSchemas.ps1', 'Invoke-TiaSimulationAcceptance.ps1', 'New-TiaFixtureManifest.ps1', 'TiaBlockMetadata.ps1', 'TiaExampleSecrets.ps1', 'TiaSclSafety.ps1')) {
         if (-not (Test-Path -LiteralPath (Join-Path $core "30-tools\scripts\$tool") -PathType Leaf)) { throw "Core package is missing semantic tool: $tool" }
     }
-    foreach ($test in @('Test-TiaProjectAnalysis.ps1', 'Test-TiaSclProposal.ps1', 'Test-TiaSclProposalApply.ps1', 'Test-TiaIoList.ps1', 'Test-TiaFunctionalDescription.ps1', 'Test-TiaWorkflow.ps1', 'Test-ConvertTiaTagTableExport.ps1', 'Test-MergeTiaTagEvidence.ps1', 'Test-TiaCreationRecipes.ps1', 'Test-InspectMcpToolSchemas.ps1', 'Test-InvokeTiaSimulationAcceptance.ps1', 'Test-PlcSimCommandProtocol.ps1')) {
+    foreach ($test in @('Test-TiaProjectAnalysis.ps1', 'Test-TiaBlockMetadata.ps1', 'Test-TiaFixtureManifest.ps1', 'Test-AgentDemoScaffold.ps1', 'Test-TiaSclProposal.ps1', 'Test-TiaSclProposalApply.ps1', 'Test-TiaSclSafetyGate.ps1', 'Test-TiaExampleSecrets.ps1', 'Test-TiaIoList.ps1', 'Test-TiaFunctionalDescription.ps1', 'Test-TiaWorkflow.ps1', 'Test-ConvertTiaTagTableExport.ps1', 'Test-MergeTiaTagEvidence.ps1', 'Test-TiaCreationRecipes.ps1', 'Test-InspectMcpToolSchemas.ps1', 'Test-InvokeTiaSimulationAcceptance.ps1', 'Test-TiaSimulationAcceptanceSafety.ps1', 'Test-PlcSimCommandProtocol.ps1')) {
         if (-not (Test-Path -LiteralPath (Join-Path $core "30-tools\tests\$test") -PathType Leaf)) { throw "Core package is missing semantic test: $test" }
     }
     foreach ($guide in @('README-INSTALL.md', 'docs\arquitectura.md', 'docs\funcionamiento.md', 'docs\harnesses.md', 'docs\prompt-claude-code.md')) {
@@ -52,8 +57,19 @@ try {
     if ($exampleManifestObject.packageKind -ne 'examples' -or $exampleManifestObject.containsProjects -ne $true) {
         throw 'Examples manifest must explicitly declare that it contains projects.'
     }
+    $secretScanner = Join-Path $core '30-tools\scripts\TiaExampleSecrets.ps1'
+    . $secretScanner
+    $secretFindings = @(Find-TiaExampleJwtLikeSecret -RootPath @($core, $examples))
+    if ($secretFindings.Count -gt 0) {
+        $findingSummary = @($secretFindings | ForEach-Object { "$($_.path) ($($_.count))" }) -join '; '
+        throw "Portable output contains JWT-like credentials: $findingSummary"
+    }
+    & (Join-Path $WorkspaceRoot 'TIA-Claude_Portable\tests\Test-PortablePackage.ps1') -PackageRoot $outputRoot
+    if ($LASTEXITCODE -ne 0) { throw 'Portable package metadata validation failed.' }
     Write-Output 'PASS: portable core excludes project artifacts and examples are separately manifested'
 }
 finally {
-    if (Test-Path -LiteralPath $outputRoot) { Remove-Item -LiteralPath $outputRoot -Recurse -Force }
+    if ($outputRoot.StartsWith($scratchRoot.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $outputRoot)) {
+        Remove-Item -LiteralPath $outputRoot -Recurse -Force
+    }
 }

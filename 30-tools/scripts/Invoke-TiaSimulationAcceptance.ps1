@@ -16,6 +16,7 @@ param(
     [string]$OutputPath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path '70-runs\simulation\acceptance-latest.json'),
     [string]$ProjectFile,
     [string]$ProjectName,
+    [string]$DevicePath,
     [string]$SoftwarePath,
     [string]$TargetIpAddress,
     [string]$VirtualInterfacePattern = 'PLCSIM',
@@ -70,7 +71,7 @@ function New-BaseReport([object]$Readiness) {
         status = 'PREVIEW'
         phase = 'PREFLIGHT'
         mutationAttempted = $false
-        project = [ordered]@{ file = $ProjectFile; name = $ProjectName; softwarePath = $SoftwarePath; targetIpAddress = $TargetIpAddress }
+        project = [ordered]@{ file = $ProjectFile; name = $ProjectName; devicePath = $DevicePath; softwarePath = $SoftwarePath; targetIpAddress = $TargetIpAddress }
         virtualTarget = [ordered]@{ acknowledged = [bool]$AcknowledgeVirtualTarget; interfacePattern = $VirtualInterfacePattern }
         blockers = @()
         nextActions = @()
@@ -111,9 +112,9 @@ function Start-VirtualPlcProcess {
     [pscustomobject]@{ process = $process; ready = $ready; stderrTask = $stderrTask }
 }
 
-function Invoke-IoPlan([Diagnostics.Process]$Process, [string]$Path) {
+function Invoke-IoPlan([Diagnostics.Process]$Process, [string]$Path, [object]$Plan, [string]$Sha256) {
     if ($null -eq $Process) { throw 'IoPlanPath requiere -StartVirtualPlc para disponer del proceso nativo.' }
-    $plan = Read-Json $Path
+    $plan = $Plan
     $steps = @($plan.steps)
     if ($steps.Count -eq 0) { throw "El plan de E/S no contiene steps: $Path" }
     $results = [System.Collections.Generic.List[object]]::new()
@@ -148,9 +149,86 @@ function Invoke-IoPlan([Diagnostics.Process]$Process, [string]$Path) {
         schemaVersion = 1
         name = [string]$plan.name
         planPath = [IO.Path]::GetFullPath($Path)
+        sha256 = $Sha256
         verified = $true
         steps = @($results)
     }
+}
+
+function Get-IpAddressPropertyValues([object]$InputObject) {
+    $values = [System.Collections.Generic.List[string]]::new()
+    $pending = [System.Collections.Generic.List[object]]::new()
+    if ($null -ne $InputObject) { $pending.Add($InputObject) }
+    $addressPropertyNames = @('primaryaddress', 'primaryipaddress', 'ipaddress', 'ip', 'address')
+    while ($pending.Count -gt 0) {
+        $lastIndex = $pending.Count - 1
+        $node = $pending[$lastIndex]
+        $pending.RemoveAt($lastIndex)
+        if ($null -eq $node -or $node -is [string]) { continue }
+        if ($node -is [System.Collections.IDictionary]) {
+            foreach ($key in $node.Keys) {
+                $value = $node[$key]
+                if ($addressPropertyNames -contains ([string]$key).ToLowerInvariant() -and $value -is [string]) {
+                    $parsed = $null
+                    if ([Net.IPAddress]::TryParse([string]$value, [ref]$parsed)) { $values.Add($parsed.ToString()) }
+                }
+                if ($null -ne $value -and $value -isnot [string]) { $pending.Add($value) }
+            }
+            continue
+        }
+        if ($node -is [System.Collections.IEnumerable]) {
+            foreach ($item in $node) { if ($null -ne $item) { $pending.Add($item) } }
+            continue
+        }
+        foreach ($property in @($node.PSObject.Properties)) {
+            if ($addressPropertyNames -contains $property.Name.ToLowerInvariant() -and $property.Value -is [string]) {
+                $parsed = $null
+                if ([Net.IPAddress]::TryParse([string]$property.Value, [ref]$parsed)) { $values.Add($parsed.ToString()) }
+            }
+            if ($null -ne $property.Value -and $property.Value -isnot [string]) { $pending.Add($property.Value) }
+        }
+    }
+    @($values | Select-Object -Unique)
+}
+
+function Read-ValidatedIoPlan([string]$Path) {
+    if ([string]::IsNullOrWhiteSpace($Path)) { throw 'Falta -IoPlanPath; no se acepta una descarga sin plan de comportamiento.' }
+    $fullPath = [IO.Path]::GetFullPath($Path)
+    if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) { throw "El plan de E/S no existe: $fullPath" }
+    $plan = Read-Json $fullPath
+    if ($null -eq $plan -or [int]$plan.schemaVersion -ne 1) { throw 'El plan de E/S debe ser JSON con schemaVersion=1.' }
+    if ([string]::IsNullOrWhiteSpace([string]$plan.name)) { throw 'El plan de E/S necesita un name no vacío.' }
+    $steps = @($plan.steps)
+    if ($steps.Count -eq 0) { throw 'El plan de E/S no contiene steps.' }
+    $hasFunctionalObservation = $false
+    $allowedCommands = @('read-area-size', 'read-bit', 'write-bit', 'read-byte', 'write-byte', 'read-bool-tag', 'write-bool-tag', 'read-uint8-tag', 'write-uint8-tag', 'read-float-tag', 'write-float-tag')
+    foreach ($index in 0..($steps.Count - 1)) {
+        $step = $steps[$index]
+        $command = [string]$step.command
+        if ([string]::IsNullOrWhiteSpace($command)) { throw "El step $index no tiene command." }
+        if ($command -match '[\r\n\x00]') { throw "El step $index command debe ocupar una sola línea y no contener NUL." }
+        $operation = ($command -split '\s+', 2)[0]
+        if ($allowedCommands -notcontains $operation) { throw "El step $index usa una operación no permitida por el adaptador PLCSIM: '$operation'." }
+        if (-not $step.expect -or @($step.expect.PSObject.Properties).Count -eq 0) { throw "El step $index debe declarar expect." }
+        if ($operation -like 'read-*') {
+            $functionalProperties = @($step.expect.PSObject.Properties | Where-Object { $_.Name -notin @('status', 'op') })
+            if ($functionalProperties.Count -eq 0) { throw "El step de lectura $index debe comprobar al menos un valor funcional, además de status/op." }
+            $tokens = @($command -split '\s+')
+            $readsOutputArea = $operation -in @('read-bit', 'read-byte') -and $tokens.Count -gt 1 -and $tokens[1] -eq 'output'
+            $readsSymbolicTag = $operation -in @('read-bool-tag', 'read-uint8-tag', 'read-float-tag')
+            if ($readsOutputArea -or $readsSymbolicTag) { $hasFunctionalObservation = $true }
+        }
+    }
+    if (-not $hasFunctionalObservation) { throw 'El plan debe leer y comprobar al menos un valor funcional observable.' }
+    [pscustomobject]@{
+        path = $fullPath
+        plan = $plan
+        sha256 = (Get-FileHash -LiteralPath $fullPath -Algorithm SHA256).Hash
+    }
+}
+
+function Test-StrictTrue([object]$Value) {
+    return ($Value -is [bool] -and $Value -eq $true)
 }
 
 $readiness = Read-Json $ReadinessPath
@@ -158,10 +236,10 @@ $report = New-BaseReport $readiness
 $requiredGates = @('plcToolchainReady', 'plcsimVirtualAdapterReady', 'tiaInstanceSafeForApply')
 $gateBlockers = [System.Collections.Generic.List[string]]::new()
 foreach ($gate in $requiredGates) {
-    if (-not [bool]$readiness.gates.$gate) { $gateBlockers.Add("Readiness gate '$gate' is false.") }
-}
-if (@($readiness.blockers).Count -gt 0) {
-    foreach ($blocker in @($readiness.blockers)) { $gateBlockers.Add([string]$blocker) }
+    $gateProperty = if ($readiness.gates) { $readiness.gates.PSObject.Properties[$gate] } else { $null }
+    if (-not $gateProperty -or -not (Test-StrictTrue $gateProperty.Value)) {
+        $gateBlockers.Add("Readiness gate '$gate' must be the JSON boolean true.")
+    }
 }
 
 if (-not $Run) {
@@ -179,6 +257,7 @@ if ($gateBlockers.Count -gt 0) {
 $missing = @(
     @{ name = 'ProjectFile'; value = $ProjectFile },
     @{ name = 'ProjectName'; value = $ProjectName },
+    @{ name = 'DevicePath'; value = $DevicePath },
     @{ name = 'SoftwarePath'; value = $SoftwarePath },
     @{ name = 'TargetIpAddress'; value = $TargetIpAddress }
 ) | Where-Object { [string]::IsNullOrWhiteSpace([string]$_.value) }
@@ -187,6 +266,22 @@ if ($missing.Count -gt 0 -or -not $AcknowledgeVirtualTarget) {
     $report.blockers = @($missing | ForEach-Object { "Falta el parámetro obligatorio '$($_.name)'." })
     if (-not $AcknowledgeVirtualTarget) { $report.blockers += 'Falta -AcknowledgeVirtualTarget; no se permite descargar sin declarar que el destino es PLCSIM.' }
     $report.nextActions = @('Revisar el destino y repetir con los parámetros obligatorios.')
+    Write-Report $report 2
+}
+
+if (-not $StartVirtualPlc) {
+    $report.status = 'BLOCKED'
+    $report.blockers = @('La aceptación requiere -StartVirtualPlc para identificar, mantener y limpiar la instancia virtual usada por el plan.')
+    $report.nextActions = @('No use destinos externos gestionados fuera del runner; proporcione una instancia PLCSIM desechable gestionada por este flujo.')
+    Write-Report $report 2
+}
+
+$validatedIoPlan = $null
+try { $validatedIoPlan = Read-ValidatedIoPlan $IoPlanPath }
+catch {
+    $report.status = 'BLOCKED'
+    $report.blockers = @($_.Exception.Message)
+    $report.nextActions = @('Corrija el plan de E/S y compruebe sus expectativas funcionales antes de iniciar PLCSIM o contactar con el servidor MCP.')
     Write-Report $report 2
 }
 
@@ -225,10 +320,12 @@ try {
 
     $report.phase = 'PREFLIGHT'
     $preflightCalls = @(
-        @{ name = 'Bootstrap'; args = @{} },
+    @{ name = 'Bootstrap'; args = @{} },
         @{ name = 'Connect'; args = @{} },
         @{ name = 'OpenProject'; args = @{ path = $ProjectFile; closeForeignProject = $false } },
         @{ name = 'GetProjectTree'; args = @{} },
+        @{ name = 'GetSoftwareTree'; args = @{ softwarePath = $SoftwarePath } },
+        @{ name = 'GetDeviceIpAddress'; args = @{ devicePath = $DevicePath } },
         @{ name = 'CompileSoftware'; args = @{ softwarePath = $SoftwarePath; password = '' } },
         @{ name = 'CheckDownloadReadiness'; args = @{ softwarePath = $SoftwarePath } },
         @{ name = 'Disconnect'; args = @{} }
@@ -236,24 +333,81 @@ try {
     $callsJson = $preflightCalls | ConvertTo-Json -Depth 20 -Compress
     & $pwsh -NoProfile -NonInteractive -File $sequenceScript -ExecutablePath $McpExecutablePath -Arguments $McpArguments -CallsJson $callsJson -OutputPath $preflightSequencePath -TimeoutSeconds $TimeoutSeconds | Out-Null
     $preflight = if (Test-Path -LiteralPath $preflightSequencePath) { Read-Json $preflightSequencePath } else { $null }
+    if (-not $preflight -or -not (Test-StrictTrue $preflight.success)) { throw 'The MCP preflight sequence did not complete successfully.' }
     $report.calls = @($preflight.calls)
     $treeCall = @($preflight.calls | Where-Object name -eq 'GetProjectTree' | Select-Object -Last 1)
     $treePayload = Get-ToolPayload $treeCall
     $treeText = if ($treePayload.tree) { [string]$treePayload.tree } else { [string]$treeCall.text }
     if ($treeText -notmatch [regex]::Escape($ProjectName)) { throw "Project tree does not contain the expected project '$ProjectName'." }
+    if ($treeText -notmatch [regex]::Escape($DevicePath)) { throw "DevicePath '$DevicePath' was not read from GetProjectTree." }
+    if ($treeText -notmatch [regex]::Escape($SoftwarePath)) { throw "SoftwarePath '$SoftwarePath' was not read from GetProjectTree." }
+    $softwareTreeCall = @($preflight.calls | Where-Object name -eq 'GetSoftwareTree' | Select-Object -Last 1)
+    $softwareTreePayload = Get-ToolPayload $softwareTreeCall
+    $softwareTreeText = if ($softwareTreePayload.tree) { [string]$softwareTreePayload.tree } else { [string]$softwareTreeCall.text }
+    if ($softwareTreeText -notmatch [regex]::Escape($SoftwarePath)) { throw "GetSoftwareTree did not confirm the exact SoftwarePath '$SoftwarePath'." }
+    $compileCall = @($preflight.calls | Where-Object name -eq 'CompileSoftware' | Select-Object -Last 1)
+    $compilePayload = Get-ToolPayload $compileCall
+    $compileStateProperty = if ($compilePayload) { $compilePayload.PSObject.Properties['state'] } else { $null }
+    $compileErrorsProperty = if ($compilePayload) { $compilePayload.PSObject.Properties['errorCount'] } else { $null }
+    $compileWarningsProperty = if ($compilePayload) { $compilePayload.PSObject.Properties['warningCount'] } else { $null }
+    if (-not $compileStateProperty -or [string]$compileStateProperty.Value -ne 'Success' -or
+        -not $compileErrorsProperty -or [int]$compileErrorsProperty.Value -ne 0 -or
+        -not $compileWarningsProperty -or [int]$compileWarningsProperty.Value -ne 0) {
+        throw 'CompileSoftware debe terminar en Success con 0 errores y 0 avisos antes de descargar.'
+    }
+    $deviceIpCall = @($preflight.calls | Where-Object name -eq 'GetDeviceIpAddress' | Select-Object -Last 1)
+    $deviceIpPayload = Get-ToolPayload $deviceIpCall
+    $configuredIpAddresses = @(Get-IpAddressPropertyValues $deviceIpPayload)
+    $parsedTargetIp = $null
+    if (-not [Net.IPAddress]::TryParse($TargetIpAddress, [ref]$parsedTargetIp)) { throw "TargetIpAddress no es una dirección IP válida: '$TargetIpAddress'." }
+    if ($configuredIpAddresses -notcontains $parsedTargetIp.ToString()) {
+        throw "La IP objetivo '$TargetIpAddress' no aparece en las direcciones leídas de GetDeviceIpAddress para '$DevicePath'."
+    }
     $readinessCall = @($preflight.calls | Where-Object name -eq 'CheckDownloadReadiness' | Select-Object -Last 1)
     $downloadReadiness = Get-ToolPayload $readinessCall
-    if (-not $downloadReadiness.Ready) { throw "CheckDownloadReadiness did not return Ready=true: $($readinessCall.text)" }
+    if (-not (Test-StrictTrue $downloadReadiness.Ready) -or -not (Test-StrictTrue $downloadReadiness.IsConsistent)) {
+        throw "CheckDownloadReadiness debe devolver Ready=true e IsConsistent=true: $($readinessCall.text)"
+    }
     $routes = @($downloadReadiness.Meta.downloadRoutes)
-    $virtualRoutes = @($routes | Where-Object { [string]$_.pgPcInterface -match $VirtualInterfacePattern })
-    if ($virtualRoutes.Count -eq 0) { throw "No download route matches the virtual interface pattern '$VirtualInterfacePattern'." }
-    $report.preflight = [ordered]@{ readiness = $downloadReadiness; selectedRoutes = $virtualRoutes }
+    $adapterReady = $virtualAdapterResult.ready
+    $adapterIp = $null
+    if (-not [Net.IPAddress]::TryParse([string]$adapterReady.ip, [ref]$adapterIp) -or $adapterIp.ToString() -ne $parsedTargetIp.ToString()) {
+        throw "La instancia PLCSIM lista no confirma la misma IP objetivo ($TargetIpAddress)."
+    }
+    $adapterInterfaces = @(
+        [string]$adapterReady.interfaceName,
+        [string]$adapterReady.interfaceDescription
+    ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+    if (@($adapterInterfaces | Where-Object { [string]::Equals($_, $PlcSimInterface, [StringComparison]::OrdinalIgnoreCase) }).Count -ne 1) {
+        throw "La instancia PLCSIM no confirma la interfaz virtual esperada '$PlcSimInterface'."
+    }
+    $virtualRoutes = @($routes | Where-Object {
+        $routeName = [string]$_.pgPcInterface
+        $patternMatch = $false
+        try { $patternMatch = ($routeName -match $VirtualInterfacePattern) } catch { throw "VirtualInterfacePattern no es una expresión válida: $VirtualInterfacePattern" }
+        $exactAdapterMatch = @($adapterInterfaces | Where-Object { [string]::Equals($_, $routeName, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0
+        $patternMatch -and $exactAdapterMatch
+    })
+    if ($virtualRoutes.Count -ne 1) { throw "Se esperaba exactamente una ruta para '$PlcSimInterface' con patrón '$VirtualInterfacePattern'; se encontraron $($virtualRoutes.Count)." }
+    $selectedRoute = $virtualRoutes[0]
+    foreach ($ipPropertyName in @('targetIpAddress', 'ipAddress', 'cpuIpAddress', 'targetAddress')) {
+        $routeIpProperty = $selectedRoute.PSObject.Properties[$ipPropertyName]
+        if ($routeIpProperty -and -not [string]::Equals([string]$routeIpProperty.Value, $parsedTargetIp.ToString(), [StringComparison]::OrdinalIgnoreCase)) {
+            throw "La ruta seleccionada declara $ipPropertyName='$($routeIpProperty.Value)', no la IP objetivo '$TargetIpAddress'."
+        }
+    }
+    $report.preflight = [ordered]@{
+        readiness = $downloadReadiness
+        configuredDeviceIpAddresses = $configuredIpAddresses
+        virtualInstance = [ordered]@{ ip = $adapterIp.ToString(); interfaceName = $adapterReady.interfaceName; interfaceDescription = $adapterReady.interfaceDescription }
+        selectedRoutes = @($selectedRoute)
+    }
 
     $downloadCalls = @(
         @{ name = 'Bootstrap'; args = @{} },
         @{ name = 'Connect'; args = @{} },
         @{ name = 'AttachToOpenProject'; args = @{ projectName = $ProjectName } },
-        @{ name = 'DownloadToPlc'; args = @{ softwarePath = $SoftwarePath; consistentBlocksOnly = $true; keepActualValues = $true; startAfterDownload = $true; stopBeforeDownload = $true; password = ''; pgPcInterface = $VirtualInterfacePattern; targetIpAddress = $TargetIpAddress } },
+        @{ name = 'DownloadToPlc'; args = @{ softwarePath = $SoftwarePath; consistentBlocksOnly = $true; keepActualValues = $true; startAfterDownload = $true; stopBeforeDownload = $true; password = ''; pgPcInterface = [string]$selectedRoute.pgPcInterface; targetIpAddress = $parsedTargetIp.ToString() } },
         @{ name = 'GetOnlineState'; args = @{ softwarePath = $SoftwarePath } },
         @{ name = 'Disconnect'; args = @{} }
     )
@@ -263,12 +417,9 @@ try {
     $download = if (Test-Path -LiteralPath $downloadSequencePath) { Read-Json $downloadSequencePath } else { $null }
     $report.calls += @($download.calls)
     if (-not $download.success) { throw "Download sequence failed; inspect calls in the report." }
-    if (-not [string]::IsNullOrWhiteSpace($IoPlanPath)) {
-        $report.phase = 'BEHAVIOR'
-        $report.behavior = Invoke-IoPlan $virtualProcess $IoPlanPath
-    }
+    $report.phase = 'BEHAVIOR'
+    $report.behavior = Invoke-IoPlan $virtualProcess $validatedIoPlan.path $validatedIoPlan.plan $validatedIoPlan.sha256
     $report.status = 'VERIFIED'
-    if (-not $report.behavior) { $report.phase = 'DOWNLOAD_AND_ONLINE_CHECK' }
     $report.nextActions = @('Registrar el comportamiento observable de la planta y, si procede, iniciar una aceptación HMI separada.')
 }
 catch {

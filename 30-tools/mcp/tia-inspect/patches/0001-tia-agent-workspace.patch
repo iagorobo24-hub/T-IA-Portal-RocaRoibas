@@ -1,0 +1,1407 @@
+diff --git a/src/TiaMcpServer/CliOptions.cs b/src/TiaMcpServer/CliOptions.cs
+index 7c9f3b3186f0881c9030f7d254d5d767c175f2ca..ba578f86aa33fe3488856cb8b9ea98edabfdd064 100644
+--- a/src/TiaMcpServer/CliOptions.cs
++++ b/src/TiaMcpServer/CliOptions.cs
+@@ -6,6 +6,8 @@ public class CliOptions
+         public int? Logging { get; set; } // "stdio" or "http"
+         public bool Doctor { get; set; } // print environment diagnostics and exit
+         public bool AllowWrite { get; set; } // register the project-mutating tools
++        public bool Isolated { get; set; } // start a private headless Openness instance; never attach
++        public string? FixtureRoot { get; set; } // root containing one explicitly marked disposable project clone
+ 
+         public static CliOptions ParseArgs(string[] args)
+         {
+@@ -33,6 +35,19 @@ public static CliOptions ParseArgs(string[] args)
+                         options.AllowWrite = true;
+                         break;
+ 
++                    case "-isolated":
++                    case "--isolated":
++                        options.Isolated = true;
++                        break;
++
++                    case "-fixture-root":
++                    case "--fixture-root":
++                        if (i + 1 < args.Length)
++                        {
++                            options.FixtureRoot = args[++i];
++                        }
++                        break;
++
+                     case "-logging":
+                     case "--logging":
+                         if (i + 1 < args.Length && int.TryParse(args[i + 1], out int l))
+diff --git a/src/TiaMcpServer/ModelContextProtocol/McpPrompts.cs b/src/TiaMcpServer/ModelContextProtocol/McpPrompts.cs
+index f4d06680a5b0143921e3627cb01892348eb54881..f4e2f37c8f34918a840bb9f14399e41b3bbbbe66 100644
+--- a/src/TiaMcpServer/ModelContextProtocol/McpPrompts.cs
++++ b/src/TiaMcpServer/ModelContextProtocol/McpPrompts.cs
+@@ -38,24 +38,26 @@ public static string Connect()
+ Use the Connect tool to initiate the connection.";
+         }
+ 
+-        [McpServerPrompt(Name = "OpenProject"), Description("Open a TIA Portal project")]
+-        public static string OpenProject(string projectPath)
++        [McpServerPrompt(Name = "OpenProject"), Description("Open the exact disposable fixture named by a manifest")]
++        public static string OpenProject(string path)
+         {
+-            return $@"Open the TIA Portal project.
++            return $@"Open the exact disposable TIA Portal fixture named in its manifest.
+ 
+ Common parameter values:
+-- projectPath: the full path to the project file (.ap18, .ap19, .ap20, etc.) or local session file (.als18, .als19, .als20, etc.).
++- path: the exact full path to the .apXX or .alsXX project declared by .tia-agent-fixture.json under the configured --fixture-root.
+ 
+ Use the OpenProject tool with this parameter:
+-- projectPath: {projectPath}";
++- path: {path}
++
++The server refuses projects outside the configured fixture root or projects not named in the manifest. Never use this for a client project or a project open in a user-visible TIA session.";
+         }
+ 
+         [McpServerPrompt(Name = "CloseProject"), Description("Close the currently open TIA Portal project")]
+         public static string CloseProject()
+         {
+-            return @"Close the currently open TIA Portal project.
++            return @"Close the currently open disposable fixture project in the isolated TIA instance.
+ 
+-This will close the active project and return TIA Portal to the main screen.
++CloseProject is restricted to an isolated fixture session. It cannot close a project in a user-visible TIA session.
+ 
+ Use the CloseProject tool to close the current project.";
+         }
+@@ -233,7 +235,7 @@ public static string ExportAllTypesAsDocumentsStructured(string softwarePath, st
+ 
+         #region Import From Documents Templates
+ 
+-        [McpServerPrompt(Name = "ImportFromDocuments"), Description("Import a single block from SIMATIC SD documents (.s7dcl/.s7res) (V20+)")]
++        // No prompt is registered while opaque source imports are disabled pending payload preflight.
+         public static string ImportFromDocuments(string softwarePath, string importPath, string fileNameWithoutExtension, string groupPath = "", string importOption = "Override")
+         {
+             return $@"Import a single program block from SIMATIC SD documents into PLC software (requires TIA Portal V20 or newer).
+@@ -255,7 +257,7 @@ public static string ImportFromDocuments(string softwarePath, string importPath,
+ - importOption: {importOption}";
+         }
+ 
+-        [McpServerPrompt(Name = "ImportTypesFromDocuments"), Description("Import PLC data types from SIMATIC Source Documents (V21+)")]
++        // No prompt is registered while incoming F-compliant UDTs cannot be classified.
+         public static string ImportTypesFromDocuments(string softwarePath, string importPath, string groupPath = "", string regexName = "", string importOption = "Override")
+         {
+             return $@"Import PLC data types (UDTs) from SIMATIC Source Documents into PLC software (requires TIA Portal V21 or newer and the server started with '--allow-write').
+@@ -277,7 +279,7 @@ Use ImportTypeFromDocuments instead when you want a single named document set.
+ - importOption: {importOption}";
+         }
+ 
+-        [McpServerPrompt(Name = "ImportBlocksFromDocuments"), Description("Import blocks from SIMATIC SD documents (.s7dcl/.s7res) (V20+)")]
++        // No prompt is registered while opaque source imports are disabled pending payload preflight.
+         public static string ImportBlocksFromDocuments(string softwarePath, string importPath, string groupPath = "", string regexName = "", string importOption = "Override")
+         {
+             return $@"Import multiple program blocks from SIMATIC SD documents into PLC software (requires TIA Portal V20 or newer).
+diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServer.Lookup.cs b/src/TiaMcpServer/ModelContextProtocol/McpServer.Lookup.cs
+index 0012dd32781fea5c9d7fe36b001b2d9d424e4e71..0d13df0005d33e41e005b4aeace1ed8b4a8fd0f0 100644
+--- a/src/TiaMcpServer/ModelContextProtocol/McpServer.Lookup.cs
++++ b/src/TiaMcpServer/ModelContextProtocol/McpServer.Lookup.cs
+@@ -68,6 +68,12 @@ public static ResponseOpenTiaProject OpenTiaProject(
+         {
+             try
+             {
++                if (!Engineering.IsDisposableFixtureProject(path))
++                {
++                    throw new McpException(
++                        $"OpenTiaProject refused '{path}': it is not the exact disposable project declared by the fixture manifest under '{Engineering.FixtureRoot}'.");
++                }
++
+                 var connected = Portal.IsConnected();
+ 
+                 if (!connected && !Portal.ConnectPortal())
+diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServer.cs b/src/TiaMcpServer/ModelContextProtocol/McpServer.cs
+index eb1ec81fbaeac658f057f17b4feeb1f4aeaf6a51..591ba819be44712371599a5e17c283c8a764c02f 100644
+--- a/src/TiaMcpServer/ModelContextProtocol/McpServer.cs
++++ b/src/TiaMcpServer/ModelContextProtocol/McpServer.cs
+@@ -4,6 +4,7 @@
+ using ModelContextProtocol.Protocol;
+ using ModelContextProtocol.Server;
+ using Siemens.Engineering.Compiler;
++using Siemens.Engineering.Safety;
+ using Siemens.Engineering.SW;
+ using Siemens.Engineering.SW.Blocks;
+ using System;
+@@ -27,6 +28,15 @@ public static partial class McpServer
+ 
+         public static ILogger? Logger { get; set; }
+ 
++        /// <summary>
++        /// Classify F blocks from the language enum and the Siemens safety signature service.
++        /// Unknown languages or unavailable/failed safety metadata stay null so writers can fail closed.
++        /// </summary>
++        internal static bool? GetFailsafeClassification(PlcBlock block)
++        {
++            return SafetyClassification.GetFailsafeClassification(block);
++        }
++
+         public static Portal Portal
+         {
+             get
+@@ -134,7 +144,7 @@ public static ResponseState GetState()
+                         IsConnected = state.IsConnected,
+                         Project = state.Project,
+                         Session = state.Session,
+-                        AllowWrite = WritePolicy.AllowWrite,
++                        AllowWrite = WritePolicy.IsWriteEnabled,
+                         Meta = new JsonObject
+                         {
+                             ["timestamp"] = DateTime.Now,
+@@ -163,7 +173,7 @@ public static ResponseDoctor Doctor()
+             try
+             {
+                 // Fully qualified: 'Diagnostics' alone would collide with the System.Diagnostics namespace.
+-                var report = TiaMcpServer.Siemens.Diagnostics.Run(Portal, WritePolicy.AllowWrite);
++                var report = TiaMcpServer.Siemens.Diagnostics.Run(Portal, WritePolicy.IsWriteEnabled);
+ 
+                 return new ResponseDoctor
+                 {
+@@ -248,7 +258,28 @@ public static ResponseOpenProject OpenProject(
+         {
+             try
+             {
+-                Portal.CloseProject();
++                if (!Engineering.HasFixtureRoot)
++                {
++                    throw new McpException(
++                        "OpenProject requires '--isolated --fixture-root <fixture-directory>' and a matching .tia-agent-fixture.json manifest.");
++                }
++
++                if (!Engineering.IsDisposableFixtureProject(path))
++                {
++                    throw new McpException(
++                        $"OpenProject refused '{path}': it is not the exact disposable project declared by the fixture manifest under '{Engineering.FixtureRoot}'.");
++                }
++
++                if (!Portal.IsConnected())
++                {
++                    throw new McpException("Connect to the isolated TIA instance before opening a disposable project.");
++                }
++
++                if (Portal.ProjectIsValid)
++                {
++                    throw new McpException(
++                        "The isolated instance already has a project open. Close that fixture explicitly before opening another one.");
++                }
+ 
+                 // get project extension
+                 string extension = Path.GetExtension(path).ToLowerInvariant();
+@@ -294,7 +325,7 @@ public static ResponseOpenProject OpenProject(
+             }
+         }
+ 
+-        [McpServerTool(Name = "SaveProject", Title = "Save project", Destructive = true, Idempotent = true, OpenWorld = false), Description("Save the current TIA-Portal local project/session")]
++        // Project persistence is registered on McpServerWrite.LegacyMutations.cs only.
+         public static ResponseSaveProject SaveProject()
+         {
+             try
+@@ -344,7 +375,7 @@ public static ResponseSaveProject SaveProject()
+             }
+         }
+ 
+-        [McpServerTool(Name = "SaveAsProject", Title = "Save project as", Destructive = true, Idempotent = true, OpenWorld = false), Description("Save current TIA-Portal project/session with a new name")]
++        // Project persistence is registered on McpServerWrite.LegacyMutations.cs only.
+         public static ResponseSaveAsProject SaveAsProject(
+             [Description("newProjectPath: defines the new path where to save the project")] string newProjectPath)
+         {
+@@ -386,6 +417,12 @@ public static ResponseCloseProject CloseProject()
+         {
+             try
+             {
++                if (!Engineering.HasFixtureRoot)
++                {
++                    throw new McpException(
++                        "CloseProject is restricted to the isolated instance configured for a disposable fixture.");
++                }
++
+                 bool success;
+ 
+                 if (Portal.IsLocalSession)
+@@ -784,6 +821,7 @@ public static ResponseBlockInfo GetBlockInfo(
+                         TypeName = block.GetType().Name,
+                         Namespace = block.Namespace,
+                         ProgrammingLanguage = Enum.GetName(typeof(ProgrammingLanguage),block.ProgrammingLanguage),
++                        IsFailsafe = GetFailsafeClassification(block),
+                         MemoryLayout = Enum.GetName(typeof(MemoryLayout), block.MemoryLayout),
+                         IsConsistent = block.IsConsistent,
+                         HeaderName = block.HeaderName,
+@@ -832,6 +870,7 @@ public static ResponseBlocks GetBlocks(
+                             TypeName = block.GetType().Name,
+                             Namespace = block.Namespace,
+                             ProgrammingLanguage = Enum.GetName(typeof(ProgrammingLanguage), block.ProgrammingLanguage),
++                            IsFailsafe = GetFailsafeClassification(block),
+                             MemoryLayout = Enum.GetName(typeof(MemoryLayout), block.MemoryLayout),
+                             IsConsistent = block.IsConsistent,
+                             HeaderName = block.HeaderName,
+@@ -1041,7 +1080,7 @@ private static string BuildBlockPathSuggestion(string softwarePath, string block
+                 return string.Empty; // best effort only
+             }
+         }
+-        [McpServerTool(Name = "ImportBlock", Title = "Import block from XML", Destructive = true, Idempotent = true, OpenWorld = false), Description("Import a block file to plc software")]
++        // Project imports are registered on McpServerWrite.LegacyMutations.cs only.
+         public static ResponseImportBlock ImportBlock(
+             [Description("softwarePath: defines the path in the project structure to the plc software")] string softwarePath,
+             [Description("groupPath: defines the path in the project structure to the group, where to import the block")] string groupPath,
+@@ -1372,7 +1411,7 @@ public static ResponseExportType ExportType(
+             }
+         }
+ 
+-        [McpServerTool(Name = "ImportType", Title = "Import type from XML", Destructive = true, Idempotent = true, OpenWorld = false), Description("Import a type from file into the plc software")]
++        // Project imports are registered on McpServerWrite.LegacyMutations.cs only.
+         public static ResponseImportType ImportType(
+             [Description("softwarePath: defines the path in the project structure to the plc software")] string softwarePath,
+             [Description("groupPath: defines the path in the project structure to the group, where to import the type")] string groupPath,
+@@ -1701,7 +1740,7 @@ public static async Task<ResponseExportBlocksAsDocuments> ExportBlocksAsDocument
+             }
+         }
+ 
+-        [McpServerTool(Name = "ImportFromDocuments", Title = "Import block from documents", Destructive = true, Idempotent = true, OpenWorld = false), Description("Import program block from SIMATIC SD documents (.s7dcl/.s7res) into PLC software (V20+)")]
++        // Project imports are registered on McpServerWrite.LegacyMutations.cs only.
+         public static ResponseImportFromDocuments ImportFromDocuments(
+             [Description("softwarePath: defines the path in the project structure to the plc software")] string softwarePath,
+             [Description("groupPath: optional path within the PLC program where the block should be placed (empty for root)")] string groupPath,
+@@ -1763,7 +1802,7 @@ public static ResponseImportFromDocuments ImportFromDocuments(
+             }
+         }
+ 
+-        [McpServerTool(Name = "ImportBlocksFromDocuments", Title = "Import blocks from documents", Destructive = true, Idempotent = true, OpenWorld = false), Description("Import program blocks from SIMATIC SD documents (.s7dcl/.s7res) into PLC software (V20+)")]
++        // Project imports are registered on McpServerWrite.LegacyMutations.cs only.
+         public static async Task<ResponseImportBlocksFromDocuments> ImportBlocksFromDocuments(
+             IProgress<ProgressNotificationValue> progress,
+             [Description("softwarePath: defines the path in the project structure to the plc software")] string softwarePath,
+diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Blocks.cs b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Blocks.cs
+index c747acd418c58770a190dc275f4fc7802ee1c5d8..6de4260290d494483632f64e09eb7cb81e44aaea 100644
+--- a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Blocks.cs
++++ b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Blocks.cs
+@@ -1,5 +1,8 @@
+ using ModelContextProtocol.Server;
++using ModelContextProtocol;
++using System;
+ using System.ComponentModel;
++using System.Linq;
+ 
+ namespace TiaMcpServer.ModelContextProtocol
+ {
+@@ -58,8 +61,8 @@ public static ResponseCreated CreateTypeGroup(
+             });
+         }
+ 
+-        [McpServerTool(Name = "DeleteTypeGroup", Title = "Delete a PLC data type group", Destructive = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true),
+-         Description("Delete a PLC data type group and everything inside it. The PLC data types system group itself cannot be deleted")]
++        // Unregistered: this could remove F-compliant PLC data types, which the documented V20
++        // Openness surface does not let this server classify independently.
+         public static ResponseDeleted DeleteTypeGroup(
+             [Description("softwarePath: defines the path in the project structure to the plc software")] string softwarePath,
+             [Description("groupPath: root-relative path of the group to delete")] string groupPath)
+@@ -102,8 +105,8 @@ public static ResponseRenamed RenameBlock(
+             });
+         }
+ 
+-        [McpServerTool(Name = "DeleteType", Title = "Delete a PLC data type", Destructive = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true),
+-         Description("Delete a PLC data type (UDT). Know-how protected types are rejected")]
++        // Unregistered: an F-compliant PLC data type requires Safety protection and is not
++        // distinguishable from a standard type through the documented V20 object surface.
+         public static ResponseDeleted DeleteType(
+             [Description("softwarePath: defines the path in the project structure to the plc software")] string softwarePath,
+             [Description("typePath: root-relative path of the type, e.g. Common/CarrierRegister/ML_SubstratState")] string typePath)
+@@ -115,8 +118,8 @@ public static ResponseDeleted DeleteType(
+             });
+         }
+ 
+-        [McpServerTool(Name = "RenameType", Title = "Rename a PLC data type", Destructive = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true),
+-         Description("Rename a PLC data type (UDT). Know-how protected types are rejected")]
++        // Unregistered: an F-compliant PLC data type requires Safety protection and is not
++        // distinguishable from a standard type through the documented V20 object surface.
+         public static ResponseRenamed RenameType(
+             [Description("softwarePath: defines the path in the project structure to the plc software")] string softwarePath,
+             [Description("typePath: root-relative path of the type")] string typePath,
+@@ -141,6 +144,13 @@ public static ResponseCreated CreateFB(
+         {
+             return Guarded(nameof(CreateFB), () =>
+             {
++                var standardLanguages = new[] { "LAD", "FBD", "STL", "SCL", "GRAPH" };
++                if (string.IsNullOrWhiteSpace(language) ||
++                    !standardLanguages.Any(candidate => string.Equals(candidate, language.Trim(), StringComparison.OrdinalIgnoreCase)))
++                {
++                    throw new McpException("CreateFB only accepts the allowlisted standard languages LAD, FBD, STL, SCL or GRAPH. F-language and unknown language values are blocked.");
++                }
++
+                 var block = Portal.CreateFB(softwarePath, groupPath, name, autoNumber, number, language);
+                 return Created("FB", block.Name, Join(groupPath, block.Name));
+             });
+diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Documents.cs b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Documents.cs
+index bb1c61a0e6c2d351ab9afc9c3f58b41a344850d9..e9f68c3ee027622a2c1bfecb283542ffe4acb8ce 100644
+--- a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Documents.cs
++++ b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Documents.cs
+@@ -17,17 +17,15 @@ namespace TiaMcpServer.ModelContextProtocol
+     /// none existing - both tools are new. File I/O: reads the caller's '.s7dcl'/'.s7res' files;
+     /// writes none.
+     ///
+-    /// These live in the write tool type, unlike the older block tools ImportFromDocuments and
+-    /// ImportBlocksFromDocuments, which sit in the ungated McpServer even though they also
+-    /// create objects in the project. That is a known inconsistency in the block tools, not a
+-    /// pattern to copy: WritePolicy states that only filesystem-only exports stay ungated.
++    /// These live in the write tool type. Block-document imports remain unregistered until the
++    /// server can classify every incoming block and every overwrite target before changing a project.
+     /// </summary>
+     public static partial class McpServerWrite
+     {
+         #region type documents
+ 
+-        [McpServerTool(Name = "ImportTypeFromDocuments", Title = "Import PLC data type from documents", Destructive = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true),
+-         Description("Import one PLC data type from a SIMATIC Source Document set (.s7dcl plus an optional .s7res) on the file system of the machine running this server. A PLC data type name is unique across the whole PLC, so importing an existing name into a different group fails even with importOption 'Override' - target the group the type already lives in. Requires TIA Portal V21 or newer")]
++        // Unregistered until the incoming document can be proven not to create or replace an
++        // F-compliant PLC data type. Requires TIA Portal V21 or newer.
+         public static ResponseImportTypeFromDocuments ImportTypeFromDocuments(
+             [Description("softwarePath: defines the path in the project structure to the plc software")] string softwarePath,
+             [Description("groupPath: root-relative PLC data type group that receives the type; empty uses the PLC data types root. A leading 'PLC data types' segment, as written by preservePath exports, is accepted and ignored")] string groupPath,
+@@ -51,8 +49,7 @@ public static ResponseImportTypeFromDocuments ImportTypeFromDocuments(
+             });
+         }
+ 
+-        [McpServerTool(Name = "ImportTypesFromDocuments", Title = "Import PLC data types from documents", Destructive = true, OpenWorld = false, UseStructuredContent = true),
+-         Description("Import every SIMATIC Source Document set in a directory as a PLC data type. A set that fails does not abort the run. A PLC data type name is unique across the whole PLC, so a name that already exists in another group fails even with importOption 'Override'. Requires TIA Portal V21 or newer")]
++        // Deliberately not registered until batch failures can be proven atomic and every input/overwrite is preflighted.
+         public static async Task<ResponseImportTypesFromDocuments> ImportTypesFromDocuments(
+             IProgress<ProgressNotificationValue> progress,
+             [Description("softwarePath: defines the path in the project structure to the plc software")] string softwarePath,
+diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.ImportSources.cs b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.ImportSources.cs
+index ca306577000b0d43ad49b3ed495ca3cedbe3463d..1f0c5f93baf3605cdeda910cf66feb9eb8ddf4dc 100644
+--- a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.ImportSources.cs
++++ b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.ImportSources.cs
+@@ -23,8 +23,7 @@ public static partial class McpServerWrite
+     {
+         #region import sources
+ 
+-        [McpServerTool(Name = "ImportSources", Title = "Import a tree of source files", Destructive = true, OpenWorld = false, UseStructuredContent = true),
+-         Description("Compile every block and PLC data type source file (*.db, *.awl, *.scl, *.udt) under a folder tree back into the project - the counterpart to 'GenerateSources'. Each file is placed into the block or PLC data type group its folder path implies, matching the layout 'GenerateSources' writes; a folder whose group does not yet exist in the project fails that file rather than being created automatically. Existing blocks/types of the same name are overwritten")]
++        // Deliberately not registered until every incoming source and overwrite target is classified.
+         public static ResponseImportedSources ImportSources(
+             [Description("softwarePath: defines the path in the project structure to the plc software")] string softwarePath,
+             [Description("importPath: directory on this machine to walk recursively for *.db, *.awl, *.scl and *.udt files")] string importPath,
+diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.LegacyMutations.cs b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.LegacyMutations.cs
+new file mode 100644
+index 0000000000000000000000000000000000000000..a3c10eeaf457390426ae94e40c7e872ee95bdb46
+--- /dev/null
++++ b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.LegacyMutations.cs
+@@ -0,0 +1,259 @@
++using ModelContextProtocol;
++using ModelContextProtocol.Server;
++using Microsoft.Extensions.Logging;
++using Siemens.Engineering;
++using Siemens.Engineering.SW.Blocks;
++using System;
++using System.Collections.Generic;
++using System.ComponentModel;
++using System.IO;
++using System.Linq;
++using System.Text.Json.Nodes;
++using System.Text.RegularExpressions;
++using System.Threading.Tasks;
++using TiaMcpServer.Siemens;
++
++namespace TiaMcpServer.ModelContextProtocol
++{
++    /// <summary>
++    /// Legacy block/type imports and project saves. These operations were historically declared
++    /// on McpServer and therefore visible in read mode. They are registered only with the
++    /// --allow-write tool type now.
++    /// </summary>
++    public static partial class McpServerWrite
++    {
++        // Deliberately not registered as an MCP tool. The incoming SimaticML can contain an
++        // F-block and Openness supports F-block import, so no destination-only preflight is enough.
++        public static ResponseImportBlock ImportBlock(
++            [Description("softwarePath: defines the path in the project structure to the PLC software")] string softwarePath,
++            [Description("groupPath: defines the path in the project structure to the group, where to import the block")] string groupPath,
++            [Description("importPath: defines the path of the XML file from which to import the block")] string importPath)
++        {
++            return Guarded(nameof(ImportBlock), () =>
++            {
++                if (!Portal.ImportBlock(softwarePath, groupPath, importPath))
++                {
++                    throw new McpException($"Failed importing block from '{importPath}' to '{groupPath}'");
++                }
++
++                return new ResponseImportBlock
++                {
++                    Message = $"Block imported from '{importPath}' to '{groupPath}'. {SaveHint}",
++                    Meta = OkMeta()
++                };
++            });
++        }
++
++        // Unregistered until XML input can be proven not to create or replace an F-compliant PLC data type.
++        public static ResponseImportType ImportType(
++            [Description("softwarePath: defines the path in the project structure to the PLC software")] string softwarePath,
++            [Description("groupPath: defines the path in the project structure to the group, where to import the type")] string groupPath,
++            [Description("importPath: defines the path of the XML file from which to import the type")] string importPath)
++        {
++            return Guarded(nameof(ImportType), () =>
++            {
++                if (!Portal.ImportType(softwarePath, groupPath, importPath))
++                {
++                    throw new McpException($"Failed importing type from '{importPath}' to '{groupPath}'");
++                }
++
++                return new ResponseImportType
++                {
++                    Message = $"Type imported from '{importPath}' to '{groupPath}'. {SaveHint}",
++                    Meta = OkMeta()
++                };
++            });
++        }
++
++        // Deliberately not registered until every incoming document and collision is classified.
++        public static ResponseImportFromDocuments ImportFromDocuments(
++            [Description("softwarePath: defines the path in the project structure to the PLC software")] string softwarePath,
++            [Description("groupPath: optional path within the PLC program where the block should be placed (empty for root)")] string groupPath,
++            [Description("importPath: directory containing the document files (.s7dcl/.s7res)")] string importPath,
++            [Description("fileNameWithoutExtension: name of the block file without extension")] string fileNameWithoutExtension,
++            [Description("importOption: ImportDocumentOptions value (None, Override, SkipInactiveCultures, ActivateInactiveCultures)")] string importOption = "Override")
++        {
++            return Guarded(nameof(ImportFromDocuments), () =>
++            {
++                if (Engineering.TiaMajorVersion < 20)
++                {
++                    throw new McpException("ImportFromDocuments requires TIA Portal V20 or newer");
++                }
++
++                var option = McpServer.ParseImportDocumentOption(importOption);
++                var warnings = new JsonArray();
++                try
++                {
++                    var missingIds = McpServer.GetResMissingEnUsIds(importPath, fileNameWithoutExtension);
++                    if (missingIds != null && missingIds.Count > 0)
++                    {
++                        warnings.Add(new JsonObject
++                        {
++                            ["name"] = fileNameWithoutExtension,
++                            ["missingEnUsIds"] = new JsonArray(missingIds.Select(id => (JsonNode)id).ToArray())
++                        });
++                    }
++                }
++                catch (Exception ex)
++                {
++                    McpServer.Logger?.LogDebug(ex, "Failed to evaluate .s7res warnings");
++                }
++
++                if (!Portal.ImportFromDocuments(softwarePath, groupPath, importPath, fileNameWithoutExtension, option))
++                {
++                    throw new McpException($"Failed importing '{fileNameWithoutExtension}' from '{importPath}'");
++                }
++
++                var meta = OkMeta();
++                meta["warnings"] = warnings;
++                return new ResponseImportFromDocuments
++                {
++                    Message = $"Imported '{fileNameWithoutExtension}' from '{importPath}'. {SaveHint}",
++                    Meta = meta
++                };
++            });
++        }
++
++        // Deliberately not registered until the full batch and all collisions are classified.
++        public static Task<ResponseImportBlocksFromDocuments> ImportBlocksFromDocuments(
++            IProgress<ProgressNotificationValue> progress,
++            [Description("softwarePath: defines the path in the project structure to the PLC software")] string softwarePath,
++            [Description("groupPath: optional path within the PLC program where the blocks should be placed (empty for root)")] string groupPath,
++            [Description("importPath: directory containing the document files (.s7dcl/.s7res)")] string importPath,
++            [Description("regexName: name or regular expression to select block files (empty for all)")] string regexName = "",
++            [Description("importOption: ImportDocumentOptions value (None, Override, SkipInactiveCultures, ActivateInactiveCultures)")] string importOption = "Override")
++        {
++            var response = Guarded(nameof(ImportBlocksFromDocuments), () =>
++            {
++                if (Engineering.TiaMajorVersion < 20)
++                {
++                    throw new McpException("ImportBlocksFromDocuments requires TIA Portal V20 or newer");
++                }
++
++                var option = McpServer.ParseImportDocumentOption(importOption);
++                var scanWarnings = new JsonArray();
++                var matchingNames = new List<string>();
++                if (Directory.Exists(importPath))
++                {
++                    var rx = string.IsNullOrWhiteSpace(regexName) ? null : new Regex(regexName, RegexOptions.Compiled);
++                    foreach (var file in Directory.GetFiles(importPath, "*.s7dcl", SearchOption.TopDirectoryOnly))
++                    {
++                        var name = Path.GetFileNameWithoutExtension(file);
++                        if (rx != null && !rx.IsMatch(name)) continue;
++                        matchingNames.Add(name);
++                        try
++                        {
++                            var missingIds = McpServer.GetResMissingEnUsIds(importPath, name);
++                            if (missingIds != null && missingIds.Count > 0)
++                            {
++                                scanWarnings.Add(new JsonObject
++                                {
++                                    ["name"] = name,
++                                    ["missingEnUsIds"] = new JsonArray(missingIds.Select(id => (JsonNode)id).ToArray())
++                                });
++                            }
++                        }
++                        catch (Exception ex)
++                        {
++                            McpServer.Logger?.LogDebug(ex, "Failed to evaluate .s7res warnings for {BlockName}", name);
++                        }
++                    }
++                }
++
++                progress.Report(new ProgressNotificationValue
++                {
++                    Progress = 0,
++                    Total = matchingNames.Count,
++                    Message = matchingNames.Count > 0 ? $"Starting import of {matchingNames.Count} blocks from documents..." : "Scanning import directory..."
++                });
++
++                var imported = Portal.ImportBlocksFromDocuments(softwarePath, groupPath, importPath, regexName, option);
++                var items = new List<ResponseBlockInfo>();
++                var importedBlocks = imported == null ? Enumerable.Empty<PlcBlock>() : imported;
++                foreach (var block in importedBlocks)
++                {
++                    if (block == null) continue;
++                    items.Add(new ResponseBlockInfo
++                    {
++                        Path = Portal.GetBlockPath(block),
++                        Name = block.Name,
++                        TypeName = block.GetType().Name,
++                        Namespace = block.Namespace,
++                        ProgrammingLanguage = Enum.GetName(typeof(ProgrammingLanguage), block.ProgrammingLanguage),
++                        IsFailsafe = McpServer.GetFailsafeClassification(block),
++                        MemoryLayout = Enum.GetName(typeof(MemoryLayout), block.MemoryLayout),
++                        IsConsistent = block.IsConsistent,
++                        HeaderName = block.HeaderName,
++                        ModifiedDate = block.ModifiedDate,
++                        IsKnowHowProtected = block.IsKnowHowProtected,
++                        Attributes = Helper.GetAttributeList(block),
++                        Description = block.ToString()
++                    });
++                }
++
++                progress.Report(new ProgressNotificationValue
++                {
++                    Progress = items.Count,
++                    Total = matchingNames.Count,
++                    Message = $"Document import completed: {items.Count} blocks imported successfully"
++                });
++
++                var meta = OkMeta();
++                meta["totalBlocks"] = matchingNames.Count;
++                meta["importedBlocks"] = items.Count;
++                meta["warnings"] = scanWarnings;
++                return new ResponseImportBlocksFromDocuments
++                {
++                    Message = $"Document import completed: {items.Count} blocks imported from '{importPath}'. {SaveHint}",
++                    Items = items,
++                    Meta = meta
++                };
++            });
++
++            return Task.FromResult(response);
++        }
++
++        [McpServerTool(Name = "SaveProject", Title = "Save project", Destructive = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true),
++         Description("Save the current TIA Portal local project/session; available only in --allow-write mode")]
++        public static ResponseSaveProject SaveProject()
++        {
++            return Guarded(nameof(SaveProject), () =>
++            {
++                if (!Portal.IsLocalSession && Portal.SaveProject())
++                {
++                    return new ResponseSaveProject { Message = "Local project saved", Meta = OkMeta() };
++                }
++                if (Portal.IsLocalSession && Portal.SaveSession())
++                {
++                    return new ResponseSaveProject { Message = "Local session saved", Meta = OkMeta() };
++                }
++
++                throw new McpException("Failed to save the current project/session");
++            });
++        }
++
++        // Unregistered: SaveAsProject can write outside the fixture root; SaveProject is sufficient
++        // for the current disposable-fixture acceptance workflow.
++        public static ResponseSaveAsProject SaveAsProject(
++            [Description("newProjectPath: defines the new path where to save the project")] string newProjectPath)
++        {
++            return Guarded(nameof(SaveAsProject), () =>
++            {
++                if (Portal.IsLocalSession)
++                {
++                    throw new McpException($"Cannot save local session as '{newProjectPath}'");
++                }
++                if (!Portal.SaveAsProject(newProjectPath))
++                {
++                    throw new McpException($"Failed saving local project as '{newProjectPath}'");
++                }
++
++                return new ResponseSaveAsProject
++                {
++                    Message = $"Local project saved as '{newProjectPath}'",
++                    Meta = OkMeta()
++                };
++            });
++        }
++    }
++}
+diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.MoveCopy.cs b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.MoveCopy.cs
+index e5eb0d3185b8c77a8c792279fc781b4665c28aa4..958d7d66b6c2bbaf50cc4048ddd78d3129541f9d 100644
+--- a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.MoveCopy.cs
++++ b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.MoveCopy.cs
+@@ -66,8 +66,8 @@ public static ResponseRenamed MoveBlock(
+             });
+         }
+ 
+-        [McpServerTool(Name = "CopyType", Title = "Copy a PLC data type to another group", Destructive = true, OpenWorld = false, UseStructuredContent = true),
+-         Description("Copy a PLC data type (UDT) into another type group of the same plc software. Implemented as export plus import because Openness has no copy operation, so the type must be consistent")]
++        // Unregistered: an F-compliant PLC data type requires Safety protection and is not
++        // distinguishable from a standard type through the documented V20 object surface.
+         public static ResponseCreated CopyType(
+             [Description("softwarePath: defines the path in the project structure to the plc software")] string softwarePath,
+             [Description("typePath: root-relative path of the type to copy, e.g. Common/CarrierRegister/ML_SubstratState")] string typePath,
+@@ -90,8 +90,8 @@ public static ResponseCreated CopyType(
+             });
+         }
+ 
+-        [McpServerTool(Name = "MoveType", Title = "Move a PLC data type to another group", Destructive = true, OpenWorld = false, UseStructuredContent = true),
+-         Description("Move a PLC data type (UDT) into another type group of the same plc software. Implemented as export, import and deleting the original; the original is only removed after the import succeeds")]
++        // Unregistered: an F-compliant PLC data type requires Safety protection and is not
++        // distinguishable from a standard type through the documented V20 object surface.
+         public static ResponseRenamed MoveType(
+             [Description("softwarePath: defines the path in the project structure to the plc software")] string softwarePath,
+             [Description("typePath: root-relative path of the type to move")] string typePath,
+diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Tables.cs b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Tables.cs
+index 44fb5cc64ca9e88fc9704131436a6af92b5aab1a..596e49a53b83be5ffa10c08b2d2bcc3fe286422f 100644
+--- a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Tables.cs
++++ b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Tables.cs
+@@ -162,8 +162,7 @@ public static ResponseDeleted DeleteExternalSourceGroup(
+             });
+         }
+ 
+-        [McpServerTool(Name = "GenerateBlocksFromSource", Title = "Generate blocks from an external source", Destructive = true, OpenWorld = false, UseStructuredContent = true),
+-         Description("Compile an external source file into program blocks and PLC data types. A target must be a block user group: blocks cannot be generated into the Program blocks root")]
++        // Deliberately not registered until the complete source and generated objects can be classified.
+         public static ResponseGenerateBlocks GenerateBlocksFromSource(
+             [Description("softwarePath: defines the path in the project structure to the plc software")] string softwarePath,
+             [Description("sourcePath: root-relative path of the external source, e.g. SourceGroup1/Source_1")] string sourcePath,
+diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Tags.cs b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Tags.cs
+index b3d9d902832a6baacf3a39406d9122e8014c9a6b..94c393070259d44dc75fe71bd337bc52481c16bf 100644
+--- a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Tags.cs
++++ b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Tags.cs
+@@ -85,8 +85,7 @@ public static ResponseDeleted DeleteTagTableGroup(
+             });
+         }
+ 
+-        [McpServerTool(Name = "ImportTagTable", Title = "Import a PLC tag table", Destructive = true, OpenWorld = false, UseStructuredContent = true),
+-         Description("Import a PLC tag table from an XML file on the file system of the machine running this server")]
++        // Deliberately not registered until incoming Safety tags and all overwrite collisions are classified.
+         public static ResponseImported ImportTagTable(
+             [Description("softwarePath: defines the path in the project structure to the plc software")] string softwarePath,
+             [Description("groupPath: root-relative tag table group that receives the table; empty uses the PLC tags root. A leading 'PLC tags' segment, as written by preservePath exports, is accepted and ignored")] string groupPath,
+diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.cs b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.cs
+index ce9f73749b66e8a16181bdca977a88c057370d92..48f64154cd9b0380bf450782f0aad999b50e1cbf 100644
+--- a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.cs
++++ b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.cs
+@@ -10,8 +10,8 @@ namespace TiaMcpServer.ModelContextProtocol
+     /// <summary>
+     /// The project-mutating MCP tools (create, rename, delete, import into the project).
+     ///
+-    /// Callers: registered by Program.BuildToolTypes() only when '--allow-write' was passed, and
+-    /// invoked directly by the write test classes. Affected API: none existing. Data: returns the
++    /// Callers: registered by Program.BuildToolTypes() only for '--isolated --fixture-root --allow-write',
++    /// and invoked directly by the write test classes. Affected API: none existing. Data: returns the
+     /// shared ResponseCreated / ResponseDeleted / ResponseRenamed / ResponseImported /
+     /// ResponseGenerateBlocks DTOs. The import tools read a caller-supplied file; nothing here
+     /// writes files. Project changes live in memory until SaveProject (or SaveSession).
+@@ -46,12 +46,13 @@ private static T Guarded<T>(string toolName, Func<T> body)
+ 
+             try
+             {
+-                // One transaction per tool call: the edits commit together or not at all, and
+-                // the operator sees a single named entry in the TIA Portal undo stack instead of
+-                // an unlabelled pile of steps. Falls back to an unwrapped write when TIA Portal
+-                // refuses exclusive access, so this can never turn a working write into a
+-                // failure - see Portal.Transactions.cs.
+-                return Portal.InTransaction($"MCP: {toolName}", body);
++                // Hold exclusive access across both classification and mutation, eliminating a
++                // TOCTOU window in which a concurrent session could change the Safety scope.
++                return Portal.InTransaction($"MCP: {toolName}", () =>
++                {
++                    Portal.EnsureNoSafetyObjectsForWrite(toolName);
++                    return body();
++                });
+             }
+             catch (PortalException pex)
+             {
+diff --git a/src/TiaMcpServer/ModelContextProtocol/Responses.cs b/src/TiaMcpServer/ModelContextProtocol/Responses.cs
+index f3bcdde2278e95cf2f3a671357050b510ff3b841..74b30f2e20023e83df70b223e576d6c407ae987c 100644
+--- a/src/TiaMcpServer/ModelContextProtocol/Responses.cs
++++ b/src/TiaMcpServer/ModelContextProtocol/Responses.cs
+@@ -42,6 +42,8 @@ public class ResponseBlockInfo : ResponseAttributes
+         public string? Name { get; set; }
+         public string? Namespace { get; set; }
+         public string? ProgrammingLanguage { get; set; }
++        /// <summary>True for F blocks, false for explicitly classified standard blocks, null when the API cannot classify the block.</summary>
++        public bool? IsFailsafe { get; set; }
+         public string? MemoryLayout { get; set; }
+         public bool? IsConsistent { get; set; }
+         public string? HeaderName { get; set; }
+diff --git a/src/TiaMcpServer/ModelContextProtocol/WritePolicy.cs b/src/TiaMcpServer/ModelContextProtocol/WritePolicy.cs
+index 8ce0c6e4c06ca98d17837ba7646dac703831aaec..6808f7f295e45d965d2957e24d556e55f39f533e 100644
+--- a/src/TiaMcpServer/ModelContextProtocol/WritePolicy.cs
++++ b/src/TiaMcpServer/ModelContextProtocol/WritePolicy.cs
+@@ -1,4 +1,5 @@
+ using ModelContextProtocol;
++using TiaMcpServer.Siemens;
+ 
+ namespace TiaMcpServer.ModelContextProtocol
+ {
+@@ -20,6 +21,7 @@ namespace TiaMcpServer.ModelContextProtocol
+     public static class WritePolicy
+     {
+         public static bool AllowWrite { get; set; }
++        public static bool IsWriteEnabled => AllowWrite && Engineering.HasFixtureRoot;
+ 
+         public static void EnsureEnabled(string toolName)
+         {
+@@ -29,6 +31,12 @@ public static void EnsureEnabled(string toolName)
+                     $"Tool '{toolName}' modifies the TIA Portal project and is disabled. " +
+                     "Restart the MCP server with '--allow-write' to enable write operations.");
+             }
++
++            if (!Engineering.HasFixtureRoot)
++            {
++                throw new McpException(
++                    $"Tool '{toolName}' is restricted to '--isolated --fixture-root <fixture-directory> --allow-write'. The root must contain a matching .tia-agent-fixture.json manifest for a disposable project clone.");
++            }
+         }
+     }
+ }
+diff --git a/src/TiaMcpServer/Program.cs b/src/TiaMcpServer/Program.cs
+index 5ba4aa35b04cc171168a5966ca56ea04edbe4d08..77c4516d294857621a5820643d41494377cd3909 100644
+--- a/src/TiaMcpServer/Program.cs
++++ b/src/TiaMcpServer/Program.cs
+@@ -18,6 +18,8 @@ public static async Task Main(string[] args)
+             var options = CliOptions.ParseArgs(args);
+ 
+             Engineering.TiaMajorVersion = options.TiaMajorVersion ?? 21;
++            Engineering.IsolatedPortal = options.Isolated;
++            Engineering.FixtureRoot = options.FixtureRoot;
+ 
+             // Set before the --doctor branch below, which reports the write mode, and before the
+             // host registers its tool types.
+@@ -59,7 +61,7 @@ public static void RunDoctor()
+             try
+             {
+                 // Fully qualified: 'Diagnostics' alone would collide with the System.Diagnostics namespace.
+-                var report = TiaMcpServer.Siemens.Diagnostics.Run(new Portal(), WritePolicy.AllowWrite);
++                var report = TiaMcpServer.Siemens.Diagnostics.Run(new Portal(), WritePolicy.IsWriteEnabled);
+ 
+                 Console.WriteLine(report.Text);
+             }
+@@ -72,15 +74,14 @@ public static void RunDoctor()
+         }
+ 
+         /// <summary>
+-        /// The read-only tools are always registered. The project-mutating tools live in a
+-        /// separate tool type that is only registered with '--allow-write', which is what keeps
+-        /// them out of 'tools/list' rather than merely refusing them when called.
++        /// The read-only tools are always registered. Mutating tools are registered only when
++        /// '--allow-write', '--isolated', and an existing fixture root are all configured.
+         /// </summary>
+         private static IEnumerable<Type> BuildToolTypes()
+         {
+             var toolTypes = new List<Type> { typeof(McpServer) };
+ 
+-            if (WritePolicy.AllowWrite)
++            if (WritePolicy.IsWriteEnabled)
+             {
+                 toolTypes.Add(typeof(McpServerWrite));
+             }
+@@ -142,7 +143,7 @@ public static async Task RunStdioHost(CliOptions? options)
+                             "absolute .apXX project or .alsXX session path. Use 'GetProjectTree' or 'GetSoftwareTree' to " +
+                             "discover the path strings that the other tools expect. Export and import tools operate on " +
+                             "the local file system of the machine running this server." +
+-                            (WritePolicy.AllowWrite
++                            (WritePolicy.IsWriteEnabled
+                                 ? " Write mode is enabled: tools that create, rename or delete project objects are " +
+                                   "available. Their changes stay in memory until 'SaveProject' (or 'SaveSession')."
+                                 : string.Empty);
+diff --git a/src/TiaMcpServer/Siemens/Diagnostics.cs b/src/TiaMcpServer/Siemens/Diagnostics.cs
+index 2c622904ffc13f0db8d5cccf909eead95dddba21..955335d6e49141f235812455f5235cb752fbaf15 100644
+--- a/src/TiaMcpServer/Siemens/Diagnostics.cs
++++ b/src/TiaMcpServer/Siemens/Diagnostics.cs
+@@ -1,4 +1,4 @@
+-using System;
++﻿using System;
+ using System.Collections.Generic;
+ using System.IO;
+ using System.Linq;
+@@ -39,8 +39,8 @@ public sealed class DiagnosticsReport
+     /// </summary>
+     public static class Diagnostics
+     {
+-        // Openness of this server targets V20+; V21 is the oldest version worth reporting.
+-        private const int MinTiaMajorVersion = 21;
++        // Patched for this workspace: report installs from V19 up, not only V21.
++        private const int MinTiaMajorVersion = 19;
+         private const int MaxTiaMajorVersion = 30;
+ 
+         // V20+ splits Openness into Siemens.Engineering.Base.dll and friends; older installations
+@@ -72,39 +72,39 @@ public static DiagnosticsReport Run(Portal portal, bool allowWrite = false)
+ 
+             var status = $"Diagnose:";
+ 
+-            status += $"\n├─ Connected = {isConnected}";
++            status += $"\nâ”œâ”€ Connected = {isConnected}";
+ 
+             if (projectName != null || projectPath != null)
+             {
+-                status += $"\n├─ Project: {projectName ?? "Unknown"}, {projectPath ?? "Unknown"}";
++                status += $"\nâ”œâ”€ Project: {projectName ?? "Unknown"}, {projectPath ?? "Unknown"}";
+             }
+             else
+             {
+-                status += $"\n├─ Project: No project open";
++                status += $"\nâ”œâ”€ Project: No project open";
+             }
+ 
+-            status += $"\n├─ Active Version: V{Openness.TiaMajorVersion}";
++            status += $"\nâ”œâ”€ Active Version: V{Openness.TiaMajorVersion}";
+ 
+             if (installations.Count > 0)
+             {
+-                status += $"\n├─ Installed TIA Portal versions:";
++                status += $"\nâ”œâ”€ Installed TIA Portal versions:";
+                 for (int i = 0; i < installations.Count; i++)
+                 {
+                     var inst = installations[i];
+                     var isLast = i == installations.Count - 1;
+-                    var prefix = isLast ? "│  └─" : "│  ├─";
++                    var prefix = isLast ? "â”‚  â””â”€" : "â”‚  â”œâ”€";
+                     status += $"\n{prefix} V{inst.MajorVersion}: {inst.InstallPath}";
+-                    status += $"\n{(isLast ? "│   " : "│  │")}  ├─ Engineering: {(inst.EngineeringExists ? "OK" : "missing")}";
+-                    status += $"\n{(isLast ? "│   " : "│  │")}  └─ Portal:      {(inst.PortalExeExists ? "OK" : "missing")}";
++                    status += $"\n{(isLast ? "â”‚   " : "â”‚  â”‚")}  â”œâ”€ Engineering: {(inst.EngineeringExists ? "OK" : "missing")}";
++                    status += $"\n{(isLast ? "â”‚   " : "â”‚  â”‚")}  â””â”€ Portal:      {(inst.PortalExeExists ? "OK" : "missing")}";
+                 }
+             }
+             else
+             {
+-                status += $"\n├─ Installed TIA Portal versions: none found (>= V{MinTiaMajorVersion})";
++                status += $"\nâ”œâ”€ Installed TIA Portal versions: none found (>= V{MinTiaMajorVersion})";
+             }
+ 
+-            status += $"\n├─ User in 'Siemens TIA Openness' user group: {userInGroup}";
+-            status += $"\n└─ Write mode (--allow-write): {(allowWrite ? "enabled" : "disabled, read-only tools only")}";
++            status += $"\nâ”œâ”€ User in 'Siemens TIA Openness' user group: {userInGroup}";
++            status += $"\nâ””â”€ Write mode (--allow-write): {(allowWrite ? "enabled" : "disabled, read-only tools only")}";
+ 
+             return new DiagnosticsReport
+             {
+@@ -120,7 +120,7 @@ public static DiagnosticsReport Run(Portal portal, bool allowWrite = false)
+         }
+ 
+         /// <summary>
+-        /// Discovers all installed TIA Portal versions >= V21 and checks whether the Openness
++        /// Discovers all installed TIA Portal versions >= V19 and checks whether the Openness
+         /// assembly and Portal.exe are actually present in each installation.
+         /// </summary>
+         public static IReadOnlyList<TiaInstallation> GetInstalledTiaPortalVersions()
+diff --git a/src/TiaMcpServer/Siemens/Engineering.cs b/src/TiaMcpServer/Siemens/Engineering.cs
+index 322b6ff5572453449c1a5813bae65e6d3211b706..c58d0e60077aaafd10b7c55f3aa393fae67d9026 100644
+--- a/src/TiaMcpServer/Siemens/Engineering.cs
++++ b/src/TiaMcpServer/Siemens/Engineering.cs
+@@ -4,6 +4,7 @@
+ using System.IO;
+ using System.Linq;
+ using System.Reflection;
++using System.Text.Json;
+ 
+ namespace TiaMcpServer.Siemens
+ {
+@@ -11,6 +12,69 @@ namespace TiaMcpServer.Siemens
+     public class Engineering
+     {
+         public static int TiaMajorVersion { get; set; }
++        public static bool IsolatedPortal { get; set; }
++        public static string? FixtureRoot { get; set; }
++
++        public static bool HasFixtureRoot
++        {
++            get
++            {
++                try
++                {
++                    return IsolatedPortal
++                        && !string.IsNullOrWhiteSpace(FixtureRoot)
++                        && Directory.Exists(FixtureRoot)
++                        && File.Exists(Path.Combine(Path.GetFullPath(FixtureRoot!), ".tia-agent-fixture.json"));
++                }
++                catch
++                {
++                    return false;
++                }
++            }
++        }
++
++        /// <summary>
++        /// Authorizes opening only the exact project named by a fixture manifest underneath the
++        /// configured fixture root. The manifest is an accident-prevention boundary, not a security
++        /// signature; the caller must create it only after cloning a disposable project.
++        /// </summary>
++        public static bool IsDisposableFixtureProject(string path)
++        {
++            if (!HasFixtureRoot || string.IsNullOrWhiteSpace(path)) return false;
++
++            try
++            {
++                var root = Path.GetFullPath(FixtureRoot!).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
++                var fullPath = Path.GetFullPath(path);
++                var rootPrefix = root + Path.DirectorySeparatorChar;
++                if (!fullPath.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase)) return false;
++                if (!string.Equals(Path.GetExtension(fullPath), ".ap20", StringComparison.OrdinalIgnoreCase)) return false;
++                if (!File.Exists(fullPath)) return false;
++
++                var manifestPath = Path.Combine(root, ".tia-agent-fixture.json");
++                if (!File.Exists(manifestPath)) return false;
++
++                using (var document = JsonDocument.Parse(File.ReadAllText(manifestPath)))
++                {
++                    var data = document.RootElement;
++                    if (!data.TryGetProperty("schemaVersion", out var schemaVersion) || schemaVersion.GetInt32() != 1) return false;
++                    if (!data.TryGetProperty("disposable", out var disposable) || disposable.ValueKind != JsonValueKind.True) return false;
++                    if (!data.TryGetProperty("projectPath", out var projectPath) || projectPath.ValueKind != JsonValueKind.String) return false;
++                    if (!data.TryGetProperty("backupProjectPath", out var backupProjectPath) || backupProjectPath.ValueKind != JsonValueKind.String) return false;
++
++                    var declaredPath = Path.GetFullPath(projectPath.GetString()!);
++                    var backupFullPath = Path.GetFullPath(backupProjectPath.GetString()!);
++                    return string.Equals(fullPath, declaredPath, StringComparison.OrdinalIgnoreCase)
++                        && backupFullPath.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase)
++                        && !string.Equals(fullPath, backupFullPath, StringComparison.OrdinalIgnoreCase)
++                        && File.Exists(backupFullPath);
++                }
++            }
++            catch
++            {
++                return false;
++            }
++        }
+ 
+         // Registry sub keys below 'TIAP{version}' that hold the installation path, most specific first.
+         private static readonly string[] PreferredInstallPathSubKeys = { "TIA_Opns", "Global", "EditionMain" };
+diff --git a/src/TiaMcpServer/Siemens/Portal.Safety.cs b/src/TiaMcpServer/Siemens/Portal.Safety.cs
+new file mode 100644
+index 0000000000000000000000000000000000000000..d2fb620538879efab492dc6bce7ccbf26993da4b
+--- /dev/null
++++ b/src/TiaMcpServer/Siemens/Portal.Safety.cs
+@@ -0,0 +1,188 @@
++using Siemens.Engineering;
++using Siemens.Engineering.HW;
++using Siemens.Engineering.HW.Features;
++using Siemens.Engineering.SW;
++using Siemens.Engineering.SW.Blocks;
++using Siemens.Engineering.SW.Tags;
++using Siemens.Engineering.SW.Types;
++using Microsoft.Extensions.Logging;
++using System;
++using System.Collections.Generic;
++using System.Linq;
++
++namespace TiaMcpServer.Siemens
++{
++    public partial class Portal
++    {
++        /// <summary>
++        /// Rejects every MCP project mutation if a PLC block cannot be proven standard or if
++        /// any PLC Safety tag is present. This intentionally protects indirect operations such
++        /// as imports, group deletes, block moves and type replacement with one shared preflight.
++        /// Callers must separately classify opaque incoming content before registering a tool.
++        /// </summary>
++        public void EnsureNoSafetyObjectsForWrite(string operation)
++        {
++            if (!ProjectIsValid)
++            {
++                throw new PortalException(PortalErrorCode.InvalidState,
++                    $"Cannot perform '{operation}': no valid project is open for the F/Safety preflight.");
++            }
++
++            var softwareItems = EnumeratePlcSoftware();
++            if (softwareItems.Count == 0)
++            {
++                throw new PortalException(PortalErrorCode.InvalidState,
++                    $"Cannot perform '{operation}': no PLC software was enumerated; the F/Safety scope cannot be proven complete.");
++            }
++
++            var blockCount = 0;
++            var tagCount = 0;
++
++            foreach (var software in softwareItems)
++            {
++                var blockRoot = software.BlockGroup;
++                if (blockRoot == null)
++                {
++                    throw new PortalException(PortalErrorCode.InvalidState,
++                        $"Cannot perform '{operation}': PLC software '{software.Name}' has no readable block root; safety classification is incomplete.");
++                }
++
++                var blocks = new List<PlcBlock>();
++                GetBlocksRecursive(blockRoot, blocks);
++                blockCount += blocks.Count;
++
++                foreach (var block in blocks)
++                {
++                    var classification = SafetyClassification.GetFailsafeClassification(block);
++                    if (classification != false)
++                    {
++                        var state = classification == true ? "F/Safety" : "unknown";
++                        throw new PortalException(PortalErrorCode.InvalidState,
++                            $"Cannot perform '{operation}': PLC block '{block.Name}' is classified as {state}; all project writes are blocked until the F/Safety scope is removed or explicitly handled outside this agent workflow.");
++                    }
++
++                    if (block.IsKnowHowProtected)
++                    {
++                        throw new PortalException(PortalErrorCode.InvalidState,
++                            $"Cannot perform '{operation}': PLC block '{block.Name}' has know-how protection; all project writes are blocked until protected scope is handled in TIA Portal.");
++                    }
++                }
++
++                var typeRoot = software.TypeGroup;
++                if (typeRoot == null)
++                {
++                    throw new PortalException(PortalErrorCode.InvalidState,
++                        $"Cannot perform '{operation}': PLC software '{software.Name}' has no readable type root; protected-type classification is incomplete.");
++                }
++
++                var types = new List<PlcType>();
++                WalkRecursive<PlcTypeGroup, PlcType>(
++                    typeRoot, types, group => group.Types, group => group.Groups,
++                    type => type.Name);
++
++                foreach (var type in types)
++                {
++                    if (type.IsKnowHowProtected)
++                    {
++                        throw new PortalException(PortalErrorCode.InvalidState,
++                            $"Cannot perform '{operation}': PLC type '{type.Name}' has know-how protection; all project writes are blocked until protected scope is handled in TIA Portal.");
++                    }
++                }
++
++                var tagRoot = software.TagTableGroup;
++                if (tagRoot == null)
++                {
++                    throw new PortalException(PortalErrorCode.InvalidState,
++                        $"Cannot perform '{operation}': PLC software '{software.Name}' has no readable tag-table root; Safety-tag classification is incomplete.");
++                }
++
++                var tables = new List<PlcTagTable>();
++                WalkRecursive<PlcTagTableGroup, PlcTagTable>(
++                    tagRoot, tables, group => group.TagTables, group => group.Groups,
++                    table => table.Name);
++
++                foreach (var table in tables)
++                {
++                    foreach (var tag in table.Tags)
++                    {
++                        tagCount++;
++                        if (tag.IsSafety)
++                        {
++                            throw new PortalException(PortalErrorCode.InvalidState,
++                                $"Cannot perform '{operation}': PLC tag '{table.Name}/{tag.Name}' is marked Safety; all project writes are blocked until the Safety-tag scope is removed or explicitly handled outside this agent workflow.");
++                        }
++                    }
++                }
++            }
++
++            _logger?.LogDebug(
++                "F/Safety preflight for {Operation} passed: {SoftwareCount} PLC software objects, {BlockCount} classified standard blocks, {TagCount} non-Safety PLC tags",
++                operation, softwareItems.Count, blockCount, tagCount);
++        }
++
++        private List<PlcSoftware> EnumeratePlcSoftware()
++        {
++            var software = new List<PlcSoftware>();
++
++            if (_project?.Devices != null)
++            {
++                foreach (Device device in _project.Devices)
++                {
++                    CollectPlcSoftware(device.DeviceItems, software);
++                }
++            }
++
++            if (_project?.DeviceGroups != null)
++            {
++                CollectPlcSoftware(_project.DeviceGroups, software);
++            }
++
++            if (_project?.UngroupedDevicesGroup?.Devices != null)
++            {
++                foreach (var composition in _project.UngroupedDevicesGroup.Devices)
++                {
++                    if (composition is Device device)
++                    {
++                        CollectPlcSoftware(device.DeviceItems, software);
++                    }
++                }
++            }
++
++            return software;
++        }
++
++        private void CollectPlcSoftware(DeviceUserGroupComposition groups, List<PlcSoftware> software)
++        {
++            foreach (DeviceUserGroup group in groups)
++            {
++                foreach (var composition in group.Devices)
++                {
++                    if (composition is Device device)
++                    {
++                        CollectPlcSoftware(device.DeviceItems, software);
++                    }
++                }
++
++                CollectPlcSoftware(group.Groups, software);
++            }
++        }
++
++        private void CollectPlcSoftware(DeviceItemComposition deviceItems, List<PlcSoftware> software)
++        {
++            foreach (DeviceItem item in deviceItems)
++            {
++                var container = item.GetService<SoftwareContainer>();
++                if (container?.Software is PlcSoftware plcSoftware &&
++                    !software.Any(existing => ReferenceEquals(existing, plcSoftware)))
++                {
++                    software.Add(plcSoftware);
++                }
++
++                if (item.DeviceItems != null && item.DeviceItems.Count > 0)
++                {
++                    CollectPlcSoftware(item.DeviceItems, software);
++                }
++            }
++        }
++    }
++}
+diff --git a/src/TiaMcpServer/Siemens/Portal.Transactions.cs b/src/TiaMcpServer/Siemens/Portal.Transactions.cs
+index 39b2cdfa10db3f7b7c4aeab3b8e375c01243384a..a987e58ad308c739eb75545300773ba8dbaf74f4 100644
+--- a/src/TiaMcpServer/Siemens/Portal.Transactions.cs
++++ b/src/TiaMcpServer/Siemens/Portal.Transactions.cs
+@@ -11,22 +11,15 @@ namespace TiaMcpServer.Siemens
+     /// tool. Affected API: no signature changes - the wrapper is invisible to callers, it only
+     /// changes what TIA Portal does with the edits underneath. Reads and writes no data files.
+     ///
+-    /// Why: before this, a write tool that failed halfway left the project half-changed, and a
+-    /// batch of edits appeared in the TIA Portal undo stack as an unlabelled pile of steps.
+-    /// Siemens.Engineering.ExclusiveAccess.Transaction gives both an all-or-nothing commit and
+-    /// a single named undo entry.
+-    ///
+-    /// Deliberately best-effort: if the running TIA Portal refuses exclusive access - another
+-    /// dialog holds it, or the project does not support transactions - the write still runs,
+-    /// unwrapped, exactly as it did before. Refusing to write at all would be a regression for
+-    /// the sake of a safety net.
++    /// Why: a failed write must not be allowed to continue when TIA Portal cannot provide the
++    /// transaction scope this server relies on. Refusing a write is safer than silently running
++    /// it without rollback guarantees.
+     /// </summary>
+     public partial class Portal
+     {
+         /// <summary>
+-        /// Runs <paramref name="body"/> inside a named transaction when TIA Portal allows one.
+-        /// The transaction commits only if the body returns without throwing, so a failed write
+-        /// rolls back instead of leaving the project half-edited.
++        /// Runs <paramref name="body"/> inside a named transaction. If TIA Portal cannot provide
++        /// exclusive access or transaction support, the operation is rejected before the body runs.
+         /// </summary>
+         /// <param name="description">
+         /// What the operator sees: the exclusive-access banner while it runs, and the undo entry
+@@ -36,9 +29,8 @@ public T InTransaction<T>(string description, Func<T> body)
+         {
+             if (_portal == null || _project is not ITransactionSupport persistence)
+             {
+-                // No portal, or a project that cannot host a transaction: run the write directly
+-                // rather than failing it.
+-                return body();
++                throw new PortalException(PortalErrorCode.InvalidState,
++                    $"Cannot perform '{description}': no connected project transaction is available; refusing an unprotected write.");
+             }
+ 
+             ExclusiveAccess? access;
+@@ -49,9 +41,9 @@ public T InTransaction<T>(string description, Func<T> body)
+             }
+             catch (Exception ex)
+             {
+-                _logger?.LogDebug(ex, "Exclusive access refused for '{Description}'; writing without a transaction", description);
+-
+-                return body();
++                _logger?.LogWarning(ex, "Exclusive access refused for '{Description}'; write rejected", description);
++                throw new PortalException(PortalErrorCode.InvalidState,
++                    $"Cannot perform '{description}': TIA Portal refused exclusive access; the write was rejected before mutation.");
+             }
+ 
+             using (access)
+@@ -64,24 +56,32 @@ public T InTransaction<T>(string description, Func<T> body)
+                 }
+                 catch (Exception ex)
+                 {
+-                    _logger?.LogDebug(ex, "Transaction refused for '{Description}'; writing without one", description);
++                    _logger?.LogWarning(ex, "Transaction refused for '{Description}'; write rejected", description);
++                    throw new PortalException(PortalErrorCode.InvalidState,
++                        $"Cannot perform '{description}': TIA Portal refused a transaction; the write was rejected before mutation.");
++                }
+ 
+-                    return body();
++                if (transaction == null)
++                {
++                    throw new PortalException(PortalErrorCode.InvalidState,
++                        $"Cannot perform '{description}': TIA Portal returned no transaction; refusing an unprotected write.");
+                 }
+ 
+                 using (transaction)
+                 {
+                     var result = body();
+ 
+-                    // Only reached when the body did not throw. Without this call the using
+-                    // block rolls the transaction back on dispose.
+-                    transaction.CommitOnDispose();
+-
+                     if (access.IsCancellationRequested)
+                     {
+-                        _logger?.LogInformation("The operator requested cancellation during '{Description}'", description);
++                        _logger?.LogInformation("The operator requested cancellation during '{Description}'; rolling back", description);
++                        throw new OperationCanceledException(
++                            $"The operator cancelled '{description}'; the transaction will be rolled back.");
+                     }
+ 
++                    // Only reached when the body did not throw or get cancelled. Without this call
++                    // the using block rolls the transaction back on dispose.
++                    transaction.CommitOnDispose();
++
+                     return result;
+                 }
+             }
+diff --git a/src/TiaMcpServer/Siemens/Portal.Write.cs b/src/TiaMcpServer/Siemens/Portal.Write.cs
+index 4293b94e1d24fa6d3bc57c7919af1ddf16d24368..0e7c17d16cba58589c217f69f04bb895d8b0c8b8 100644
+--- a/src/TiaMcpServer/Siemens/Portal.Write.cs
++++ b/src/TiaMcpServer/Siemens/Portal.Write.cs
+@@ -1,4 +1,4 @@
+-using Siemens.Engineering;
++﻿using Siemens.Engineering;
+ using Siemens.Engineering.SW.Blocks;
+ using Siemens.Engineering.SW.ExternalSources;
+ using Siemens.Engineering.SW.Tags;
+@@ -287,8 +287,17 @@ public bool RenameWatchTable(string softwarePath, string watchTablePath, string
+                 () =>
+                 {
+                     EnsureValidName(newName);
++                    #if TIA_V21_PLUS
+                     RequireWatchTable(softwarePath, watchTablePath).Name = newName;
+                     return true;
++#else
++                    _ = RequireWatchTable(softwarePath, watchTablePath);
++                    throw new PortalException(PortalErrorCode.NotSupported,
++                        "Renaming a watch table requires TIA Portal V21 or newer: PlcWatchTable.Name is read-only in this Openness version.");
++#pragma warning disable CS0162
++                    return true;
++#pragma warning restore CS0162
++#endif
+                 },
+                 ("softwarePath", softwarePath), ("watchTablePath", watchTablePath), ("newName", newName));
+         }
+diff --git a/src/TiaMcpServer/Siemens/Portal.cs b/src/TiaMcpServer/Siemens/Portal.cs
+index c0997368a335c623930aa057789bc5bd32800a50..05cc29a67f371c90976cbacc8c5d84cc133927a3 100644
+--- a/src/TiaMcpServer/Siemens/Portal.cs
++++ b/src/TiaMcpServer/Siemens/Portal.cs
+@@ -136,8 +136,10 @@ public bool ConnectPortal()
+                 _session = null;
+                 _portal = null;
+ 
+-                // connect to running TIA Portal
+-                var processes = TiaPortal.GetProcesses();
++                // Normal mode attaches to an existing instance first. Isolated mode is an
++                // explicit disposable-fixture escape hatch: it never attaches to a user's
++                // visible project and starts a private headless Openness process instead.
++                var processes = Engineering.IsolatedPortal ? Enumerable.Empty<TiaPortalProcess>() : TiaPortal.GetProcesses();
+                 if (processes.Any())
+                 {
+                     _portal = processes.First().Attach();
+@@ -158,7 +160,9 @@ public bool ConnectPortal()
+                 }
+ 
+                 // start new TIA Portal
+-                _portal = new TiaPortal(TiaPortalMode.WithUserInterface);
++                _portal = new TiaPortal(Engineering.IsolatedPortal
++                    ? TiaPortalMode.WithoutUserInterface
++                    : TiaPortalMode.WithUserInterface);
+ 
+                 return true;
+             }
+diff --git a/src/TiaMcpServer/Siemens/SafetyClassification.cs b/src/TiaMcpServer/Siemens/SafetyClassification.cs
+new file mode 100644
+index 0000000000000000000000000000000000000000..d6d61c8924d7e34c05b8c17b7b4792ca7ab776d5
+--- /dev/null
++++ b/src/TiaMcpServer/Siemens/SafetyClassification.cs
+@@ -0,0 +1,31 @@
++using Siemens.Engineering.Safety;
++using Siemens.Engineering.SW.Blocks;
++using System;
++
++namespace TiaMcpServer.Siemens
++{
++    /// <summary>
++    /// Fail-closed classification shared by read responses and every project write preflight.
++    /// A null result means the API did not provide enough evidence to permit a write.
++    /// </summary>
++    public static class SafetyClassification
++    {
++        public static bool? GetFailsafeClassification(PlcBlock block)
++        {
++            if (block == null) return null;
++
++            var language = Enum.GetName(typeof(ProgrammingLanguage), block.ProgrammingLanguage);
++            if (string.IsNullOrWhiteSpace(language) || language == "Undef") return null;
++            if (language.StartsWith("F_", StringComparison.Ordinal)) return true;
++
++            try
++            {
++                return block.GetService<SafetySignatureProvider>() != null;
++            }
++            catch (Exception)
++            {
++                return null;
++            }
++        }
++    }
++}
+diff --git a/src/TiaMcpServer/TiaMcpServer.csproj b/src/TiaMcpServer/TiaMcpServer.csproj
+index 644c01ad20a2095441e973d7071cccb602d51026..ddc9e6ba0eb05073e4e998d57f4defce41e8f2e5 100644
+--- a/src/TiaMcpServer/TiaMcpServer.csproj
++++ b/src/TiaMcpServer/TiaMcpServer.csproj
+@@ -5,6 +5,8 @@
+     <LangVersion>Latest</LangVersion>
+     <OutputType>Exe</OutputType>
+     <PlatformTarget>x64</PlatformTarget>
++    <OpennessPackageVersion Condition=" '$(OpennessPackageVersion)' == '' ">20.0.1744190253</OpennessPackageVersion>
++    <DefineConstants Condition=" '$(TiaMajor)' == '21' ">$(DefineConstants);TIA_V21_PLUS</DefineConstants>
+     <Prefer32Bit>false</Prefer32Bit>
+     <AssemblyVersion>0.1.0</AssemblyVersion>
+     <BaseOutputPath>.\bin</BaseOutputPath>
+@@ -14,12 +16,10 @@
+     <PackageReference Include="ModelContextProtocol" Version="2.2.0" />
+     <PackageReference Include="Siemens.Collaboration.Net.OperatingSystem.Windows" Version="3.0.1725521661" />
+     <PackageReference Include="Siemens.Collaboration.Net.TiaPortal.Openness.Resolver" Version="2.0.1765367256" />
+-    <PackageReference Include="Siemens.Collaboration.Net.TiaPortal.Packages.Openness" Version="21.0.1765349347" />
++    <PackageReference Include="Siemens.Collaboration.Net.TiaPortal.Packages.Openness" Version="$(OpennessPackageVersion)" />
+   </ItemGroup>
+   <ItemGroup>
+-    <Reference Include="System.Management">
+-      <HintPath>C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8\System.Management.dll</HintPath>
+-    </Reference>
++    <Reference Include="System.Management" />
+   </ItemGroup>
+   <ItemGroup>
+     <Compile Remove="tests\**" />

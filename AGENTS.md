@@ -23,14 +23,16 @@ industrial** y trabaje como lo haría el ingeniero responsable.
 
 ```
 1. Doctor              ← ¿entorno sano? Si no, para y dilo.
-2. Connect / Attach    ← usa Attach solo si el servidor lo expone y corresponde al proyecto objetivo. El `tia-inspect` instalado no expone Attach; con una ventana visible, no uses Connect a ciegas ni abras otra instancia.
+2. Connect / Attach    ← usa Attach solo si el servidor lo expone y corresponde al proyecto objetivo. Si hay una ventana visible, identifica proyecto y versión con Computer Use nativo del harness antes de conectar. En Codex para Windows se usa el plugin `computer-use` (`node_repl` + `@oai/sky`); `mcp__cua_repl` es solo navegador y su `apps=[]` no mide aplicaciones Windows. Esta capacidad es propia del host/sesión, no se presupone en otros agentes. El `tia-inspect` instalado no expone Attach; no uses Connect a ciegas ni abras otra instancia.
 3. GetProjectTree      ← de aquí salen las rutas REALES
 4. leer → cambio mínimo → compilar → guardar
 ```
 
-Excepción única: `tia-inspect --isolated` crea una instancia Openness sin interfaz exclusivamente
-para un fixture desechable previamente identificado. Requiere una orden explícita del runner y no
-se puede usar con un proyecto de cliente ni como atajo para evitar el attach normal.
+Excepción única: `tia-inspect --isolated --fixture-root <run-dir>` crea una instancia Openness sin
+interfaz exclusivamente para un fixture desechable previamente identificado. La raíz debe contener
+`.tia-agent-fixture.json`, que señala el `.ap20` exacto y su backup coincidente. Solo el runner
+serializado debe crear el manifiesto después de copiar y comparar el fixture; nunca se apunta la raíz
+a `40-projects/`, a una carpeta de cliente ni a un original de `50-examples/`.
 
 **Nunca inventes una ruta.** Openness navega por *paths* de objetos de ingeniería, no por
 nombres bonitos. `PLC_1`, `PC-System_1/Software PLC_1`, `Group/Subgroup/FB_Motor`. Si no la has
@@ -69,14 +71,42 @@ para y pregunta.
 - Bloque con **know-how protection**: no lo toques. Pide al usuario que quite la protección
   en TIA.
 - **F-blocks / tags de safety**: no los edites. Requieren password y auditoría. Reporta y para.
+- Antes de cualquier importación/escritura de un bloque, exige `GetBlocks.isFailsafe=false` y
+  `programmingLanguage=SCL` leídos del proyecto live. Si el servidor/perfil no expone `isFailsafe`,
+  o devuelve `null`, para: el heurístico de nombre/grupo y `noBlockingFindings` no autorizan la
+  escritura. Las importaciones MCP directas (`ImportSources`, `ImportFromDocuments` y equivalentes)
+  no ejecutan la barrera del runner PowerShell; para propuestas SCL existentes usa
+  `Invoke-TiaWorkflow.ps1 -Workflow apply`, que debe consultar `tools/list` y bloquear si falta la
+  herramienta requerida. **Estado V20 observado el 2026-09-21:** el perfil aislado `write` lista 84
+  herramientas y no registra `ImportSources` ni `ImportFromDocuments`; por tanto la aplicación de
+  propuestas queda bloqueada antes de mutar TIA. Los `.s7dcl` siguen siendo solo-preview aunque el
+  roster cambiara: falta un contrato probado de conteos y readback exacto. No llames directamente a
+  un importador genérico ni presentes el preview local como cambio aplicado. Evidencia:
+  `70-runs/tia-capabilities/20260921-04-write-tools-live.json`.
+  Para cualquier otra importación, repite la misma
+  preflight de forma independiente antes de llamar a la herramienta mutante.
+- **Un bloque nuevo no tiene clasificación `GetBlocks` previa.** El runner actual de propuestas
+  solo reemplaza bloques existentes; no uses ese hecho para autorizar una importación de un bloque
+  nuevo ni suplantes la metadata con la de otro bloque. La ruta de creación se considera no
+  disponible hasta que exista un flujo probado que haga preflight global del PLC (F-blocks, tags
+  Safety, protección y clasificación completa), confirme que el path destino no existe, cree un
+  FB vacío estándar con lenguaje SCL en un fixture aislado y lea de vuelta `isFailsafe=false`,
+  `programmingLanguage=SCL` y `isKnowHowProtected=false` **antes** de importar la lógica. Si una
+  propiedad no aparece o es nula, no importes; descarta/restaura el fixture.
+- `Invoke-TiaSclProposalApply.ps1` consulta todo `GetTags`. Si hay cualquier tag Safety o una marca
+  incompleta, bloquea la propuesta completa hasta que exista resolución segura de referencias SCL.
+  Es un veto conservador, no una prueba de que cada tag se use en el bloque.
 - Si un error de Openness menciona safety o protección, **no reintentes**: informa.
 
 ### 3.5 Perfiles MCP y proyectos abiertos
 
 - **`read`**: solo `tia-inspect`; es el perfil por defecto para descubrir y analizar.
-- **`write`**: `tia-inspect --allow-write`; requiere backup, lectura previa, preview y compilación.
+- **`write`**: `tia-inspect --isolated --fixture-root <run-dir> --allow-write`; el servidor exige
+  un manifiesto coincidente y solo publica escrituras si el directorio existe. Requiere backup,
+  lectura previa, preview y compilación.
 - **`create`**: solo `tia-create`; para proyectos nuevos, hardware, redes y HMI. Requiere
-  reconocimiento explícito del perfil de escritura y `dryRun` antes de aplicar.
+  reconocimiento explícito del perfil de escritura y `dryRun`/preview antes de aplicar cuando
+  la herramienta lo ofrezca; si no lo ofrece, exige preflight completo y fixture desechable.
 - **`full`**: combina lectura/escritura y creación; solo se usa cuando la tarea necesita ambos
   servidores y también requiere reconocimiento explícito.
 
@@ -86,6 +116,20 @@ expone y corresponde al proyecto pedido. En el `tia-inspect` actual no existe `A
 interacción gráfica disponible para identificar la ventana o detente y pide al usuario que libere
 o confirme la instancia. Un `Connect` correcto sin proyecto no equivale a haber adjuntado la
 ventana visible. Un resultado de `dryRun` nunca se presenta como cambio aplicado.
+
+Para Computer Use en Codex/Windows, consulta al inicio de la tarea el inventario nativo mediante
+`node_repl` + `@oai/sky`, selecciona solo una ventana devuelta y verifica título/proyecto en su estado
+visual. `mcp__cua_repl` solo devuelve superficies de navegador: un `apps=[]` allí no prueba que falte
+control nativo. No asumas que el acceso a Computer Use de una sesión Codex está disponible para
+Claude Code, OpenCode u otro agente del mismo ordenador; cada host debe verificar su integración,
+política y permiso de la aplicación.
+
+Si el inventario nativo no devuelve una ventana TIA, refresca el inventario y revisa Doctor/procesos.
+Solo si se confirma que no hay otra instancia de TIA ni proyecto abierto, y la aplicación exacta está
+identificada, puedes lanzarla con Computer Use; después vuelve a enumerar y selecciona el ID nuevo
+que devuelve la API. Si launch no entrega una ventana targetable, no repitas a ciegas: consulta el
+inventario otra vez y para si la ventana/proyecto no se puede identificar. No conectes MCP para
+compensar un inventario vacío.
 
 ### 3.4 Datos de cliente
 
@@ -120,12 +164,14 @@ Ver `00-meta/decisiones/ADR-003-lenguajes.md`.
 
 | Servidor | Para qué | Modo |
 |---|---|---|
-| **`tia-inspect`** (heilingbrunner) | Leer, entender, buscar, exportar a texto para git | solo lectura salvo `--allow-write` |
-| **`tia-create`** (bulaofen, perfil `lite`) | Crear proyectos, hardware, red, HMI Unified | escritura, usa `dryRun` |
+| **`tia-inspect`** (heilingbrunner) | Leer, entender, buscar, exportar a texto para git | lectura por defecto; escritura solo con instancia aislada, raíz/manifiesto de fixture y `--allow-write` |
+| **`tia-create`** (bulaofen, perfil `lite`) | Crear proyectos, hardware, red, HMI Unified | escritura; usa `dryRun`/preview cuando la herramienta lo ofrezca y, si no, preflight + fixture |
 
 Regla práctica: **si la tarea es entender, `tia-inspect`. Si es crear, `tia-create`.**
-Para editar un bloque existente, `tia-inspect` con `--allow-write`: tiene mejor modelo de errores
-y no se registra sin la bandera.
+Para editar un bloque estándar existente, `tia-inspect` con `--isolated --fixture-root <run-dir>
+--allow-write`: tiene mejor modelo de errores. El servidor no permite abrir otra ruta que no sea
+el `.ap20` exacto del manifiesto; las importaciones opacas y las mutaciones de tipos PLC sin
+clasificación F-compliant están desregistradas.
 
 La lista visible de `tia-create lite` no es el roster completo. Si una capacidad no aparece,
 ejecuta `FindTools` con lenguaje natural y después `CallTool` con la firma exacta; no declares
@@ -156,9 +202,13 @@ no se lanzan dos sesiones concurrentes contra TIA.
 
 La aplicación de una propuesta SCL solo se realiza mediante
 `30-tools/scripts/Invoke-TiaSclProposalApply.ps1 -Apply`. El modo predeterminado es un preview
-local sin conexión a TIA. El runner registra backup, rutas exactas, importación, compilación,
-guardado, exportación y lectura posterior; si la compilación no queda en 0 errores y 0 advertencias,
-no guarda.
+local sin conexión a TIA. En el perfil V20 actual, `tools/list` confirma que faltan los importadores
+requeridos, así que `-Apply` debe detenerse con `BLOCKED` antes de cualquier llamada de mutación.
+Solo se habilitará cuando exista una herramienta acotada registrada y probada que importe un objeto
+exacto y cuya respuesta confirme conteos, lectura posterior y metadata de seguridad. No se permite
+eludir este bloqueo con `ImportSources` o `ImportFromDocuments` directos. Cuando la capacidad exista,
+el runner registrará backup, rutas exactas, importación, compilación, guardado, exportación y lectura
+posterior; si la compilación no queda en 0 errores y 0 advertencias, no guarda.
 
 Los pasos 8 y 9 **no son opcionales**. Un `.ap20` es binario: sin el export en `src/` nadie —
 tú incluido, dentro de tres meses — puede ver qué tocó el agente.

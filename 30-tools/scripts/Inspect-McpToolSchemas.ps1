@@ -5,7 +5,9 @@ param(
     [string]$Arguments = '',
     [string[]]$ToolName = @(),
     [string]$OutputPath,
-    [int]$TimeoutSeconds = 60
+    [int]$TimeoutSeconds = 60,
+    [string]$LeaseName = 'Local\TIA-Claude-McpSession',
+    [int]$LeaseTimeoutSeconds = 60
 )
 
 $ErrorActionPreference = 'Stop'
@@ -25,6 +27,9 @@ $psi.RedirectStandardOutput = $true
 $psi.RedirectStandardError = $true
 $psi.StandardOutputEncoding = [Text.Encoding]::UTF8
 $process = $null
+$mutex = $null
+$leaseAcquired = $false
+$leaseCreated = $false
 
 function Send-Json([object]$Payload) {
     $process.StandardInput.WriteLine(($Payload | ConvertTo-Json -Depth 30 -Compress))
@@ -48,6 +53,12 @@ function Read-Response([int]$Id) {
 }
 
 try {
+    $mutex = [Threading.Mutex]::new($false, $LeaseName, [ref]$leaseCreated)
+    $leaseAcquired = $mutex.WaitOne([TimeSpan]::FromSeconds($LeaseTimeoutSeconds))
+    if (-not $leaseAcquired) {
+        throw "Could not acquire MCP/TIA session lease '$LeaseName' within $LeaseTimeoutSeconds seconds."
+    }
+
     $process = [Diagnostics.Process]::Start($psi)
     $stderrTask = $process.StandardError.ReadToEndAsync()
     Send-Json ([ordered]@{
@@ -105,6 +116,10 @@ finally {
         if ($stderrTask) { try { $null = $stderrTask.GetAwaiter().GetResult() } catch { } }
         $process.Dispose()
     }
+    if ($leaseAcquired) {
+        try { $mutex.ReleaseMutex() } catch { }
+    }
+    if ($mutex) { $mutex.Dispose() }
 }
 
 $global:LASTEXITCODE = 0

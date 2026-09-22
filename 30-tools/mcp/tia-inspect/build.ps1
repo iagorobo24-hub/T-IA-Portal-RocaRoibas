@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Clona, parchea y compila el servidor MCP tia-inspect (heilingbrunner/tiaportal-mcp)
+    Prepara, parchea y compila el servidor MCP tia-inspect (heilingbrunner/tiaportal-mcp)
     contra la version de Openness instalada en esta maquina.
 
 .DESCRIPTION
@@ -9,8 +9,10 @@
       - parchear PlcWatchTable.Name (solo escribible desde V21)
       - bajar el suelo de deteccion de instalaciones de V21 a V19
 
-    Los cambios viven en patches/0001-tia-v19-v20-compat.patch, no en un fork,
-    para poder seguir haciendo `git pull` del upstream.
+    El cambio local completo vive en un único parche canónico, fijado a UPSTREAM-COMMIT.txt.
+    Los parches previos están archivados y no se aplican. El script nunca revierte ni elimina
+    cambios locales de upstream: valida el commit base y detecta el parche como ya aplicado,
+    lo aplica si encaja, o falla preservando los archivos si el estado es ambiguo.
 
 .PARAMETER TiaMajor
     20 (por defecto) o 21. V19 AUN NO esta soportado: la API de documentos
@@ -18,9 +20,9 @@
     compilar fuera toda esa funcionalidad. Ver 00-meta/decisiones/ADR-002.
 
 .EXAMPLE
-    .\build.ps1                 # compila para TIA V20
-    .\build.ps1 -TiaMajor 21    # compila para TIA V21
-    .\build.ps1 -Clean          # borra upstream/ y vuelve a empezar
+.\build.ps1                 # compila para TIA V20
+.\build.ps1 -TiaMajor 21    # compila para TIA V21
+.\build.ps1 -Clean          # limpia los artefactos de compilacion; no borra upstream/
 #>
 [CmdletBinding()]
 param(
@@ -33,6 +35,20 @@ $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $upstream = Join-Path $root 'upstream'
 $repoUrl = 'https://github.com/heilingbrunner/tiaportal-mcp.git'
+$patchDir = Join-Path $root 'patches'
+$baseCommitFile = Join-Path $patchDir 'UPSTREAM-COMMIT.txt'
+$canonicalPatch = Join-Path $patchDir '0001-tia-agent-workspace.patch'
+
+if (-not (Test-Path -LiteralPath $baseCommitFile)) {
+    throw "Falta el pin del commit upstream: $baseCommitFile"
+}
+$expectedCommit = (Get-Content -LiteralPath $baseCommitFile -Raw).Trim()
+if ($expectedCommit -notmatch '^[0-9a-fA-F]{40}$') {
+    throw "UPSTREAM-COMMIT.txt debe contener un SHA completo de 40 caracteres."
+}
+if (-not (Test-Path -LiteralPath $canonicalPatch)) {
+    throw "Falta el parche canónico: $canonicalPatch"
+}
 
 # Version del paquete NuGet Siemens.Collaboration.Net.TiaPortal.Packages.Openness
 # por cada major de TIA. Comprobado contra nuget.org el 2026-09-14.
@@ -57,38 +73,69 @@ function Invoke-Native {
     if ($LASTEXITCODE -ne 0) { throw "$What fallo (exit $LASTEXITCODE)" }
 }
 
+function Test-GitPatchState {
+    param([string[]]$GitArguments)
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $output = @(& git @GitArguments 2>&1 | ForEach-Object { "$_" })
+        $exitCode = $LASTEXITCODE
+        return [pscustomobject]@{ ExitCode = $exitCode; Output = $output }
+    }
+    finally {
+        $ErrorActionPreference = $previousPreference
+    }
+}
+
 # --- dotnet ---------------------------------------------------------------
 $dotnet = Join-Path $env:ProgramFiles 'dotnet\dotnet.exe'
 if (-not (Test-Path $dotnet)) {
     throw "No se encuentra dotnet en '$dotnet'. Instalalo con: winget install Microsoft.DotNet.SDK.10"
 }
 
-if ($Clean -and (Test-Path $upstream)) {
-    Write-Step "Borrando upstream/"
-    Remove-Item $upstream -Recurse -Force
-}
-
 # --- clonar o actualizar --------------------------------------------------
 if (-not (Test-Path $upstream)) {
-    Write-Step "Clonando $repoUrl"
-    Invoke-Native "git clone" { git clone --depth 1 $repoUrl $upstream }
+    Write-Step "Clonando $repoUrl sin checkout"
+    Invoke-Native "git clone" { git clone --no-checkout $repoUrl $upstream }
+    Write-Step "Fijando upstream en $expectedCommit"
+    Invoke-Native "git checkout del commit fijado" { git -C $upstream checkout --detach $expectedCommit }
 } else {
-    Write-Step "upstream/ ya existe, revirtiendo cambios locales"
-    Invoke-Native "git checkout" { git -C $upstream checkout -- . }
+    Write-Step "upstream/ ya existe; se conserva su estado de trabajo"
 }
-Write-Ok ("commit " + (git -C $upstream rev-parse --short HEAD))
+
+$actualCommit = (git -C $upstream rev-parse HEAD).Trim()
+if ($actualCommit -ne $expectedCommit) {
+    throw "El upstream está en $actualCommit y el parche se validó contra $expectedCommit. No se cambió el árbol; revisa el upstream manualmente."
+}
+Write-Ok "commit fijado $actualCommit"
 
 # --- aplicar parche -------------------------------------------------------
-$patch = Join-Path $root 'patches\0001-tia-v19-v20-compat.patch'
-Write-Step "Aplicando $(Split-Path $patch -Leaf)"
-try { Invoke-Native "git apply" { git -C $upstream apply --ignore-whitespace $patch } }
-catch { throw "El parche no aplica limpio. Upstream ha cambiado: regeneralo contra el commit actual." }
-Write-Ok "parche aplicado"
+$reverseCheck = Test-GitPatchState @('-C', $upstream, 'apply', '--reverse', '--check', '--ignore-whitespace', $canonicalPatch)
+if ($reverseCheck.ExitCode -eq 0) {
+    Write-Ok "$(Split-Path $canonicalPatch -Leaf) ya aplicado"
+} else {
+    $check = Test-GitPatchState @('-C', $upstream, 'apply', '--check', '--ignore-whitespace', $canonicalPatch)
+    if ($check.ExitCode -ne 0) {
+        $detail = @($reverseCheck.Output + $check.Output) -join [Environment]::NewLine
+        throw "El parche canónico no está aplicado y tampoco encaja en el commit fijado. No se modificó upstream. $detail"
+    }
+
+    Write-Step "Aplicando $(Split-Path $canonicalPatch -Leaf)"
+    Invoke-Native "git apply" { git -C $upstream apply --ignore-whitespace $canonicalPatch }
+    Write-Ok "parche aplicado"
+}
 
 # --- compilar -------------------------------------------------------------
 $outDir = Join-Path $root "bin\v$TiaMajor"
 $pkg = $opennessPackage[$TiaMajor]
 Write-Step "Compilando para TIA V$TiaMajor (paquete Openness $pkg)"
+
+if ($Clean) {
+    Write-Step "Limpiando artefactos de compilacion (sin borrar upstream)"
+    Invoke-Native "dotnet clean" {
+        & $dotnet clean (Join-Path $upstream 'src\TiaMcpServer\TiaMcpServer.csproj') -c Release -p:TiaMajor=$TiaMajor -p:OpennessPackageVersion=$pkg --nologo
+    }
+}
 
 Invoke-Native "dotnet build" {
     & $dotnet build (Join-Path $upstream 'src\TiaMcpServer\TiaMcpServer.csproj') -c Release -p:TiaMajor=$TiaMajor -p:OpennessPackageVersion=$pkg --nologo

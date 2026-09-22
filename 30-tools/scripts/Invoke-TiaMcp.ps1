@@ -20,9 +20,17 @@
     Version de TIA. 20 por defecto.
 
 .PARAMETER AllowWrite
-    Arranca el servidor con --allow-write, que registra las 40 herramientas de
-    escritura. SIN esta bandera no existen: el modelo no puede llamar a lo que
-    no ve. Ver AGENTS.md 3.2 antes de usarla.
+    Arranca el servidor con --allow-write. Las herramientas mutantes sólo se
+    registran si también se usa -Isolated y se da una raíz de fixture marcada.
+
+.PARAMETER Isolated
+    Arranca una instancia privada de TIA Portal sin interfaz y no se conecta a
+    procesos visibles. Solo para fixtures desechables y pruebas explícitas;
+    no debe usarse sobre proyectos de cliente.
+
+.PARAMETER FixtureRoot
+    Directorio de ejecución de la copia desechable. Debe contener
+    .tia-agent-fixture.json, que nombra la ruta exacta del proyecto que se abrirá.
 
 .PARAMETER TimeoutSeconds
     Espera maxima por llamada. Por defecto 300: arrancar TIA en frio tarda
@@ -49,6 +57,10 @@ param(
 
     [switch]$AllowWrite,
 
+    [switch]$Isolated,
+
+    [string]$FixtureRoot,
+
     # Por defecto la cadena para al primer fallo: una llamada fallida suele
     # invalidar las siguientes (sin conexion, sin proyecto abierto...). Con esta
     # bandera sigue, util para lotes donde cada item es independiente.
@@ -65,10 +77,29 @@ if (-not (Test-Path $exe)) {
     throw "No existe $exe. Compilalo con 30-tools\mcp\tia-inspect\build.ps1 -TiaMajor $TiaMajor"
 }
 
+if ($Isolated -and [string]::IsNullOrWhiteSpace($FixtureRoot)) {
+    throw '-Isolated requires -FixtureRoot pointing to a disposable fixture run directory.'
+}
+if ($Isolated -and -not (Test-Path -LiteralPath (Join-Path ([IO.Path]::GetFullPath($FixtureRoot)) '.tia-agent-fixture.json') -PathType Leaf)) {
+    throw '-Isolated requires a valid .tia-agent-fixture.json manifest in -FixtureRoot.'
+}
+if ($AllowWrite -and -not $Isolated) {
+    throw '-AllowWrite is restricted to an isolated disposable fixture session.'
+}
+if ($FixtureRoot -and -not $Isolated) {
+    throw '-FixtureRoot can only be used with -Isolated.'
+}
+
 $serverArgs = "--tia-major-version $TiaMajor"
 if ($AllowWrite) {
-    Write-Host "!! MODO ESCRITURA: 40 herramientas destructivas registradas" -ForegroundColor Red
+    Write-Host "!! MODO ESCRITURA: sólo herramientas disponibles para el fixture declarado" -ForegroundColor Red
     $serverArgs += " --allow-write"
+}
+if ($Isolated) {
+    Write-Host "!! MODO AISLADO: instancia TIA privada sin interfaz; solo fixture desechable" -ForegroundColor Yellow
+    $serverArgs += " --isolated"
+    $rootFull = [IO.Path]::GetFullPath($FixtureRoot)
+    $serverArgs += ' --fixture-root "' + $rootFull + '"'
 }
 
 $psi = New-Object System.Diagnostics.ProcessStartInfo
@@ -172,5 +203,10 @@ try {
 finally {
     try { $proc.StandardInput.Close() } catch {}
     if (-not $proc.WaitForExit(5000)) { try { $proc.Kill() } catch {} }
-    try { $null = $stderrTask.GetAwaiter().GetResult() } catch {}
+    # TIA Portal may inherit the server stderr handle. Keep process cleanup bounded
+    # instead of waiting forever for an EOF that belongs to a child process.
+    try {
+        if ($stderrTask.Wait(5000)) { $null = $stderrTask.Result }
+    }
+    catch {}
 }

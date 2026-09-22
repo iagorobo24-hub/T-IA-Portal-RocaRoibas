@@ -5,9 +5,11 @@ bloques, tipos, tags, y por dónde empezar a mirar.
 
 **Precondiciones**
 - `Doctor` en verde, con `User in 'Siemens TIA Openness' user group: True`
-- Ruta del `.ap20`
+- Ruta exacta del `.ap20`; trabajar desde copia si el proyecto es antiguo o TIA puede actualizarlo
+- Saber si TIA Portal ya está abierto y qué proyecto muestra
 
-**Servidor.** `tia-inspect` — solo lectura, no puede romper nada.
+**Servidor.** `tia-inspect` perfil `read`. Este perfil oculta herramientas de escritura, pero abrir o
+actualizar un proyecto y compilar pueden guardar estado interno; usa una copia.
 
 ---
 
@@ -15,14 +17,29 @@ bloques, tipos, tags, y por dónde empezar a mirar.
 
 ### 1. Entrar
 
-```
-Doctor                              ← siempre primero
-Connect                             ← o AttachToOpenProject si TIA ya está abierto
-OpenProject(path: "...\\Proyecto.ap20")
+1. Ejecuta `Doctor` y revisa grupo Openness, versión activa, modo del server y estado de conexión.
+2. Si una ventana de TIA está abierta, identifica visualmente su proyecto mediante Computer Use
+   cuando esa capacidad esté disponible. Si no puedes identificar la ventana/proyecto, para: no
+   intentes `Connect`, `OpenProject`, cerrar ni sustituir la instancia.
+3. Comprueba el schema del servidor/perfil concreto. `tia-inspect` read no expone
+   `AttachToOpenProject`; que aparezca en un schema guardado de `tia-create full` no la habilita en
+   `tia-inspect read`. Usa Attach sólo si el server activo lo publica y el proyecto visible ya se
+   identificó como el objetivo solicitado.
+   Si el perfil activo no ofrece Attach, limita la revisión a la interfaz visible en modo lectura
+   o detente y pide que liberen/confirmen la instancia; no uses `Connect`/`OpenProject` como
+   sustituto del Attach.
+4. Si no hay proceso TIA, inicia `Connect`, ejecuta `GetState` y confirma que no hay otro proyecto
+   abierto. Sólo entonces abre la ruta exacta pedida. Si `GetState` devuelve otro proyecto, para sin
+   cerrarlo ni sustituirlo.
+
+```text
+Doctor → identificar instancia/target → verificar Attach en el perfil → Connect/Attach
+→ GetState → OpenProject sólo si no hay proyecto abierto y el target es exacto
 ```
 
-🔒 Si TIA ya está abierto con ese proyecto, **attach, no connect**. Dos instancias sobre el mismo
-proyecto es una forma excelente de perder trabajo.
+🔒 `Connect` no significa que la ventana visible esté adjunta. Si TIA muestra otro proyecto o no
+puedes distinguir la instancia, detente. Para proyectos V16/V17, primero copia la carpeta completa
+en `90-tmp/`: TIA V20 puede convertir el proyecto.
 
 ### 2. El mapa de arriba
 
@@ -99,7 +116,7 @@ Has terminado cuando puedes responder, sin volver a mirar:
 
 | Síntoma | Causa | Arreglo |
 |---|---|---|
-| `InvalidState` | No hay conexión o proyecto abierto | `Connect` → `OpenProject` |
+| `InvalidState` | No hay conexión o proyecto abierto | Sólo con target confirmado: `Connect` → `GetState` → `OpenProject` |
 | `NotFound` en un `softwarePath` | Te lo inventaste o lo escribiste mal | Vuelve a `GetProjectTree` y **copia** el valor |
 | La respuesta viene cortada | El PLC es grande | Usa `sections` y pide por partes |
 | Tarda muchísimo | TIA está arrancando en frío | Es normal: el primer arranque tarda minutos. Los siguientes, segundos |
@@ -119,12 +136,16 @@ funcionó. Resultado: S7-1200, 4 bloques, 0 inconsistentes — está en su
 50-examples/npatel-iot/03_OPCUA_Project/
 ```
 
-Están en **V16**, pero eso **no es un problema**: `OpenProject` usa `OpenWithUpgrade` por debajo
-y **migra el proyecto solo**. Tardó 125 s en el más pequeño, así que usa un timeout generoso.
-Detalle en [`MIGRACION-V16-a-V20.md`](../../50-examples/MIGRACION-V16-a-V20.md).
+Están en **V16**. El `OpenWithUpgrade` de Openness V20 documenta la actualización desde la versión
+inmediatamente anterior y advierte que una versión más antigua puede devolver una excepción. En
+este workspace se abrió una copia V16 concreta (`npatel-basement-light`) con éxito en 125 s; es
+evidencia de ese proyecto, no garantía para los demás. Abre siempre una copia desechable, nunca el
+original, y conserva el log/backup. Detalle y límites en
+[`MIGRACION-V16-a-V20.md`](../../50-examples/MIGRACION-V16-a-V20.md).
 
 **Cuando termines, rellena el `FICHA.md` del ejemplo** con lo que encuentres. Eso es lo que
 convierte la carpeta de ejemplos en algo consultable sin abrir TIA.
 
-🔴 **Y cierra TIA al acabar:** `Disconnect` no lo cierra, y las instancias se acumulan a
-1,3 GB cada una. `30-tools\scripts\Stop-TiaPortal.ps1`.
+🔴 `Disconnect` no cierra TIA. No cierres una instancia del usuario; sólo detén una instancia propia
+cuando puedas demostrar que el runner la inició y que no contiene trabajo ajeno. No uses
+`Stop-TiaPortal.ps1` como limpieza indiscriminada.

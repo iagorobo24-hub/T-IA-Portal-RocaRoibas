@@ -10,6 +10,10 @@
 > Esta página es la guía completa. [`20-standards/estilo-scl.md`](../../20-standards/estilo-scl.md)
 > es la referencia corta citable en revisión — si difieren, esta manda porque es la más reciente.
 
+> ⚠️ Los nombres de variables, grupos y bloques nunca certifican Safety. `EmergencyOk` en un
+> bloque estándar es una entrada de permiso de proceso; no implementa ni valida una función F/SIL/PL.
+> Los interlocks estándar se agrupan en `20_Permissives`; no se usa `20_Safety` para código normal.
+
 ## Estructura de un bloque
 
 ```pascal
@@ -44,6 +48,8 @@ FAMILY : Drives
    VAR
       tonStart { InstructionName := 'TON_TIME' } : TON_TIME;
       statRunLatch : Bool;
+      statFault : Bool;
+      statFaultCode : Int;
    END_VAR
 
 BEGIN
@@ -51,35 +57,39 @@ BEGIN
    // 1. Rearme de fallo
    //---------------------------------------------------------------------------
    IF #CmdReset THEN
-      #Fault     := FALSE;
-      #FaultCode := 0;
+      #statFault     := FALSE;
+      #statFaultCode := 0;
    END_IF;
 
    //---------------------------------------------------------------------------
    // 2. Enclavamiento de marcha
    //    El paro y el fallo mandan siempre sobre la orden de marcha.
    //---------------------------------------------------------------------------
-   IF #CmdStop OR #Fault OR NOT #Interlock THEN
+   IF #CmdStop OR #statFault OR NOT #Interlock THEN
       #statRunLatch := FALSE;
    ELSIF #CmdStart THEN
       #statRunLatch := TRUE;
    END_IF;
 
-   #Run := #statRunLatch;
-
    //---------------------------------------------------------------------------
    // 3. Vigilancia de la confirmacion
    //---------------------------------------------------------------------------
-   #tonStart(IN := #Run AND NOT #Feedback,
+   #tonStart(IN := #statRunLatch AND NOT #Feedback,
              PT := #StartTimeout);
 
    IF #tonStart.Q THEN
-      #Fault     := TRUE;
-      #FaultCode := 101;      // 101 = sin confirmacion de marcha
+      #statFault     := TRUE;
+      #statFaultCode := 101;      // 101 = sin confirmacion de marcha
       #statRunLatch := FALSE;
    END_IF;
 
-   #Running := #Run AND #Feedback;
+   //---------------------------------------------------------------------------
+   // 4. Publicar cada salida una vez; no usar VAR_OUTPUT como memoria interna.
+   //---------------------------------------------------------------------------
+   #Run       := #statRunLatch;
+   #Running   := #statRunLatch AND #Feedback;
+   #Fault     := #statFault;
+   #FaultCode := #statFaultCode;
 END_FUNCTION_BLOCK
 ```
 

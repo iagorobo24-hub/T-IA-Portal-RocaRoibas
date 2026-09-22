@@ -1,4 +1,4 @@
-FUNCTION_BLOCK "FB_AgentDemo"
+﻿FUNCTION_BLOCK "FB_AgentDemo"
 { S7_Optimized_Access := 'TRUE' }
 VERSION : 0.1
 AUTHOR : TIA_Claude

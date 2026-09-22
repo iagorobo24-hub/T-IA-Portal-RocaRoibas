@@ -107,6 +107,40 @@ $containsProjects = @(
 ).Count -gt 0
 New-PackageManifest $examplesRoot 'examples' $containsProjects
 
+# Keep the human-readable package summary synchronized with the manifests from
+# this exact build. The source file is a metadata template; generated counts,
+# byte totals, and the packaged tia-inspect hash always come from the output.
+$packageInfoSource = Join-Path $PSScriptRoot '..\manifests\package-info.json'
+if (-not (Test-Path -LiteralPath $packageInfoSource -PathType Leaf)) {
+    throw "Package metadata template is missing: $packageInfoSource"
+}
+$packageInfo = Get-Content -Raw -LiteralPath $packageInfoSource | ConvertFrom-Json
+foreach ($kind in @('core', 'examples')) {
+    $isCore = $kind -eq 'core'
+    $packageRoot = if ($isCore) { $coreRoot } else { $examplesRoot }
+    $manifestRelative = if ($isCore) { 'TIA-Claude_Core/manifests/package-manifest.json' } else { 'TIA-Claude_Examples/manifests/examples-manifest.json' }
+    $manifestPath = Join-Path $packageRoot 'manifests\package-manifest.json'
+    if (-not $isCore) { $manifestPath = Join-Path $packageRoot 'manifests\examples-manifest.json' }
+    $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+    $manifestBytes = [long](($manifest.files | Measure-Object -Property bytes -Sum).Sum)
+    $totalBytes = [long]((Get-ChildItem -LiteralPath $packageRoot -Recurse -File | Measure-Object -Property Length -Sum).Sum)
+    $summary = if ($isCore) { $packageInfo.distribution.core } else { $packageInfo.distribution.examples }
+    $summary.path = if ($isCore) { 'TIA-Claude_Core' } else { 'TIA-Claude_Examples' }
+    $summary.files = [int]$manifest.fileCount
+    $summary.bytes = $manifestBytes
+    $summary.totalBytesIncludingManifest = $totalBytes
+    $summary.manifest = $manifestRelative
+}
+
+$inspectExe = Join-Path $coreRoot '30-tools\mcp\tia-inspect\bin\v20\TiaMcpServer.exe'
+$packageInfo.tiaInspect.path = 'TIA-Claude_Core/30-tools/mcp/tia-inspect/bin/v20/TiaMcpServer.exe'
+$packageInfo.tiaInspect.sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $inspectExe).Hash.ToLowerInvariant()
+$packageInfo.tiaInspect.bytes = (Get-Item -LiteralPath $inspectExe).Length
+$packageInfo.metadataRole = 'generated-build-summary'
+$packageInfo.generatedUtc = [DateTime]::UtcNow.ToString('o')
+$packageInfoPath = Join-Path $OutputRoot 'package-info.json'
+$packageInfo | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $packageInfoPath -Encoding UTF8
+
 [ordered]@{
     schemaVersion = 1
     generatedUtc = [DateTime]::UtcNow.ToString('o')
