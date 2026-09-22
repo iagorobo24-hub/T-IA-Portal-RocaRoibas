@@ -384,10 +384,10 @@ index ca306577000b0d43ad49b3ed495ca3cedbe3463d..1f0c5f93baf3605cdeda910cf66feb9e
              [Description("importPath: directory on this machine to walk recursively for *.db, *.awl, *.scl and *.udt files")] string importPath,
 diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.LegacyMutations.cs b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.LegacyMutations.cs
 new file mode 100644
-index 0000000000000000000000000000000000000000..a3c10eeaf457390426ae94e40c7e872ee95bdb46
+index 0000000000000000000000000000000000000000..94faf9552f24a24de5a161b3a17aae614e457803
 --- /dev/null
 +++ b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.LegacyMutations.cs
-@@ -0,0 +1,259 @@
+@@ -0,0 +1,262 @@
 +using ModelContextProtocol;
 +using ModelContextProtocol.Server;
 +using Microsoft.Extensions.Logging;
@@ -607,7 +607,10 @@ index 0000000000000000000000000000000000000000..a3c10eeaf457390426ae94e40c7e872e
 +         Description("Save the current TIA Portal local project/session; available only in --allow-write mode")]
 +        public static ResponseSaveProject SaveProject()
 +        {
-+            return Guarded(nameof(SaveProject), () =>
++            // Project.Save/LocalSession.Save is forbidden while an Openness Transaction is
++            // active. The preceding mutation has already committed its transaction, so persist
++            // it through the save-specific safety wrapper outside that transaction scope.
++            return SaveGuarded(nameof(SaveProject), () =>
 +            {
 +                if (!Portal.IsLocalSession && Portal.SaveProject())
 +                {
@@ -702,7 +705,7 @@ index b3d9d902832a6baacf3a39406d9122e8014c9a6b..94c393070259d44dc75fe71bd337bc52
              [Description("softwarePath: defines the path in the project structure to the plc software")] string softwarePath,
              [Description("groupPath: root-relative tag table group that receives the table; empty uses the PLC tags root. A leading 'PLC tags' segment, as written by preservePath exports, is accepted and ignored")] string groupPath,
 diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.cs b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.cs
-index ce9f73749b66e8a16181bdca977a88c057370d92..48f64154cd9b0380bf450782f0aad999b50e1cbf 100644
+index ce9f73749b66e8a16181bdca977a88c057370d92..bddd12a160d42018abd510d8aa3af3f9422dd883 100644
 --- a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.cs
 +++ b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.cs
 @@ -10,8 +10,8 @@ namespace TiaMcpServer.ModelContextProtocol
@@ -736,6 +739,33 @@ index ce9f73749b66e8a16181bdca977a88c057370d92..48f64154cd9b0380bf450782f0aad999
              }
              catch (PortalException pex)
              {
+@@ -68,1 +68,26 @@
++        /// <summary>
++        /// Persists the current local project/session after a write transaction has committed.
++        /// TIA Portal rejects Project.Save/LocalSession.Save while a Transaction is active, so
++        /// persistence must run outside the <see cref="Guarded{T}"/> transaction scope. The global
++        /// F/Safety scan still runs immediately before the save.
++        /// </summary>
++        private static T SaveGuarded<T>(string toolName, Func<T> body)
++        {
++            WritePolicy.EnsureEnabled(toolName);
++
++            try
++            {
++                Portal.EnsureNoSafetyObjectsForWrite(toolName);
++                return body();
++            }
++            catch (PortalException pex)
++            {
++                throw new McpException(pex.Message, pex);
++            }
++            catch (Exception ex) when (ex is not McpException)
++            {
++                throw new McpException($"Unexpected error in '{toolName}': {ex.Message}", ex);
++            }
++        }
++
+         private static JsonObject OkMeta() => new JsonObject
 diff --git a/src/TiaMcpServer/ModelContextProtocol/Responses.cs b/src/TiaMcpServer/ModelContextProtocol/Responses.cs
 index f3bcdde2278e95cf2f3a671357050b510ff3b841..74b30f2e20023e83df70b223e576d6c407ae987c 100644
 --- a/src/TiaMcpServer/ModelContextProtocol/Responses.cs

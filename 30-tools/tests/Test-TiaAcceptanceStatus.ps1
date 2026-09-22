@@ -6,6 +6,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $scriptPath = Join-Path $WorkspaceRoot '30-tools\scripts\Write-TiaAcceptanceStatus.ps1'
 $tempPath = Join-Path $env:TEMP ('tia-claude-acceptance-' + [guid]::NewGuid().ToString('N') + '.json')
+$negativeEvidencePath = Join-Path $env:TEMP ('tia-claude-acceptance-negative-' + [guid]::NewGuid().ToString('N') + '.json')
+$negativeOutputPath = Join-Path $env:TEMP ('tia-claude-acceptance-negative-result-' + [guid]::NewGuid().ToString('N') + '.json')
 try {
     & $scriptPath -WorkspaceRoot $WorkspaceRoot -OutputPath $tempPath | Out-Null
     $report = Get-Content -Raw -LiteralPath $tempPath | ConvertFrom-Json
@@ -31,9 +33,36 @@ try {
     if ($null -eq $report.evidence.computerUse -or $report.evidence.computerUse.Count -lt 1) {
         throw 'Acceptance status must reference the Computer Use evidence files.'
     }
+    $tagLifecycleFinding = 'MCP tag lifecycle: create/update/export/compile/save/delete + independent readback'
+    if ($report.verified -notcontains $tagLifecycleFinding) {
+        throw 'Acceptance status must include the verified MCP tag lifecycle finding.'
+    }
+    if ($null -eq $report.evidence.tagLifecycle -or $report.evidence.tagLifecycle.status -ne 'verified') {
+        throw 'Acceptance status must expose verified MCP tag lifecycle evidence.'
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$report.evidence.tagLifecycle.path) -or
+        [string]$report.evidence.tagLifecycle.path -notmatch '(?i)mcp-tag-lifecycle-.*\.json$') {
+        throw 'Acceptance status must reference the mcp-tag-lifecycle evidence file.'
+    }
+
+    # A window id and version alone cannot establish a native target or the
+    # physical/Safety boundary. Keep this regression probe deliberately sparse
+    # so a future parser change cannot turn metadata into a false PASS.
+    '{"harness":"native @oai/sky Computer Use","tiaMajorVersion":20,"windowId":123,"windowSelection":"yes","safetyAndHardware":{}}' |
+        Set-Content -LiteralPath $negativeEvidencePath -Encoding UTF8
+    & $scriptPath -WorkspaceRoot $WorkspaceRoot -OutputPath $negativeOutputPath -ComputerUseEvidencePaths $negativeEvidencePath | Out-Null
+    $negative = Get-Content -Raw -LiteralPath $negativeOutputPath | ConvertFrom-Json
+    if ($negative.computerUse.nativeWindowInventory.status -eq 'verified') {
+        throw 'Sparse Computer Use evidence must not verify a native TIA window.'
+    }
+    if ($negative.computerUse.safetyBoundary.status -eq 'verified') {
+        throw 'An empty safety declaration must not verify the safety boundary.'
+    }
     if ($null -eq $report.checks) { throw 'Acceptance status must expose the aggregate check summary.' }
     Write-Output 'PASS: acceptance status distinguishes verified, incomplete and blocked work'
 }
 finally {
     if (Test-Path -LiteralPath $tempPath) { Remove-Item -LiteralPath $tempPath -Force }
+    if (Test-Path -LiteralPath $negativeEvidencePath) { Remove-Item -LiteralPath $negativeEvidencePath -Force }
+    if (Test-Path -LiteralPath $negativeOutputPath) { Remove-Item -LiteralPath $negativeOutputPath -Force }
 }
