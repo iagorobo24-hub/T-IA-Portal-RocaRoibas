@@ -83,32 +83,37 @@ TIA. El agente no puede saltarse esto, y no debe intentarlo: está en `AGENTS.md
 
 ### 🔒 Programa de seguridad (F-blocks)
 
-📄 Los bloques F y las tags de safety rechazan casi cualquier edición, a veces pidiendo la
-contraseña de safety. `tia-inspect` **no intenta adivinar** las reglas de Siemens: deja pasar el
-error original tal cual.
+Siemens documenta importación y exportación de F-blocks mediante Openness V20, además de una API
+relacionada con firmas Safety. Por tanto, **no se debe depender de que TIA/Openness rechace una
+escritura F**. Que una operación esté documentada no la autoriza en este workspace.
 
-> Tienes **STEP 7 Safety** instalado en V19 y V20 ✅ *verificado*. Así que esto te va a tocar.
-> Regla: **el agente no edita safety.** Reporta y para.
+> Regla local: **el agente no lee para modificar, importa, edita, borra, compila como parte de un
+> cambio ni descarga F-blocks o tags Safety.** La escritura debe rechazarse en una barrera
+> independiente antes de llamar a la API. Si el tipo Safety no puede clasificarse explícitamente,
+> se para. Ante un error de protección o Safety no se reintenta.
+
+Referencias: Siemens, [exportar F-blocks en Openness V20](https://docs.tia.siemens.cloud/r/en-us/v20/tia-portal-openness-api-for-automation-of-engineering-workflows/export/import/importing/exporting-data-of-a-plc-device/blocks/exporting-failsafe-blocks?contentId=IsqKGWiwDrgkeO8LIjZWJA)
+y [SafetySignatureProvider](https://docs.tia.siemens.cloud/r/en-us/v20/tia-portal-openness-api-for-automation-of-engineering-workflows/tia-portal-openness-api/f-related-openness/safetysignatureprovider).
 
 ---
 
-## Versiones — qué necesita cada cosa
+## Versiones — formatos y evidencia
 
-✅ *Verificado compilando contra los paquetes de Openness V19, V20 y V21.*
+La documentación de Siemens distingue el formato por versión y tipo de objeto. No extrapolar una
+capacidad de una versión de TIA, de un modelo HMI o de una implementación MCP a los demás.
 
-| Funcionalidad | Versión mínima |
-|---|---|
-| Exportar/importar bloques como **documentos SIMATIC SD** (`.s7dcl`/`.s7res`) | **V20** |
-| Exportar/importar **tipos de datos PLC** como documentos | **V21** |
-| `PlcWatchTable.Name` escribible (renombrar tabla de observación) | **V21** |
-| Version Control Interface completo | **V21** |
+| Funcionalidad | Documentación Siemens | Evidencia local de esta sesión |
+|---|---|---|
+| SIMATIC SD (`.s7dcl`/`.s7res`) para bloques LAD puros, DB y tipos PLC | Disponible en V20; la ayuda V20 base describe LAD, DB y tipos PLC. | No se hizo round-trip local de UDT. |
+| SIMATIC SD para bloques SCL/FBD y redes mixtas | Ampliado en **TIA V20 Update 4**. | `tia-create 2.7.2` recibió rechazo al exportar el FB SCL de prueba: “export or import of blocks with mixed programming languages is not possible”. Se conservó el XML de Openness como respaldo. No se verificó el nivel de actualización instalado ni otro bloque SCL. |
+| Exportación XML SimaticML | Openness V20 documenta PLC/HMI y recalca que el formato es interno y exclusivo de la versión actual. | `ExportBlock` generó XML del FB de prueba; inspección y readback independientes. |
+| Importar/actualizar proyectos antiguos | `Projects.OpenWithUpgrade` actualiza proyectos de la versión anterior; una versión más antigua puede dar excepción. | En este workspace se midió un proyecto V16 concreto; no se considera prueba general para todas las rutas V16→V20. |
 
-🔴 **Por qué importa:** los documentos SIMATIC SD son **la única exportación que diffea bien**.
-Todo lo demás es XML SimaticML, que en un `git diff` es ruido. En V19 no existe → en V19 git no
-sirve de mucho. Es el fondo del ADR-002.
+Referencias: Siemens, [principios de importación/exportación Openness V20](https://docs.tia.siemens.cloud/r/en-us/v20/tia-portal-openness-api-for-automation-of-engineering-workflows/export/import/overview/basic-principles-of-importing/exporting), [bloques SIMATIC SD V20](https://docs.tia.siemens.cloud/r/en-us/v20/creating-and-managing-blocks/exporting-and-importing-blocks-in-simatic-sd-format-s7-1200-s7-1500/exporting-and-importing-blocks-in-simatic-sd-format-s7-1200-s7-1500), [mejoras de V20 Update 4](https://docs.tia.siemens.cloud/r/en-us/v20-updates/tia-portal-updates-readme/improvements-in-step-7/improvements-in-update-4), y [apertura de proyectos V20](https://docs.tia.siemens.cloud/r/en-us/v20/tia-portal-openness-api-for-automation-of-engineering-workflows/tia-portal-openness-api/functions-for-projects-and-project-data/opening-a-project).
 
-**Las tablas de tags y las tablas de observación no tienen API de documentos ni siquiera en
-V21**: son XML y punto.
+El export/import de formatos XML y SIMATIC SD depende de la versión y de las capacidades del
+objeto. Que Openness lo documente no demuestra que un servidor MCP concreto exponga esa llamada o
+que una llamada determinada funcione en la instalación local.
 
 ---
 
@@ -167,4 +172,4 @@ No paralelices operaciones de Openness. Nunca.
 | Crear proyecto, añadir hardware, red | `tia-create` (bulaofen) — `tia-inspect` no lo cubre |
 | WinCC Unified por API | `tia-create` |
 | `WhereUsed`, `FindInCode`, export textual | `tia-inspect` — `tia-create` no lo cubre bien |
-| **Migrar un proyecto de versión** | ❌ **Ninguno.** Openness no expone "migrar". Se hace a mano desde TIA, una vez por proyecto (ver [`50-examples/MIGRACION-V16-a-V20.md`](../../50-examples/MIGRACION-V16-a-V20.md)) |
+| Abrir/actualizar un proyecto de otra versión | `Projects.OpenWithUpgrade` en Openness; la ayuda V20 garantiza la versión anterior y advierte excepción para versiones más antiguas. Revisar la ruta concreta y usar copia. |

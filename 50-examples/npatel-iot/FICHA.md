@@ -32,7 +32,17 @@ Verificado leyendo los nodos de cada JSON:
 | `04_MQTTCommunication` | `mqtt-broker`, botones y gráfica | Publicación a broker |
 | `05_Pythonflow` | nodos `exec` → scripts Python | Ejecutar código en la pasarela |
 | `06_CPPflow` | function + dashboard | Calculadora de **OEE** |
-| `07_MindSphereflow` | `s7 in` → cloud de Siemens | ⚠️ obsoleto, ver abajo |
+| `07_MindSphereflow` | `s7 in` → cloud de Siemens | ⚠️ obsoleto; la configuración del agente debe cargarse localmente |
+
+`07_MindSphereflow.json` no incluye una configuración real de agente. El campo se distribuye como
+`CONFIGURE_MINDCONNECT_AGENT_LOCALLY`; prepara una credencial nueva fuera del repositorio antes de
+intentar ejecutar el flujo. La credencial anterior estuvo versionada: considérala expuesta y rótala
+o revócala en el tenant/proveedor correspondiente antes de volver a habilitar ese flujo. Esta
+rotación externa aún no se ha confirmado. El archivo fuente actual y el árbol de ejemplos pasan el
+escaneo JWT-like, pero la auditoría local detectó esa credencial en los 47 commits que conservan ese
+árbol. No publiques ni compartas el historial de este repositorio hasta que el propietario
+del tenant confirme la revocación/rotación y el responsable del repositorio apruebe un saneamiento
+de historial coordinado. La limpieza del working tree no elimina objetos de commits antiguos.
 
 ## El código de apoyo
 

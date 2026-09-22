@@ -4,11 +4,20 @@
 > Portal en este workspace, qué puede hacer exactamente y qué no. No repite reglas de
 > `AGENTS.md` — las traduce en una matriz consultable. Si hay conflicto, `AGENTS.md` manda.
 
-Cualquier harness (Claude Code, Codex, OpenCode, Antigravity, Cursor...) llega a TIA Portal por
-el mismo camino: `.mcp.json` (o el fichero equivalente del harness) apunta a uno de los dos
-servidores MCP de `30-tools/mcp/`, con un perfil concreto de `30-tools/mcp/servers.json`. El
-harness no cambia lo que es posible; solo cambia cómo se genera esa configuración
-(`30-tools/scripts/Sync-HarnessConfigs.ps1`, ver `30-tools/harnesses/`).
+En el **camino MCP**, cada harness puede apuntar mediante `.mcp.json` (o su fichero equivalente) a
+uno de los servidores de `30-tools/mcp/` con un perfil de `30-tools/mcp/servers.json`; la
+configuración común se genera con `30-tools/scripts/Sync-HarnessConfigs.ps1` (ver
+`30-tools/harnesses/`). Esto describe solo MCP: las políticas, plugins, Computer Use nativo y
+permisos de aplicaciones dependen de cada host/sesión y no se heredan automáticamente entre
+Codex, Claude Code, OpenCode u otros agentes.
+
+| Ruta | Depende de | Puede aportar | Límite de esta sesión |
+|---|---|---|---|
+| Siemens Openness API | TIA/Openness de versión compatible y una integración .NET/cliente autorizada | Leer, crear, modificar, borrar, compilar, importar/exportar o diagnosticar los objetos soportados por esa versión/modelo | La API documentada no demuestra que este host la invoque directamente; las llamadas locales fueron mediante MCP |
+| Servidores MCP locales | Binario instalado, perfil actual, herramientas y esquema expuestos | Acciones concretas listadas por `tools/list` o `FindTools`, sujetas a guardas del servidor y contrato de `AGENTS.md` | Hay inventario por nombre/schema y evidencia solo para las llamadas enumeradas en el plan maestro; schema no equivale a ejecución |
+| Computer Use nativo | Integración y permiso habilitado en la aplicación Codex/host y sesión Windows activa | Inspeccionar y operar la UI visible cuando Openness no muestra renderizado, diálogos o runtime | Verificado en Codex por `node_repl` + `@oai/sky`; el acceso debe redescubrirse por sesión y no se hereda a otros hosts |
+
+El registro accionable del perfil MCP está en el apéndice del [plan maestro](../../../docs/superpowers/plans/2026-09-21-tia-agent-operating-model.md).
 
 ---
 
@@ -16,10 +25,10 @@ harness no cambia lo que es posible; solo cambia cómo se genera esa configuraci
 
 | Perfil | Servidor(es) | Confirmación | Qué es, en una frase |
 |---|---|---|---|
-| `read` | `tia-inspect` sin `--allow-write` | No — es el perfil por defecto | Mirar y exportar sin tocar nada |
-| `write` | `tia-inspect --allow-write` | Sí, explícita para la tarea | Editar bloques y tablas que ya existen |
-| `create` | `tia-create --profile lite` | Sí, explícita | Crear proyecto, hardware, red, HMI Unified |
-| `full` | ambos servidores a la vez | Sí, explícita | Analizar y crear en la misma sesión |
+| `read` | `tia-inspect` sin `--allow-write` | Perfil por defecto | Inspeccionar y exportar; no registra mutaciones |
+| `write` | Invocación puntual: `tia-inspect --isolated --fixture-root <run-dir> --allow-write` | Reconocimiento explícito y manifiesto de copia desechable | Cambiar elementos estándar autorizados dentro de un fixture |
+| `create` | `tia-create --profile lite` | Reconocimiento explícito y `dryRun` | Crear proyecto, hardware, red y HMI Unified según tools expuestos |
+| `full` | Perfil ampliado `tia-create --profile full`; no se asume configurado | Schema guardado no equivale a disponibilidad o autorización | Superficie ampliada; acciones online/físicas siguen bloqueadas por política |
 
 Fuente: `30-tools/mcp/servers.json` y [ADR-011](../../00-meta/decisiones/ADR-011-perfiles-y-proyectos-abiertos.md).
 
@@ -38,13 +47,24 @@ Fuente: `30-tools/mcp/servers.json` y [ADR-011](../../00-meta/decisiones/ADR-011
   `ExportTagTable`, `ExportWatchTable`, `ExportPlcAsSourceTree`, `GenerateSources`).
 - Compilar (`CompileSoftware`) — compilar **no** modifica el `.ap20` guardado en disco, solo el
   estado en memoria/consistencia de bloques.
-- Cerrar sesión (`CloseProject`, `Disconnect` — esto último no cierra TIA, ver
-  [`conexion-y-sesiones.md`](conexion-y-sesiones.md)).
+- Desconectar (`Disconnect` no cierra TIA, ver [`conexion-y-sesiones.md`](conexion-y-sesiones.md)).
+- `OpenProject` y `CloseProject` sólo operan en una sesión aislada con manifiesto de fixture; no
+  sustituyen un proyecto de una ventana visible.
 
 **Qué NO puede hacer (por diseño, no por límite técnico):**
-- Ninguna de las ~40 herramientas de escritura existe en el roster cuando el servidor arranca sin
-  `--allow-write`. No es que fallen: **no están registradas**, el modelo no puede verlas ni
-  llamarlas. Verificado: 59 herramientas en modo lectura.
+- Ninguna herramienta de escritura se registra si el servidor arranca sin `--allow-write` y sin
+  `--isolated --fixture-root`. El schema histórico guardado tenía 53 tools de lectura; recapturarlo
+  tras la última compilación antes de tomar ese número como actual.
+- `Invoke-TiaSclProposalApply.ps1` acepta reemplazos de bloques existentes, no crea bloques nuevos.
+  No autorizar imports de destinos nuevos mientras falte el flujo de creación/clasificación previo
+  descrito en [`AGENTS.md`](../../AGENTS.md#33-bloques-protegidos-y-seguridad).
+- **Estado observado del apply SCL (2026-09-21):** el roster vivo del perfil V20 aislado `write`
+  tiene 84 herramientas y no registra `ImportSources` ni `ImportFromDocuments`;
+  `Invoke-TiaSclProposalApply.ps1 -Apply` consulta el roster y se bloquea antes de mutar si falta el
+  importador requerido. El preview local valida/estaciona el archivo, pero no prueba una importación
+  en TIA. Los documentos `.s7dcl` permanecen solo-preview hasta verificar conteos exactos y readback
+  de su importador. No se permite llamar al importador genérico como atajo. Evidencia local:
+  `70-runs/tia-capabilities/20260921-04-write-tools-live.json`.
 - No crea, no modifica, no borra bloques, tipos, tags, tablas ni hardware.
 - No descarga nada a PLCSIM ni a hardware.
 
@@ -53,12 +73,17 @@ una propuesta. Es el perfil que registra `.mcp.json` en este workspace.
 
 ---
 
-## 3. `write` — `tia-inspect --allow-write`
+## 3. `write` — `tia-inspect` en un fixture explícito
 
-**Qué añade sobre `read`:** las ~40 herramientas de escritura para bloques y tipos **que ya
-existen** en el proyecto: modificar interfaz/fuente de un FB/FC/OB/DB, `ImportBlock`,
-`ImportFromDocuments`, `ImportType`, operaciones compuestas de copiar/mover bloque o tipo
-(exportar→importar→borrar origen, con el número de bloque viajando), `SaveProject` / `SaveSession`.
+**Activación:** `--isolated --fixture-root <run-dir> --allow-write`. La raíz debe contener
+`.tia-agent-fixture.json` con la ruta exacta del `.ap20`, `disposable=true` y una copia de backup
+existente. El servidor abre sólo ese proyecto en una instancia headless propia; no se conecta a una
+ventana visible. `New-TiaFixtureManifest.ps1` compara el fixture con su backup antes de autorizarlo.
+
+**Qué permite:** sólo operaciones presentes en el schema vigente, tras el preflight global de
+F/Safety/know-how. Las mutaciones de fuente genérica quedan temporalmente desregistradas.
+La escritura de propuestas SCL permanece bloqueada mientras el roster no ofrezca el importador
+requerido; el runner comprueba la disponibilidad antes de intentar la mutación.
 
 **Qué sigue sin poder hacer:**
 - **No existe un "crear bloque" genérico.** Solo hay `CreateFB` y `CreateInstanceDB` como
@@ -66,8 +91,11 @@ existen** en el proyecto: modificar interfaz/fuente de un FB/FC/OB/DB, `ImportBl
   XML SimaticML o desde fuente externa SCL (`ImportPlcExternalSource` →
   `GenerateBlocksFromExternalSource`) o desde documentos `.s7dcl/.s7res` (V20+).
 - No toca bloques con **know-how protection**: se rechazan antes de cualquier edición.
-- No edita **bloques F / tags de safety**: casi toda operación se rechaza, a veces pidiendo
-  contraseña de safety; el agente no debe reintentar, debe reportar y parar.
+- No modifica ningún proyecto que contenga un bloque F, una tag Safety, un bloque/tipo protegido o
+  un bloque cuya clasificación sea desconocida. El preflight corre bajo acceso exclusivo antes de
+  cada escritura. Es global y conservador: puede impedir cambios estándar en proyectos mixtos.
+- No importa, renombra, copia, mueve ni borra PLC data types. Los UDT F-compliant requieren
+  protección Safety y el API V20 usado aquí no expone un clasificador independiente suficiente.
 - No crea ni borra hardware, red ni pantallas HMI — eso es terreno de `tia-create`.
 - No renombra la tabla de observación (`PlcWatchTable.Name` de solo lectura antes de V21).
 - No añade una fila real a una tabla de observación (solo hay creador de filas de comentario) ni
@@ -80,27 +108,34 @@ del `.ap20`, leer el bloque entero antes de tocarlo, `dryRun`/preview cuando la 
 ofrezca, un bloque por vez, compilar con 0 errores antes de `SaveProject`/`SaveSession`. Si no
 compila limpio, no se guarda.
 
-**Cuándo usarlo:** para modificar lógica, tipos o tablas que ya existen en un proyecto abierto y
-confirmado. Requiere reconocimiento explícito del perfil por parte de quien opera el harness.
+**Cuándo usarlo:** aceptación en copias desechables. La escritura en proyectos de cliente queda
+deshabilitada hasta que exista un procedimiento adicional aprobado.
 
 ---
 
 ## 4. `create` — `tia-create --profile lite`
 
+**Estado observado:** la captura de `lite` del 21-09 tenía 55 tools visibles, incluidos `FindTools`
+y `CallTool`. El schema no enumera necesariamente las capacidades dinámicas.
+
 **Qué puede hacer:** lo que `tia-inspect` no cubre en absoluto —
 - Crear un proyecto nuevo (`ScaffoldProject`, siempre con `dryRun=true` primero).
 - Añadir hardware y configurar red.
 - Crear pantallas y objetos de **WinCC Unified** por API.
-- El roster visible en perfil `lite` es un subconjunto; hay ~224 herramientas en el servidor
-  completo. Si falta una capacidad, se busca con `FindTools` en lenguaje natural y se llama con
+- El roster visible en perfil `lite` es un subconjunto; la captura `full` guardada el 21-09 tenía
+  222 tools. Esa captura demuestra schema, no configuración activa ni ejecución. Si falta una
+  capacidad, se busca con `FindTools` en lenguaje natural y se llama con
   `CallTool` y la firma exacta — no se declara "no existe" sin haber hecho esa comprobación.
 
 **Qué NO puede hacer:**
 - No sustituye a `tia-inspect` para inspección fina, `WhereUsed`, `FindInCode` ni export textual
   diffeable: eso lo cubre mejor `tia-inspect`.
-- No migra un proyecto de versión (V16→V20, por ejemplo). Openness no expone "migrar" en ningún
-  servidor; se hace a mano desde TIA Portal, una vez por proyecto
-  (ver [`50-examples/MIGRACION-V16-a-V20.md`](../../50-examples/MIGRACION-V16-a-V20.md)).
+- La API Openness V20 sí documenta `Projects.OpenWithUpgrade`: abre y actualiza un proyecto de la
+  versión inmediatamente anterior. Siemens advierte que un proyecto más antiguo puede devolver
+  una excepción. En este workspace hay una prueba local de un proyecto V16 concreto, pero no
+  demuestra compatibilidad universal ni sustituye backup, compilación y lectura del log. Consultar
+  [R01](../20-recetas/R01-inventariar-proyecto.md) y
+  [la nota de migración](../../50-examples/MIGRACION-V16-a-V20.md).
 - No descarga nada por sí solo a hardware ni a PLCSIM sin pasar por las puertas de §5/§6.
 
 **Cuándo usarlo:** proyectos nuevos, hardware/red desde cero, HMI Unified. Requiere
@@ -108,14 +143,13 @@ reconocimiento explícito y `dryRun` antes de aplicar cualquier plan real.
 
 ---
 
-## 5. `full` — ambos servidores a la vez
+## 5. `full` — perfil ampliado de `tia-create`
 
-Combina `write` y `create` en la misma sesión: analizar con `tia-inspect` y crear/ampliar con
-`tia-create` sin cambiar de configuración a mitad de tarea. No añade capacidades nuevas más allá
-de la suma de §3 y §4; añade el riesgo de que ambos servidores compitan por el mismo proyecto
-abierto. Openness **no es thread-safe** (`Operation.Run` serializa con un lock global) — nunca se
-paralelizan llamadas, y con dos servidores activos hay que serializar también entre ellos.
-Requiere el mismo reconocimiento explícito que `create`.
+El nombre `full` identifica el perfil ampliado de `tia-create`; no implica que la configuración local
+use ambos servidores ni que todas las acciones estén autorizadas. El schema guardado contiene
+`GoOnline`, `DownloadToPlc`, importaciones masivas y cambios de Safety/hardware. La presencia en
+tools/list no permite ejecutar esas operaciones. Toda sesión que combine servidores debe usar el
+mutex `Local\TIA-Claude-McpSession`; nunca se paralelizan llamadas Openness.
 
 ---
 
@@ -148,9 +182,11 @@ no probada en esta máquina** (no hay V21 instalado aquí):
 Antes de tratar una sesión V21 como equivalente a V20, hay que repetir `Doctor` y confirmar que
 Engineering/Portal V21 dan `OK` en **esa** máquina, y correr al menos un scaffold desechable de
 aceptación. El detalle completo, incluidos los dos `.csproj` distintos de `tia-create` y qué
-gana realmente V21 (tipos de datos PLC como documento, `PlcWatchTable.Name` escribible, Version
-Control Interface completo — ver [`limites.md`](limites.md) §Versiones), está en
-[ADR-014](../../00-meta/decisiones/ADR-014-version-v21.md). Los cuatro perfiles del §1 no
+diferencias locales siguen pendientes de comprobar (por ejemplo `PlcWatchTable.Name` escribible y
+Version Control Interface — ver [`limites.md`](limites.md) §Versiones), está en
+[ADR-014](../../00-meta/decisiones/ADR-014-version-v21.md). No se presenta el soporte de tipos PLC
+en documentos SIMATIC SD como novedad exclusiva de V21: la documentación base V20 ya los incluye.
+Los cuatro perfiles del §1 no
 cambian de significado en V21; lo que cambia es qué binario y qué ruta usan.
 
 ---
@@ -159,9 +195,10 @@ cambian de significado en V21; lo que cambia es qué binario y qué ruta usan.
 
 | Falta | Alternativa |
 |---|---|
-| Migrar un proyecto de versión | Manual desde TIA Portal, una vez por proyecto |
+| Abrir/actualizar versiones previas | Openness V20 documenta `OpenWithUpgrade` para la versión inmediatamente anterior. Para una versión más antigua, comprobar la ruta compatible y no generalizar la única prueba local V16. |
 | Cerrar TIA Portal desde MCP (`ExitAndCloseTiaPortal` no está expuesta) | `30-tools/scripts/Stop-TiaPortal.ps1` |
 | `Attach` a una ventana de TIA ya abierta con interfaz | No existe en el `tia-inspect` instalado; si hay una ventana visible y el proyecto objetivo no está confirmado, la sesión de escritura se bloquea (ver [ADR-012](../../00-meta/decisiones/ADR-012-connect-no-es-attach.md)) |
+| Control nativo de la ventana TIA Portal | En Codex, comprobar el plugin nativo `computer-use` con `node_repl` + `@oai/sky`, listar ventanas y leer el título/estado antes de actuar. `mcp__cua_repl` solo expone navegador; su `apps=[]` no mide aplicaciones Windows. En la sesión 2026-09-21 se abrió visualmente el clon IOT2050 desechable y se navegó hasta `PLC_1 > Program blocks`; no se editó por GUI. Esta capacidad pertenece a la sesión de Codex y no se hereda automáticamente por otros agentes. |
 | Validación visual de una pantalla HMI o comportamiento real de un programa | El MCP no sustituye al Runtime ni a mirar la pantalla; compilar y hacer `PowerOn/PowerOff` no demuestra comportamiento |
 
 Detalle ampliado de límites de la API (no de los servidores): [`limites.md`](limites.md).
@@ -174,9 +211,9 @@ Ciclo de vida de la conexión, tiempos medidos y gestión de instancias:
 
 ```
 ¿Solo quiero entender / documentar / exportar?          → read
-¿Voy a tocar un bloque o tipo que YA existe?             → write   (backup + dryRun + compilar 0 errores)
-¿Voy a crear proyecto / hardware / red / HMI Unified?    → create  (dryRun primero)
-¿Necesito las dos cosas en la misma sesión?               → full    (ojo con la concurrencia)
+¿Voy a tocar lógica estándar para acceptance en fixture? → write (manifiesto + backup + preflight + compilación)
+¿Voy a crear proyecto / hardware / red / HMI Unified?    → create lite (dryRun primero; acciones autorizadas)
+¿Tengo sólo un schema full guardado?                     → no asumir que está configurado o probado
 ¿Voy a descargar algo a una CPU?
     target = PLCSIM virtual desechable                    → libre
     target = PLC real / no puedo asegurar que es virtual   → PARA y pide confirmación explícita ahora

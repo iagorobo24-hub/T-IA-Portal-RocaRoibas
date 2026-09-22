@@ -174,10 +174,16 @@ Dos sospechosos, en este orden:
 
 ### Se abre una segunda instancia de TIA Portal
 
-El agente llamó a `Connect` cuando debía llamar a `Attach`. Dos instancias sobre el mismo
-proyecto es una forma excelente de perder trabajo.
+El agente llamó a `Connect` o `OpenProject` sin verificar si el perfil activo puede adjuntarse a la
+instancia visible. Dos instancias sobre el mismo proyecto pueden bloquear el proyecto o perder
+trabajo.
 
-🔒 **Si TIA ya está abierto, se hace attach.** Está en `AGENTS.md` §2.
+🔒 **Attach es condicional.** Primero identifica visualmente la ventana/proyecto y consulta el
+roster del servidor/perfil activo. Usa `Attach` solo si esa herramienta está registrada y el
+proyecto visible es el objetivo exacto. `tia-inspect read` en este workspace no expone
+`AttachToOpenProject`; no sustituyas Attach por `Connect` a ciegas. Si Computer Use no está
+disponible o no permite identificar la instancia, detente y pide que el usuario libere o confirme
+la ventana. Ver `AGENTS.md` §2 y [R01](../20-recetas/R01-inventariar-proyecto.md).
 
 ### `OpenProject` falla en un proyecto que sí existe
 

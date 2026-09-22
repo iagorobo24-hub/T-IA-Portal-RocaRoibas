@@ -1,7 +1,74 @@
 # Operar TIA Portal por la interfaz gráfica (computer use)
 
-> ✅ **Todo verificado en esta máquina el 2026-09-14** inspeccionando
-> `npatel-sorting-plant` migrado a V20. No es teoría.
+> El contenido de inspección visual de TIA fue verificado el 2026-09-14 con el proyecto
+> `npatel-sorting-plant` migrado a V20. Las instrucciones de API de control que aparecen más abajo
+> describían el harness usado entonces; para Codex en Windows, sigue primero la sección actual.
+
+## Computer Use nativo actual en Codex para Windows
+
+Computer Use es una capacidad del host/sesión de Codex, no de los servidores TIA MCP. En este
+workspace, la ruta comprobada en Codex es el plugin nativo `computer-use` mediante `node_repl` y
+`@oai/sky`. `mcp__cua_repl` está limitado a navegador y el valor `apps: []` de esa superficie no
+indica si hay control de ventanas Windows. Este acceso tampoco se hereda automáticamente por Claude
+Code, OpenCode u otros agentes: cada host necesita tener su propia integración y permisos.
+
+### Habilitar o recuperar el acceso
+
+1. En Codex, abre **Plugins > Computer Use**. Instala/habilita el plugin y sus componentes de servidor
+   y skill cuando se ofrezcan.
+2. Revisa **Settings > Computer use** y el permiso de la aplicación de TIA. Una política de workspace
+   puede desactivar Computer Use o limitar las aplicaciones permitidas; solo un administrador puede
+   cambiar un requisito impuesto por la organización.
+3. En Windows, deja TIA visible en el escritorio activo mientras el agente trabaja. El control de UI
+   usa esa sesión activa.
+4. En cada sesión, vuelve a enumerar las aplicaciones y ventanas. No reutilices IDs antiguos ni
+   inventes IDs a partir del nombre de la aplicación.
+
+Documentación oficial: [Computer Use en Codex](https://learn.chatgpt.com/docs/computer-use) y
+[políticas de Computer Use para Enterprise](https://help.openai.com/en/articles/20001510-manage-browser-and-computer-use-in-your-enterprise-workspace).
+
+### Secuencia de observación segura
+
+1. Leer la skill `computer-use/SKILL.md` y sus guías `docs/guidance.md` y `docs/confirmations.md`.
+2. Inicializar `@oai/sky` en `node_repl` y llamar a `sky.list_apps()` o `sky.list_windows()`.
+3. Elegir una ventana devuelta por la API. Si hay cero o varias ventanas candidatas, resolverlo antes
+   de actuar. Llamar a `sky.get_window_state()` y verificar visualmente título, proyecto, diálogo,
+   foco y estado.
+4. Hacer una sola acción basada en esa observación y volver a leer el estado. Las coordenadas,
+   índices y screenshot IDs caducan al cambiar la ventana o la vista.
+5. Para escribir texto, observar primero el foco. Si no se puede comprobar el foco, no escribir.
+   `Computer Use` no debe usarse para comandos de terminal, PowerShell, Windows Run ni para sortear
+   avisos de seguridad.
+
+Inicialización del runtime de Codex:
+
+```js
+if (!globalThis.sky) {
+  const { sky } = await import("@oai/sky");
+  globalThis.sky = sky;
+}
+globalThis.apps = await sky.list_apps();
+nodeRepl.write(JSON.stringify(apps.map(app => ({
+  id: app.id,
+  windows: app.windows.map(window => ({ id: window.id, app: window.app, title: window.title }))
+})), null, 2));
+```
+
+### Prueba gráfica observada en este workspace — 2026-09-21
+
+- **Verificado:** no había proceso TIA ni ventana TIA antes de iniciar esta prueba; Doctor confirmó
+  que no había proyecto conectado y que el usuario pertenece al grupo Siemens Openness.
+- **Verificado:** se abrió TIA Portal V20 y, desde el selector de proyectos, se eligió el `.ap20`
+  descrito por el manifiesto del fixture:
+  `90-tmp/e2e/20260921-iot2050-agent-probe-clean/fixture/IOT2050_S7_CompleteProject_V20/IOT2050_S7_CompleteProject_V20.ap20`.
+- **Verificado:** el título de TIA mostró la ruta del clon y la vista de proyecto permitió expandir
+  `PLC_1` y `Program blocks`.
+- **No verificado:** edición de SCL/LAD/HMI desde la GUI, guardado/compilación iniciados desde GUI,
+  runtime HMI, descarga a PLCSIM desde GUI y descarga a hardware.
+- **Detalle operativo:** `launch_app` no devolvió una ventana en su primera respuesta; la nueva
+  consulta `list_apps()` sí devolvió una ventana TIA llamada `Siemens`. Después de abrir el proyecto,
+  el título ya contenía su path. Se debe refrescar el inventario tras un inicio lento, no repetir el
+  lanzamiento a ciegas.
 
 ## Cuándo usar esto y cuándo no
 
@@ -19,7 +86,14 @@ La interfaz gráfica es para lo que Openness **no puede** hacer.
 
 ---
 
-## Mecánica en Windows — los tres tropiezos
+## Mecánica Windows del harness anterior — referencia histórica
+
+Los nombres `screenshot`, `switch_display` y `open_application` de los apartados siguientes
+pertenecen a la integración gráfica que se usó para la prueba del 2026-09-14. No son los nombres
+del plugin nativo de Codex descrito arriba. En Codex, usa `sky.get_window_state`, `sky.list_apps`,
+`sky.list_windows`, `sky.activate_window`, `sky.click` y `sky.press_key`, con observación nueva
+después de cada acción. Conservamos las notas históricas de resolución/latencia como referencia,
+pero no deben copiarse como código ejecutable en Codex.
 
 ### 1. TIA puede estar en otro monitor
 
@@ -132,6 +206,11 @@ decir**.
 ## El `.s7dcl` es fiel al LAD gráfico ✅
 
 Comprobado abriendo `CylinderControl [FB2]` en el editor y comparándolo con su export.
+
+> ⚠️ Ejemplo LAD histórico solo para inspección: `Fault` es `VAR_OUTPUT`, aunque el siguiente
+> network lo lee como contacto. El export confirma la fidelidad del texto, no valida ese patrón.
+> En SCL nuevo, usa estado interno (`VAR`/`STAT`) y publica la salida al final. Consulta
+> [R04](../20-recetas/R04-entender-un-bloque.md) y [la regla SCL](../30-lenguajes/scl.md).
 
 **En el editor:**
 

@@ -26,6 +26,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+$metadataScript = Join-Path $root '30-tools\scripts\TiaBlockMetadata.ps1'
+if (-not (Test-Path -LiteralPath $metadataScript -PathType Leaf)) { throw "Missing block metadata helper: $metadataScript" }
+. $metadataScript
 
 if ($Help) {
     Write-Output @'
@@ -98,6 +101,18 @@ function Get-RelativePath([string]$Path, [string]$Base) {
 
 $sourceFiles = @(Get-ChildItem -LiteralPath $SourceRoot -Recurse -File |
     Where-Object { $_.Extension -in @('.s7dcl', '.scl', '.s7res', '.xml') } | Sort-Object FullName)
+$xmlCommentMetadata = @{}
+foreach ($xmlFile in @($sourceFiles | Where-Object Extension -eq '.xml')) {
+    try {
+        $metadata = Get-TiaBlockCommentMetadata -XmlPath $xmlFile.FullName
+        if (-not [string]::IsNullOrWhiteSpace([string]$metadata.blockName)) {
+            $xmlCommentMetadata[[string]$metadata.blockName] = $metadata
+        }
+    }
+    catch {
+        # Malformed/non-block XML is retained in source coverage, but cannot prove comment state.
+    }
+}
 $sourceRows = [System.Collections.Generic.List[object]]::new()
 $declarations = [System.Collections.Generic.List[object]]::new()
 $calls = [System.Collections.Generic.List[object]]::new()
@@ -135,6 +150,22 @@ foreach ($file in $sourceFiles) {
 $inventoryBlocks = [System.Collections.Generic.List[object]]::new()
 foreach ($plc in @($inventory.plcs)) {
     foreach ($block in @($plc.blocks)) {
+        $comment = $null
+        $commentEvidence = 'not-collected'
+        $commentEncodingStatus = 'unknown'
+        if ($xmlCommentMetadata.ContainsKey([string]$block.name)) {
+            $commentMetadata = $xmlCommentMetadata[[string]$block.name]
+            if ($commentMetadata.status -ne 'unverified') {
+                $comment = $commentMetadata.hasComment
+                $commentEvidence = 'block-export-xml'
+                $commentEncodingStatus = $commentMetadata.encodingStatus
+            }
+        }
+        elseif ($block.PSObject.Properties['commentEvidence'] -and $block.commentEvidence -eq 'block-export-xml') {
+            $comment = $block.comment
+            $commentEvidence = 'block-export-xml'
+            if ($block.PSObject.Properties['commentEncodingStatus']) { $commentEncodingStatus = [string]$block.commentEncodingStatus }
+        }
         $inventoryBlocks.Add([ordered]@{
             softwarePath = [string]$plc.softwarePath
             path = [string]$block.path
@@ -143,12 +174,30 @@ foreach ($plc in @($inventory.plcs)) {
             programmingLanguage = [string]$block.programmingLanguage
             isConsistent = [bool]$block.isConsistent
             isKnowHowProtected = [bool]$block.isKnowHowProtected
-            comment = [bool]$block.comment
+            comment = $comment
+            commentEvidence = $commentEvidence
+            commentEncodingStatus = $commentEncodingStatus
         })
     }
 }
 foreach ($block in @($inventory.blocks)) {
     if (-not (@($inventoryBlocks | Where-Object { $_.path -eq [string]$block.path -and $_.name -eq [string]$block.name }).Count)) {
+        $comment = $null
+        $commentEvidence = 'not-collected'
+        $commentEncodingStatus = 'unknown'
+        if ($xmlCommentMetadata.ContainsKey([string]$block.name)) {
+            $commentMetadata = $xmlCommentMetadata[[string]$block.name]
+            if ($commentMetadata.status -ne 'unverified') {
+                $comment = $commentMetadata.hasComment
+                $commentEvidence = 'block-export-xml'
+                $commentEncodingStatus = $commentMetadata.encodingStatus
+            }
+        }
+        elseif ($block.PSObject.Properties['commentEvidence'] -and $block.commentEvidence -eq 'block-export-xml') {
+            $comment = $block.comment
+            $commentEvidence = 'block-export-xml'
+            if ($block.PSObject.Properties['commentEncodingStatus']) { $commentEncodingStatus = [string]$block.commentEncodingStatus }
+        }
         $inventoryBlocks.Add([ordered]@{
             softwarePath = [string]$block.softwarePath
             path = [string]$block.path
@@ -157,7 +206,9 @@ foreach ($block in @($inventory.blocks)) {
             programmingLanguage = [string]$block.programmingLanguage
             isConsistent = [bool]$block.isConsistent
             isKnowHowProtected = [bool]$block.isKnowHowProtected
-            comment = [bool]$block.comment
+            comment = $comment
+            commentEvidence = $commentEvidence
+            commentEncodingStatus = $commentEncodingStatus
         })
     }
 }
@@ -178,7 +229,9 @@ foreach ($block in $inventoryBlocks) {
         language = [string]$block.programmingLanguage
         consistent = [bool]$block.isConsistent
         knowHowProtected = [bool]$block.isKnowHowProtected
-        hasComment = [bool]$block.comment
+        hasComment = $block.comment
+        commentStatus = if ($null -eq $block.comment) { 'unverified' } elseif ($block.comment) { 'verified-present' } else { 'verified-missing' }
+        commentEncodingStatus = [string]$block.commentEncodingStatus
         source = if ($match) { [string]$match.file } else { $null }
         sourcePresent = $hasSource
     })
@@ -193,7 +246,13 @@ foreach ($block in $inventoryBlocks) {
         $findings.Add([ordered]@{ severity = 'WARNING'; code = 'SOURCE_NOT_EXPORTED'; block = $name; message = 'No se encontro una declaracion exportada para este bloque.' })
     }
     if ($block.comment -eq $false) {
-        $findings.Add([ordered]@{ severity = 'WARNING'; code = 'MISSING_BLOCK_COMMENT'; block = $name; message = 'El bloque no tiene comentario de cabecera verificable en el inventario.' })
+        $findings.Add([ordered]@{ severity = 'WARNING'; code = 'MISSING_BLOCK_COMMENT'; block = $name; message = 'La exportación XML del bloque no contiene comentario de cabecera.' })
+    }
+    elseif ($null -eq $block.comment) {
+        $findings.Add([ordered]@{ severity = 'WARNING'; code = 'BLOCK_COMMENT_UNVERIFIED'; block = $name; message = 'La metadata de comentario no está incluida en la evidencia disponible.' })
+    }
+    if ($block.commentEncodingStatus -eq 'suspect') {
+        $findings.Add([ordered]@{ severity = 'WARNING'; code = 'BLOCK_COMMENT_ENCODING_SUSPECT'; block = $name; message = 'La exportación XML del comentario contiene señales de texto mal codificado.' })
     }
     if ([string]$block.typeName -match '(?i)F-|Safety' -or $name -match '(?i)^F_|Safety') {
         $findings.Add([ordered]@{ severity = 'BLOCKING'; code = 'SAFETY_OBJECT'; block = $name; message = 'El objeto parece relacionado con safety; requiere auditoria y no se edita.' })

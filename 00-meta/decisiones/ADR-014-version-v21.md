@@ -94,10 +94,11 @@ publica en `30-tools/mcp/tia-create/bin/v21/`.
   V20.
 - La regla de hardware físico (`AGENTS.md` §3.1) y todas las puertas de escritura (§3.2) aplican
   exactamente igual en V21. Una versión de Openness distinta no relaja ninguna confirmación.
-- Los documentos SIMATIC SD (`.s7dcl`/`.s7res`) siguen disponibles desde V20; V21 no quita nada
-  de lo que ya funciona, añade lo de `10-kb/10-openness/limites.md` §"Versiones" (tipos de datos
-  PLC como documento, `PlcWatchTable.Name` escribible, Version Control Interface completo) — esas
-  sí son ganancias reales de V21 **una vez verificadas**.
+- Los documentos SIMATIC SD (`.s7dcl`/`.s7res`) siguen disponibles desde V20. La tabla anterior
+  de `limites.md` atribuía los tipos PLC a V21, pero la ayuda Siemens V20 ya documenta su intercambio
+  en SIMATIC SD; no se debe presentar como ganancia exclusiva de V21. Las diferencias locales de
+  `PlcWatchTable.Name` y Version Control Interface siguen siendo específicas del binario y deben
+  probarse con el perfil V21 antes de tratarlas como capacidades operativas.
 
 ## Trabajo pendiente explícito
 

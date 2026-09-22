@@ -35,8 +35,8 @@ try {
         throw 'Acceptance runner did not record a blocked preflight.'
     }
     if ($report.mutationAttempted -ne $false) { throw 'Blocked preflight must not attempt mutation.' }
-    if (@($report.blockers) -notcontains 'El adaptador virtual Siemens PLCSIM no está operativo') {
-        throw 'Readiness blocker was not propagated to the acceptance report.'
+    if (@($report.blockers) -notcontains "Readiness gate 'plcsimVirtualAdapterReady' must be the JSON boolean true.") {
+        throw 'The false PLC adapter gate was not reported as a required PLC precondition.'
     }
     $global:LASTEXITCODE = 0
     Write-Output 'PASS: simulation acceptance refuses to run before all readiness gates are true'
@@ -55,7 +55,10 @@ while ($line = [Console]::In.ReadLine()) {
         $name = [string]$request.params.name
         switch ($name) {
             'GetProjectTree' { $payload = [ordered]@{ tree = "Fixture Project`n└── Fixture PLC [PLC Program]"; message = 'Project tree retrieved' } }
-            'CheckDownloadReadiness' { $payload = [ordered]@{ Ready = $true; IsConsistent = $true; Message = 'ready'; Meta = @{ downloadRoutes = @(@{ pgPcInterface = 'Siemens PLCSIM Virtual Ethernet Adapter'; preferred = $true; targetInterface = '1 X1' }) } } }
+            'GetSoftwareTree' { $payload = [ordered]@{ tree = "Fixture PLC`n└── Main [OB]"; message = 'Software tree retrieved' } }
+            'GetDeviceIpAddress' { $payload = [ordered]@{ message = (@{ Ok = $true; Data = @{ found = $true; device = 'Fixture PLC'; ipAddress = '192.168.0.1'; nodeCount = 1; nodes = @(@{ nodeName = 'X1'; address = '192.168.0.1'; nodeType = 'Ethernet'; isIndustrialEthernet = $true }) }; Errors = $null; Warnings = $null; Message = 'PLC IP: 192.168.0.1' } | ConvertTo-Json -Depth 20 -Compress) } }
+            'CompileSoftware' { $payload = [ordered]@{ state = 'Success'; errorCount = 0; warningCount = 0; message = 'Compiling finished (errors: 0; warnings: 0)' } }
+            'CheckDownloadReadiness' { $payload = [ordered]@{ Ready = $true; IsConsistent = $true; Message = 'ready'; Meta = @{ downloadRoutes = @(@{ pgPcInterface = 'Siemens PLCSIM Virtual Ethernet Adapter'; preferred = $true; targetInterface = '1 X1'; targetIpAddress = '192.168.0.1' }) } } }
             'DownloadToPlc' { $payload = [ordered]@{ State = 'Success'; Message = 'downloaded to virtual target' } }
             'GetOnlineState' { $payload = [ordered]@{ State = 'Online'; Message = 'online' } }
             default { $payload = [ordered]@{ success = $true; message = $name } }
@@ -84,19 +87,22 @@ while ($line = [Console]::In.ReadLine()) {
     $projectFile = Join-Path $temp 'Fixture.ap20'
     'fixture project' | Set-Content -LiteralPath $projectFile -Encoding UTF8
     $positiveReportPath = Join-Path $temp 'positive.json'
+    $ioPlanPath = Join-Path $temp 'io-plan.json'
+    [ordered]@{
+        schemaVersion = 1
+        name = 'fixture-io-plan'
+        steps = @([ordered]@{ command = 'read-bit output 0 0'; expect = [ordered]@{ status = 'ok'; op = 'read-bit'; value = $false } })
+    } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $ioPlanPath -Encoding UTF8
     $fixtureArguments = ' -NoProfile -NonInteractive -File "' + $fixtureServer + '"'
     $fixtureOutput = & $pwsh -NoProfile -NonInteractive -File $script `
         -ReadinessPath $readyPath -OutputPath $positiveReportPath -ProjectFile $projectFile `
-        -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
+        -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -DevicePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
         -McpExecutablePath $pwsh -McpArguments $fixtureArguments -AcknowledgeVirtualTarget -Run 2>&1 | Out-String
-    if ($LASTEXITCODE -ne 0) { throw "Fixture acceptance run failed with exit code $LASTEXITCODE. Output: $fixtureOutput" }
+    if ($LASTEXITCODE -ne 2) { throw "Run without a managed virtual PLC and I/O plan must block, got exit code $LASTEXITCODE. Output: $fixtureOutput" }
     $positive = Get-Content -Raw -LiteralPath $positiveReportPath | ConvertFrom-Json
-    if ($positive.status -ne 'VERIFIED' -or $positive.mutationAttempted -ne $true) { throw 'Fixture acceptance did not reach verified download state.' }
-    $downloadCall = @($positive.calls | Where-Object name -eq 'DownloadToPlc')
-    if ($downloadCall.Count -ne 1) { throw 'Fixture acceptance did not execute exactly one DownloadToPlc call.' }
-    if (@($positive.preflight.selectedRoutes).Count -ne 1) { throw 'Fixture acceptance did not record the selected PLCSIM route.' }
+    if ($positive.status -ne 'BLOCKED' -or $positive.mutationAttempted -ne $false) { throw 'Unmanaged-target run was not blocked before mutation.' }
     $global:LASTEXITCODE = 0
-    Write-Output 'PASS: simulation acceptance validates the virtual route before one guarded download'
+    Write-Output 'PASS: simulation acceptance blocks downloads without a runner-managed virtual PLC and I/O plan'
 
     $notReadyAdapter = Join-Path $temp 'not-ready-adapter.ps1'
     $notReadyPidPath = Join-Path $temp 'not-ready.pid'
@@ -114,8 +120,8 @@ while ($line = [Console]::In.ReadLine()) {
     $notReadyArguments = ' -NoProfile -NonInteractive -File "' + $notReadyAdapter + '"'
     $notReadyOutput = & $pwsh -NoProfile -NonInteractive -File $script `
         -ReadinessPath $readyPath -OutputPath $notReadyReportPath -ProjectFile $projectFile `
-        -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
-        -McpExecutablePath $pwsh -McpArguments $fixtureArguments -PlcSimAdapterPath $pwsh `
+        -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -DevicePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
+        -McpExecutablePath $pwsh -McpArguments $fixtureArguments -PlcSimAdapterPath $pwsh -IoPlanPath $ioPlanPath `
         -PlcSimAdapterArguments $notReadyArguments -StartVirtualPlc -AcknowledgeVirtualTarget -Run 2>&1 | Out-String
     if ($LASTEXITCODE -ne 1) { throw "Non-ready adapter must fail with exit code 1. Output: $notReadyOutput" }
     if (-not (Test-Path -LiteralPath $notReadyPidPath -PathType Leaf)) { throw 'Non-ready adapter did not publish its PID.' }
@@ -134,7 +140,7 @@ while ($line = [Console]::In.ReadLine()) {
 
     $adapterFixture = Join-Path $temp 'adapter-fixture.ps1'
     @'
-[Console]::Out.WriteLine('{"status":"ready","instanceName":"FixtureVirtualPlc","interfaceName":"Fixture PLCSIM","ip":"192.168.0.1"}')
+[Console]::Out.WriteLine('{"status":"ready","instanceName":"FixtureVirtualPlc","interfaceName":"Ethernet 2","interfaceDescription":"Siemens PLCSIM Virtual Ethernet Adapter","ip":"192.168.0.1"}')
 [Console]::Out.Flush()
 while ($line = [Console]::In.ReadLine()) {
     if ($line -eq 'stop' -or $line -eq 'quit') {
@@ -151,54 +157,46 @@ while ($line = [Console]::In.ReadLine()) {
     $managedAdapterArguments = ' -NoProfile -NonInteractive -File "' + $adapterFixture + '"'
     $managedOutput = & $pwsh -NoProfile -NonInteractive -File $script `
         -ReadinessPath $readyPath -OutputPath $managedReportPath -ProjectFile $projectFile `
-        -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
-        -McpExecutablePath $pwsh -McpArguments $fixtureArguments -PlcSimAdapterPath $pwsh `
+        -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -DevicePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
+        -McpExecutablePath $pwsh -McpArguments $fixtureArguments -PlcSimAdapterPath $pwsh -IoPlanPath $ioPlanPath `
         -PlcSimAdapterArguments $managedAdapterArguments -StartVirtualPlc -AcknowledgeVirtualTarget -Run 2>&1 | Out-String
     if ($LASTEXITCODE -ne 0) { throw "Managed virtual PLC fixture failed with exit code $LASTEXITCODE. Output: $managedOutput" }
     $managed = Get-Content -Raw -LiteralPath $managedReportPath | ConvertFrom-Json
     if ($managed.status -ne 'VERIFIED' -or $managed.virtualPlc.started -ne $true -or $managed.virtualPlc.cleanup.status -ne 'stopped') {
         throw 'Managed virtual PLC lifecycle did not start and clean up deterministically.'
     }
+    if ($managed.behavior.verified -ne $true) { throw 'The managed acceptance did not record observed behavior.' }
     $global:LASTEXITCODE = 0
     Write-Output 'PASS: simulation acceptance owns virtual PLC startup and cleanup'
 
-    $ioPlanPath = Join-Path $temp 'io-plan.json'
-    [ordered]@{
-        schemaVersion = 1
-        name = 'fixture-io-plan'
-        steps = @(
-            [ordered]@{ command = 'write-bit input 0 0 1'; expect = [ordered]@{ status = 'ok'; op = 'write-bit' }; delayMs = 1 },
-            [ordered]@{ command = 'read-bit output 0 0'; expect = [ordered]@{ status = 'ok'; op = 'read-bit' } }
-        )
-    } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $ioPlanPath -Encoding UTF8
     $behaviorReportPath = Join-Path $temp 'behavior.json'
     $behaviorOutput = & $pwsh -NoProfile -NonInteractive -File $script `
         -ReadinessPath $readyPath -OutputPath $behaviorReportPath -ProjectFile $projectFile `
-        -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
+        -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -DevicePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
         -McpExecutablePath $pwsh -McpArguments $fixtureArguments -PlcSimAdapterPath $pwsh `
         -PlcSimAdapterArguments $managedAdapterArguments -IoPlanPath $ioPlanPath `
         -StartVirtualPlc -AcknowledgeVirtualTarget -Run 2>&1 | Out-String
     if ($LASTEXITCODE -ne 0) { throw "Behavior fixture failed with exit code $LASTEXITCODE. Output: $behaviorOutput" }
     $behavior = Get-Content -Raw -LiteralPath $behaviorReportPath | ConvertFrom-Json
-    if ($behavior.status -ne 'VERIFIED' -or $behavior.behavior.verified -ne $true -or @($behavior.behavior.steps).Count -ne 2) {
+    if ($behavior.status -ne 'VERIFIED' -or $behavior.behavior.verified -ne $true -or @($behavior.behavior.steps).Count -ne 1) {
         throw 'Behavior plan was not executed and recorded as verified.'
     }
     $global:LASTEXITCODE = 0
     Write-Output 'PASS: simulation acceptance executes and records an I/O behavior plan'
 
     $weakPlanPath = Join-Path $temp 'weak-io-plan.json'
-    [ordered]@{ schemaVersion = 1; name = 'weak-plan'; steps = @([ordered]@{ command = 'read-bit output 0 0' }) } |
+    [ordered]@{ schemaVersion = 1; name = 'weak-plan'; steps = @([ordered]@{ command = 'read-bit output 0 0'; expect = [ordered]@{ status = 'ok'; op = 'read-bit' } }) } |
         ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $weakPlanPath -Encoding UTF8
     $weakReportPath = Join-Path $temp 'weak-plan-report.json'
     $weakOutput = & $pwsh -NoProfile -NonInteractive -File $script `
         -ReadinessPath $readyPath -OutputPath $weakReportPath -ProjectFile $projectFile `
-        -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
+        -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -DevicePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
         -McpExecutablePath $pwsh -McpArguments $fixtureArguments -PlcSimAdapterPath $pwsh `
         -PlcSimAdapterArguments $managedAdapterArguments -IoPlanPath $weakPlanPath `
         -StartVirtualPlc -AcknowledgeVirtualTarget -Run 2>&1 | Out-String
-    if ($LASTEXITCODE -ne 1) { throw "Weak behavior plan must fail with exit code 1. Output: $weakOutput" }
+    if ($LASTEXITCODE -ne 2) { throw "Weak behavior plan must block with exit code 2. Output: $weakOutput" }
     $weak = Get-Content -Raw -LiteralPath $weakReportPath | ConvertFrom-Json
-    if ($weak.status -ne 'FAILED' -or $weak.phase -ne 'BEHAVIOR') { throw 'Weak behavior plan was not rejected in BEHAVIOR phase.' }
+    if ($weak.status -ne 'BLOCKED' -or $weak.phase -ne 'PREFLIGHT' -or $weak.mutationAttempted -ne $false) { throw 'Weak behavior plan was not rejected before mutation.' }
     $global:LASTEXITCODE = 0
     Write-Output 'PASS: simulation acceptance rejects behavior plans without explicit expectations'
 
@@ -206,8 +204,8 @@ while ($line = [Console]::In.ReadLine()) {
     $missingAdapter = Join-Path $temp 'missing-tia-claude-plcsim-adapter.exe'
     $adapterOutput = & $pwsh -NoProfile -NonInteractive -File $script `
         -ReadinessPath $readyPath -OutputPath $adapterFailureReportPath -ProjectFile $projectFile `
-        -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
-        -McpExecutablePath $pwsh -McpArguments $fixtureArguments -PlcSimAdapterPath $missingAdapter `
+        -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -DevicePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
+        -McpExecutablePath $pwsh -McpArguments $fixtureArguments -PlcSimAdapterPath $missingAdapter -IoPlanPath $ioPlanPath `
         -StartVirtualPlc -AcknowledgeVirtualTarget -Run 2>&1 | Out-String
     if ($LASTEXITCODE -ne 1) { throw "Missing adapter must fail with exit code 1. Output: $adapterOutput" }
     $adapterFailure = Get-Content -Raw -LiteralPath $adapterFailureReportPath | ConvertFrom-Json

@@ -1,15 +1,16 @@
 # Migrar los ejemplos de TIA V16 a V20
 
-> ✅ **Probado de verdad el 2026-09-14** sobre `npatel-basement-light`. Lo que sigue son
-> resultados medidos, no teoría.
+> ✅ **Probado de verdad el 2026-09-14** sobre una copia de `npatel-basement-light`. Es evidencia
+> de un proyecto concreto, no una garantía para todos los `.ap16`.
 
 ---
 
 ## La buena noticia: se migra solo
 
-**Openness migra el proyecto automáticamente.** `OpenProject` llama por debajo a
-`Projects.OpenWithUpgrade()`, así que abrir un `.ap16` con un servidor ligado a V20 **hace el
-upgrade sin intervención**.
+`OpenProject` usó `Projects.OpenWithUpgrade()` en la prueba local. La ayuda oficial de Openness V20
+documenta la actualización desde la versión inmediatamente anterior y advierte que una versión
+más antigua puede devolver una excepción. Este proyecto V16 concreto se abrió aquí; no se debe
+inferir que los otros seis ejemplos sigan la misma ruta.
 
 ```powershell
 30-tools\scripts\Invoke-TiaMcp.ps1 -TimeoutSeconds 600 -Calls @(
@@ -19,8 +20,7 @@ upgrade sin intervención**.
 )
 ```
 
-> ⚠️ **Corrección.** Una versión anterior de este documento decía que Openness no podía migrar y
-> que había que hacerlo a mano desde TIA. **Era falso.** Se corrigió al probarlo.
+Referencia oficial: [abrir proyectos y `OpenWithUpgrade` en Openness V20](https://docs.tia.siemens.cloud/r/en-us/v20/tia-portal-openness-api-for-automation-of-engineering-workflows/tia-portal-openness-api/functions-for-projects-and-project-data/opening-a-project).
 
 ### Qué pasa exactamente
 

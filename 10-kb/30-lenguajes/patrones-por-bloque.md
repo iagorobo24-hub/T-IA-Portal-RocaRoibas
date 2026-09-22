@@ -7,6 +7,9 @@
 > muestran **cómo aplicar cada uno a un caso concreto**; esta página los centraliza para no
 > repetir la justificación en cada receta.
 
+> ⚠️ `EmergencyOk` y otros nombres de emergencia son variables ordinarias en estos patrones.
+> Ningún nombre, carpeta o comentario convierte una condición estándar en Safety certificada.
+
 ## 1. El enclavamiento entra por parámetro, nunca se calcula dentro
 
 Ningún bloque de dispositivo decide por su cuenta si puede arrancar. `FB_Motor` y
@@ -32,7 +35,7 @@ En todos los bloques de dispositivo, la rama que **desactiva** va primero en el 
 
 ```pascal
 // FB_Motor
-IF #CmdStop OR #Fault OR NOT #Interlock THEN
+IF #CmdStop OR #statFault OR NOT #Interlock THEN
    #statRunLatch := FALSE;
 ELSIF #CmdStart THEN
    #statRunLatch := TRUE;
@@ -121,6 +124,9 @@ END_IF;
 
 Cuatro `IF` independientes (sin `ELSIF`) permitirían que más de una condición se cumpliera a la
 vez y el resultado dependería del orden de ejecución, no de una precedencia declarada.
+
+`EmergencyOk` aquí es un permiso de proceso estándar. Este patrón no implementa una función de
+seguridad certificada: no sustituye F-CPU/F-blocks, relé de seguridad ni una validación SIL/PL.
 
 ## 8. Matriz activa/reconocida para alarmas, no un booleano suelto
 

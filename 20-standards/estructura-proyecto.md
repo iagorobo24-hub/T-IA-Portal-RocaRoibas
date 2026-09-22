@@ -10,7 +10,7 @@
 Program blocks/
 ├── 00_System/        OB_Main, OB_Startup, OBs de error y diagnóstico
 ├── 10_Modes/         modos manual / automático / paro / emergencia
-├── 20_Safety/        lógica de seguridad no-F (enclavamientos duros)
+├── 20_Permissives/   permisos e interlocks de proceso estándar (no-F, no certificados)
 ├── 30_Sequences/     secuencias de proceso, una por área o máquina
 ├── 40_Devices/       llamadas a FB_Motor, FB_Valve... una por equipo
 ├── 50_Analog/        escalado, filtrado, lazos PID
@@ -21,8 +21,13 @@ Program blocks/
 ```
 
 🔒 **Numeración en decenas, con hueco.** Deja sitio para meter `35_` sin renumerar treinta
-carpetas. El número comunica además el orden de ejecución mental: sistema → modos → seguridad →
+ carpetas. El número comunica además el orden de ejecución mental: sistema → modos → permisos →
 secuencia → actuadores.
+
+🔒 **El nombre de grupo nunca clasifica Safety.** No uses `20_Safety` para lógica estándar ni
+interpretes nombres como `EmergencyOk`, `EStop` o `Safety` como evidencia de una función certificada.
+Los bloques F, tags Safety y el circuito de seguridad siguen un flujo independiente y no forman
+parte de esta estructura estándar.
 
 🔒 **`90_Library` es sagrada.** Lo que entra ahí viene de `60-library/` y **no se edita dentro
 del proyecto**. Si hay que cambiar un bloque de librería, se cambia en la librería, se prueba, y

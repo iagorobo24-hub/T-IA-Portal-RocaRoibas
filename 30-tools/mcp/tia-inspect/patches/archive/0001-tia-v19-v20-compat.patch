@@ -134,4 +134,80 @@ index 644c01a..ddc9e6b 100644
 +    <Reference Include="System.Management" />
    </ItemGroup>
    <ItemGroup>
-     <Compile Remove="tests\**" />
+    <Compile Remove="tests\**" />
+diff --git a/src/TiaMcpServer/CliOptions.cs b/src/TiaMcpServer/CliOptions.cs
+index 7c9f3b3..b19265b 100644
+--- a/src/TiaMcpServer/CliOptions.cs
++++ b/src/TiaMcpServer/CliOptions.cs
+@@ -6,6 +6,7 @@ public class CliOptions
+         public int? Logging { get; set; } // "stdio" or "http"
+         public bool Doctor { get; set; } // print environment diagnostics and exit
+         public bool AllowWrite { get; set; } // register the project-mutating tools
++        public bool Isolated { get; set; } // start a private headless Openness instance; never attach
+
+         public static CliOptions ParseArgs(string[] args)
+         {
+@@ -33,6 +34,11 @@ public static CliOptions ParseArgs(string[] args)
+                         options.AllowWrite = true;
+                         break;
+
++                    case "-isolated":
++                    case "--isolated":
++                        options.Isolated = true;
++                        break;
++
+                     case "-logging":
+                     case "--logging":
+                         if (i + 1 < args.Length && int.TryParse(args[i + 1], out int l))
+diff --git a/src/TiaMcpServer/Program.cs b/src/TiaMcpServer/Program.cs
+index 5ba4aa3..1fc09a9 100644
+--- a/src/TiaMcpServer/Program.cs
++++ b/src/TiaMcpServer/Program.cs
+@@ -18,6 +18,7 @@ public static async Task Main(string[] args)
+             var options = CliOptions.ParseArgs(args);
+
+             Engineering.TiaMajorVersion = options.TiaMajorVersion ?? 21;
++            Engineering.IsolatedPortal = options.Isolated;
+
+             // Set before the --doctor branch below, which reports the write mode, and before the
+             // host registers its tool types.
+diff --git a/src/TiaMcpServer/Siemens/Engineering.cs b/src/TiaMcpServer/Siemens/Engineering.cs
+index 322b6ff..529aaa5 100644
+--- a/src/TiaMcpServer/Siemens/Engineering.cs
++++ b/src/TiaMcpServer/Siemens/Engineering.cs
+@@ -11,6 +11,7 @@ namespace TiaMcpServer.Siemens
+     public class Engineering
+     {
+         public static int TiaMajorVersion { get; set; }
++        public static bool IsolatedPortal { get; set; }
+
+         // Registry sub keys below 'TIAP{version}' that hold the installation path, most specific first.
+         private static readonly string[] PreferredInstallPathSubKeys = { "TIA_Opns", "Global", "EditionMain" };
+diff --git a/src/TiaMcpServer/Siemens/Portal.cs b/src/TiaMcpServer/Siemens/Portal.cs
+index c099736..05cc29a 100644
+--- a/src/TiaMcpServer/Siemens/Portal.cs
++++ b/src/TiaMcpServer/Siemens/Portal.cs
+@@ -136,8 +136,10 @@ public bool ConnectPortal()
+                 _session = null;
+                 _portal = null;
+
+-                // connect to running TIA Portal
+-                var processes = TiaPortal.GetProcesses();
++                // Normal mode attaches to an existing instance first. Isolated mode is an
++                // explicit disposable-fixture escape hatch: it never attaches to a user's
++                // visible project and starts a private headless Openness process instead.
++                var processes = Engineering.IsolatedPortal ? Enumerable.Empty<TiaPortalProcess>() : TiaPortal.GetProcesses();
+                 if (processes.Any())
+                 {
+                     _portal = processes.First().Attach();
+@@ -158,7 +160,9 @@ public bool ConnectPortal()
+                 }
+
+                 // start new TIA Portal
+-                _portal = new TiaPortal(TiaPortalMode.WithUserInterface);
++                _portal = new TiaPortal(Engineering.IsolatedPortal
++                    ? TiaPortalMode.WithoutUserInterface
++                    : TiaPortalMode.WithUserInterface);
+
+                 return true;
+             }

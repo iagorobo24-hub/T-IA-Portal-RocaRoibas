@@ -34,7 +34,13 @@ GetBlockSource(softwarePath: "Sorting Plant Controller",
 
 ### Cómo se lee un LAD en `.s7dcl`
 
-Es texto, y es sorprendentemente claro:
+Es texto, y es sorprendentemente claro. El extracto siguiente documenta fielmente un ejemplo LAD
+histórico; no lo convierte en plantilla de diseño:
+
+> ⚠️ Este ejemplo declara `Fault` como `VAR_OUTPUT` en la interfaz y lo vuelve a leer como contacto
+> en el siguiente network. Trátalo como lógica heredada que hay que revisar. No copies esta
+> dependencia en SCL: conserva el estado en una variable interna (`VAR`/`STAT`) y escribe la salida
+> desde ese estado. Un export fiel describe lo que hay; no acredita que sea una buena práctica.
 
 ```
 { S7_Language := "LAD"; S7_NetworkTitle := "MLC_U4" }
@@ -110,10 +116,11 @@ FUNCTION_BLOCK "CylinderControl"
 | `VAR` (static) | Estado que persiste entre ciclos |
 | `VAR_TEMP` | Se pierde cada ciclo |
 
-🔴 **Un FB tiene estado aunque no declare `VAR` static.** Sus **salidas** viven en el DB de
-instancia y retienen valor entre ciclos. `CylinderControl` no declara ni una static, pero usa
-`S_Coil`/`R_Coil` sobre la salida `"Extend Cylinder"`: es un biestable con memoria. Si solo
-miras `VAR`, concluyes que es combinacional y te equivocas.
+🔴 **Un FB puede tener estado aunque no declare `VAR` static.** Sus **salidas** viven en el DB de
+instancia y pueden conservar su último valor entre llamadas. Eso no convierte una salida en una
+variable interna de estado ni autoriza a leerla dentro de la lógica. `CylinderControl` no declara
+una static y usa `S_Coil`/`R_Coil` sobre `"Extend Cylinder"`; registra ese comportamiento LAD como
+legado. En SCL nuevo, mantén el estado en `VAR`/`STAT` y publica la salida al final.
 
 ### 3. Para bloques de datos, sí `GetBlockInterface`
 

@@ -15,7 +15,9 @@ param(
 # (all resolve 30-tools/mcp/*/bin/v20/TiaMcpServer.exe or the gitignored .mcp.json/servers.local.json).
 $ciSafeCheckNames = @(
     'knowledge', 'public-boundary', 'runtime-media-discovery', 'tag-export-converter',
-    'semantic-workflow', 'check-tia-standards', 'eval-freshness'
+    'semantic-workflow', 'check-tia-standards', 'eval-freshness', 'tia-block-metadata',
+    'agent-demo-scaffold-source', 'fixture-manifest', 'scl-safety-gate', 'example-secrets',
+    'simulation-acceptance-runner', 'simulation-acceptance-safety'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -38,6 +40,7 @@ $definitions = @(
     @{ name = 'mcp-tool-schemas'; path = '30-tools/tests/Test-InspectMcpToolSchemas.ps1' },
     @{ name = 'mcp-tool-sequence'; path = '30-tools/tests/Test-McpToolSequence.ps1' },
     @{ name = 'mcp-session-lease'; path = '30-tools/tests/Test-McpSessionLease.ps1' },
+    @{ name = 'mcp-stderr-capture'; path = '30-tools/tests/Test-McpToolSequenceStderrCapture.ps1' },
     @{ name = 'plcsim-api-probe'; path = '30-tools/tests/Test-PlcSimRuntimeApiProbe.ps1' },
     @{ name = 'plcsim-command-protocol'; path = '30-tools/tests/Test-PlcSimCommandProtocol.ps1' },
     @{ name = 'plcsim-native-adapter'; path = '30-tools/tests/Test-PlcSimNativeAdapter.ps1' },
@@ -49,6 +52,12 @@ $definitions = @(
     @{ name = 'runtime-media-discovery'; path = '30-tools/tests/Test-FindTiaRuntimeMedia.ps1' },
     @{ name = 'simulation-readiness'; path = '30-tools/tests/Test-SimulationReadiness.ps1' },
     @{ name = 'simulation-acceptance-runner'; path = '30-tools/tests/Test-InvokeTiaSimulationAcceptance.ps1' },
+    @{ name = 'simulation-acceptance-safety'; path = '30-tools/tests/Test-TiaSimulationAcceptanceSafety.ps1' },
+    @{ name = 'tia-block-metadata'; path = '30-tools/tests/Test-TiaBlockMetadata.ps1' },
+    @{ name = 'agent-demo-scaffold-source'; path = '30-tools/tests/Test-AgentDemoScaffold.ps1' },
+    @{ name = 'fixture-manifest'; path = '30-tools/tests/Test-TiaFixtureManifest.ps1' },
+    @{ name = 'scl-safety-gate'; path = '30-tools/tests/Test-TiaSclSafetyGate.ps1' },
+    @{ name = 'example-secrets'; path = '30-tools/tests/Test-TiaExampleSecrets.ps1' },
     @{ name = 'portable-install-relocation'; path = 'TIA-Claude_Portable/tests/Test-PortableInstallRelocation.ps1' },
     @{ name = 'project-analysis'; path = '30-tools/tests/Test-TiaProjectAnalysis.ps1' },
     @{ name = 'scl-proposal'; path = '30-tools/tests/Test-TiaSclProposal.ps1' },

@@ -21,6 +21,9 @@ try {
       <Name>FB_Motor</Name>
       <ProgrammingLanguage>SCL</ProgrammingLanguage>
     </AttributeList>
+    <ObjectList>
+      <MultilingualText CompositionName="Comment"><ObjectList><MultilingualTextItem><AttributeList><Culture>en-US</Culture><Text>Verified block comment</Text></AttributeList></MultilingualTextItem></ObjectList></MultilingualText>
+    </ObjectList>
   </SW.Blocks.FB>
 </Document>
 '@ | Set-Content -LiteralPath (Join-Path $sourceRoot 'Program blocks\FB_Motor.xml') -Encoding UTF8
@@ -50,7 +53,7 @@ END_FUNCTION_BLOCK
       "softwareTree": "Program blocks [Group]\n  Main [OB]\n  FB_Motor [FB]",
       "blocks": [
         { "path": "Main", "name": "Main", "typeName": "OB", "programmingLanguage": "SCL", "isConsistent": true, "isKnowHowProtected": false, "comment": true },
-        { "path": "FB_Motor", "name": "FB_Motor", "typeName": "FB", "programmingLanguage": "SCL", "isConsistent": true, "isKnowHowProtected": false, "comment": true }
+        { "path": "FB_Motor", "name": "FB_Motor", "typeName": "FB", "programmingLanguage": "SCL", "isConsistent": true, "isKnowHowProtected": false, "comment": false }
       ],
       "defaultTagCount": 0
     }
@@ -72,6 +75,16 @@ END_FUNCTION_BLOCK
     if ($report.sources.scl -ne 2) { throw 'Expected two SCL source files.' }
     if ($report.references.calls[0].target -ne 'FB_Motor') { throw 'Expected the Main to reference FB_Motor.' }
     if ($report.summary.blockingFindings -ne 0) { throw 'The clean fixture must have no blocking findings.' }
+    $motorReport = @($report.blocks | Where-Object name -eq 'FB_Motor' | Select-Object -First 1)
+    if ($motorReport.Count -ne 1 -or $motorReport[0].hasComment -ne $true -or $motorReport[0].commentStatus -ne 'verified-present') {
+        throw 'Exported block XML must override the unreliable GetBlocks.headerName-derived false value.'
+    }
+    if (@($report.findings | Where-Object { $_.block -eq 'FB_Motor' -and $_.code -eq 'MISSING_BLOCK_COMMENT' }).Count -ne 0) {
+        throw 'A present XML block comment must not be reported as missing.'
+    }
+    if (@($report.findings | Where-Object { $_.block -eq 'Main' -and $_.code -eq 'BLOCK_COMMENT_UNVERIFIED' }).Count -ne 1) {
+        throw 'A comment without XML evidence must be reported as unverified, not treated as present.'
+    }
     if (-not (Test-Path -LiteralPath ([IO.Path]::ChangeExtension($outputPath, '.md')) -PathType Leaf)) { throw 'Analysis Markdown was not created.' }
     Write-Output 'PASS: project analysis creates a read-only dossier, source coverage and call references'
 

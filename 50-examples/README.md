@@ -22,9 +22,12 @@ Doble función:
 | [`orsin-wincc-games`](orsin-wincc-games/) | Juegos en WinCC + VBScript | Hasta dónde llega WinCC: scripting, listas gráficas, animación, rendimiento | 38 MB | V16 |
 | [`siemens-snippets`](siemens-snippets/) | 91 snippets de la API Openness | No es un proyecto TIA: es código C# de referencia | — | V20 |
 
-**Todos son TIA V16**, pero eso no es un obstáculo: ✅ **Openness los migra solo** al abrirlos
-(`OpenWithUpgrade`). Probado sobre `npatel-basement-light`: 125 s y listo, sin tocar TIA a mano.
-Detalle en **[`MIGRACION-V16-a-V20.md`](MIGRACION-V16-a-V20.md)**.
+**Todos son TIA V16**. En este workspace, `OpenWithUpgrade` abrió una copia de
+`npatel-basement-light` en V20 en 125 s. La ayuda Siemens V20 garantiza la actualización desde la
+versión inmediatamente anterior y advierte una excepción para una versión más antigua; ese ensayo
+concreto no garantiza la migración de los otros ejemplos. Conserva el original y procesa cada
+proyecto en una copia con revisión del log y compilación. Detalle en
+**[`MIGRACION-V16-a-V20.md`](MIGRACION-V16-a-V20.md)**.
 
 ---
 
@@ -147,8 +150,10 @@ y si se rompen no pasa nada.
 Openness no puede abrir un proyecto que otro proceso tiene bloqueado. Ciérralo y reejecuta
 `30-tools\scripts\Export-Sources.ps1`.
 
-† Los 6 UDTs salen en **XML**, no en `.s7dcl`: los documentos SIMATIC SD para tipos de datos PLC
-**requieren V21**. Confirmación real de un [límite documentado](../10-kb/10-openness/limites.md).
+† En el inventario local esos 6 UDTs se exportaron a **XML**. La documentación base de V20 sí
+incluye tipos de datos PLC en el alcance SIMATIC SD, pero aquí no se hizo un round-trip local de
+UDT en ese formato. Por tanto, esta observación describe la exportación de estos ejemplos, no un
+requisito mínimo V21. Véase [límites y evidencia por versión](../10-kb/10-openness/limites.md).
 
 ‡ Solo contiene `HMI_RT_1`. Es un proyecto de HMI puro, sin PLC — `tia-inspect` no tiene nada
 que inventariar ahí.
