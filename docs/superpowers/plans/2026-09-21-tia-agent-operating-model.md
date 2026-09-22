@@ -77,7 +77,7 @@ evidencia de apertura gráfica más abajo. Volver a ejecutar Doctor antes de cad
 | Openness Siemens V20 | Base de automatización que usan TIA y las herramientas locales; el probe independiente [direct-openness-20260922-final.json](../../../70-runs/environment/direct-openness-20260922-final.json) inicializó el resolver V20 desde un proyecto .NET Framework separado, comprobó el grupo y ejecutó `TiaPortal.GetProcesses()` en solo lectura. | El probe no adjuntó ni abrió proyecto y no valida todavía cada acción del API ni las operaciones de proyecto. |
 | Computer Use/UI | Nativo disponible en esta sesión por `node_repl` + `@oai/sky`; `mcp__cua_repl` solo expone navegador y su `apps: []` no mide Windows. TIA V20 se abrió con el clon exacto del fixture y se navegó visualmente al árbol `PLC_1 > Program blocks`. | La evidencia de esta sesión confirma apertura y navegación visual, no edición por GUI, compilación desde GUI ni runtime HMI. El acceso depende de la sesión, el permiso de la app y políticas de workspace. |
 | PLC fixture | En un clon IOT2050 aislado, el preview de `PlcBuildAndImport` pasó pero su apply falló por cultura, sin importación y con integridad confirmada. En una secuencia separada, el import de fuente SCL generó un bloque probe, compiló 0/0, guardó, exportó, se releyó y luego se borró/restauró el clon. Evidencia bajo `90-tmp/e2e/20260921-iot2050-agent-probe-clean/`. | La ruta de fuente externa no demuestra `Invoke-TiaSclProposalApply`; tampoco valida acciones ajenas a la secuencia ni comportamiento PLCSIM/HMI. La instancia original no se modificó. |
- | Runtime | [status-20260922-final9.json](../../../70-runs/acceptance/status-20260922-final9.json) mantiene `accepted=false`; el scaffold live está verificado, mientras PLCSIM y Runtime Advanced V20 siguen pendientes/bloqueados. | El informe de aceptación separa compilación/mocks de comportamiento real; no autoriza descarga ni runtime. |
+ | Runtime | [status-20260922-final10.json](../../../70-runs/acceptance/status-20260922-final10.json) mantiene `accepted=false`; el scaffold live está verificado, mientras PLCSIM y Runtime Advanced V20 siguen pendientes/bloqueados. | El informe de aceptación separa compilación/mocks de comportamiento real; no autoriza descarga ni runtime. |
 
 ### Estado actualizado antes de la fase gráfica final — 2026-09-22
 
@@ -85,7 +85,7 @@ evidencia de apertura gráfica más abajo. Volver a ejecutar Doctor antes de cad
   pasó con V20 activo, grupo `Siemens TIA Openness=true`, V19/V20 instalados, `isConnected=false`,
   sin proyecto MCP y `allowWrite=false`. Esta evidencia no identifica la ventana TIA visible; esa
   identidad se hará con Computer Use nativo justo antes de la fase gráfica.
-- **Checks no gráficos:** [ci-safe-20260922-final5.json](../../../70-runs/checks/ci-safe-20260922-final5.json)
+- **Checks no gráficos:** [ci-safe-20260922-final6.json](../../../70-runs/checks/ci-safe-20260922-final6.json)
   terminó con 14 PASS, 0 WARN y 0 BLOCKED. Las pruebas de simulación incluidas son mocks de guards;
   no acreditan PLCSIM ni Runtime.
 - **Aislamiento headless:** [isolated-20260922-connect-disconnect.json](../../../70-runs/environment/isolated-20260922-connect-disconnect.json)
@@ -216,7 +216,7 @@ no es defensa suficiente.
     confirma ambos ausentes, el bloqueo fail-closed del helper y los tres tests locales PASS; `liveTiaConnected=false`
     y `liveImportAttempted=false`. No se sustituyó el binario de producción. El resultado
     persistente más reciente de checks del workspace es
-    [14 PASS, 0 WARN, 0 BLOCKED](../../../70-runs/checks/ci-safe-20260922-final5.json).
+    [14 PASS, 0 WARN, 0 BLOCKED](../../../70-runs/checks/ci-safe-20260922-final6.json).
     La validación del [candidato portable actual](../../../70-runs/portable-package/final-20260922-093500-000/validation.json)
    registra el hash de su `tia-inspect` empaquetado, pero no reemplaza un log de compilación. La salida
    detallada del compilador y los warnings no se conservaron en `90-tmp`.
@@ -229,7 +229,7 @@ no es defensa suficiente.
    [compile/save](../../../90-tmp/e2e/20260921-iot2050-agent-probe-clean/17-generate-compile-save.json)
    y [readback independiente](../../../90-tmp/e2e/20260921-iot2050-agent-probe-clean/18-independent-readback.json).
    Los tests negativos demuestran bloqueo ante `isFailsafe=true`, null/desconocido y tags
-    Safety/incompletas; el check integrado persistente está en [ci-safe-20260922-final5](../../../70-runs/checks/ci-safe-20260922-final5.json).
+    Safety/incompletas; el check integrado persistente está en [ci-safe-20260922-final5](../../../70-runs/checks/ci-safe-20260922-final6.json).
 
 Aceptación estática: gates locales, tests y compile/schema pasan. La ruta de importación de fuente
 externa de `tia-create` compiló y releyó el probe, pero eso no demuestra integración del runner de
@@ -289,7 +289,7 @@ El valor se tratará comprometido hasta confirmación.
   `20_Permissives`, advertir que nombres no clasifican Safety, y corregir la memoria `#Fault` en
   ejemplos ejecutables. Las menciones restantes de `#Fault` son anti-patrones etiquetados.
 - [x] Corregir R01 para que Attach solo se use cuando el servidor/perfil real lo expone; completar
-  checks locales de safety/nombres con `Test-TiaSclSafetyGate.ps1`; el [informe de checks](../../../70-runs/checks/ci-safe-20260922-final5.json)
+  checks locales de safety/nombres con `Test-TiaSclSafetyGate.ps1`; el [informe de checks](../../../70-runs/checks/ci-safe-20260922-final6.json)
   conserva el resultado de la barrera SCL y estándares.
 
 Aceptación: recetas consistentes con AGENTS; ningún ejemplo lee una salida como memoria ni sugiere
@@ -313,7 +313,7 @@ TIA-Claude_Portable/tests/Test-PortablePackage.ps1, 50-examples/README.md y agen
   no se usa para afirmar el estado del candidato final.
 - [x] Eliminar la afirmación de que los tipos PLC requieren V21 y documentar que `agent-demo` es un
   fixture de scaffold. La comprobación CI segura del 22/09/2026 registra 14 PASS, 0 WARN y 0 BLOCKED:
-  [ci-safe-20260922-final5.json](../../../70-runs/checks/ci-safe-20260922-final5.json). Incluye guards y mocks, no
+  [ci-safe-20260922-final6.json](../../../70-runs/checks/ci-safe-20260922-final6.json). Incluye guards y mocks, no
   equivale a PLCSIM real ni a Runtime HMI.
 - [x] Corregir el falso `MISSING_BLOCK_COMMENT`: `HeaderName` es un ID de usuario, no el comentario
   del bloque. `TiaBlockMetadata.ps1` lee el comentario del XML de exportación; sin XML marca el dato
@@ -388,6 +388,19 @@ pasaron; sus respuestas declaran Engineering V21 para PLC y V18 para la pantalla
 siguen siendo **builders verificados offline**, no importaciones V20 aceptadas. El UDT corregido y su
 lectura de resultado están en [20260922-noncu-family-udt-rerun.json](../../../70-runs/tia-capabilities/20260922-noncu-family-udt-rerun.json).
 
+La auditoría final [20260922-final-noncu-hardware-comms-analog-audit.md](../../../70-runs/tia-capabilities/20260922-final-noncu-hardware-comms-analog-audit.md)
+cerró la parte que podía comprobarse sin Computer Use de hardware/redes, comunicaciones/diagnóstico
+y analógicas. Sin conectar un proyecto, `PlanHardwareNetworkConfiguration` rechazó tres entradas
+inválidas y confirmó sus guardas offline; `RunOnlineMonitoringSafetySelfTest` pasó con 6
+verificaciones y `checkedTools=222`; `PlanOnlineReadOnlyMonitoring` y
+`PlanOnlineReadOnlyDataProvider` aceptaron únicamente planes read-only y rechazaron entradas
+inseguras o proveedores no soportados. No se abrió una CPU, endpoint, watch table o runtime. La
+búsqueda específica de analógicas no encontró una herramienta dedicada: el escalado, calibración,
+diagnóstico de canal y medida física quedan **no verificados**. Hardware/E/S real, catálogo,
+direcciones, redes y diagnóstico live siguen bloqueados hasta disponer de un proyecto identificado
+y paths leídos del árbol. El JSON primario es
+[20260922-final-noncu-hardware-comms-analog-audit.json](../../../70-runs/tia-capabilities/20260922-final-noncu-hardware-comms-analog-audit.json).
+
 Aceptación de catálogo: las tablas reflejan los perfiles actuales configurados, cada conteo/hash
 coincide con tools/list y los snapshots históricos se distinguen como tales. La evidencia de acción
 probada se conserva separada y no se propaga a otras herramientas parecidas.
@@ -434,8 +447,10 @@ Los artefactos completos están en `90-tmp/e2e/20260921-iot2050-agent-probe-clea
 `24-create-export-xml-delete-preview.json`, `26-create-delete-compile-save.json`,
 `27-independent-delete-readback.json` y `28-restore-report.json`.
 
-**No probado por acción:** escritura independiente de tags/UDT/DB, hardware, módulos, redes, HMI, medición física,
-comunicaciones, online/watch, descarga y runtime. Quedan en nivel Schema/Documentado, no Fixture.
+**No probado por acción:** escritura independiente de tags/UDT/DB, modificación de hardware,
+módulos, redes, HMI, medición física, comunicación con una CPU, online/watch, descarga y runtime.
+Las guardas offline de hardware/red y los planes read-only de monitorización/OPC UA sí quedaron
+verificados en la auditoría final; no elevan ninguna de esas acciones a nivel Fixture.
 No se actuó sobre originales de ejemplos, `40-projects/` ni PLC físico.
 
 **Regla de creación:** la ruta experimental anterior queda etiquetada como `experimental`, no como
@@ -493,7 +508,7 @@ PLCSIM ni runtime HMI; no se sustituye por PLC físico ni se infiere runtime a p
   verificados en [doctor-20260922-final.json](../../../70-runs/environment/doctor-20260922-final.json)
   y [Test-TiaIsolatedMode](../../../30-tools/tests/Test-TiaIsolatedMode.ps1).
 - [x] Ejecutar la suite final de guards, el runner de propuesta SCL en modo negativo y
-  `Write-TiaAcceptanceStatus.ps1`; el informe fechado [status-20260922-final9.json](../../../70-runs/acceptance/status-20260922-final9.json)
+  `Write-TiaAcceptanceStatus.ps1`; el informe fechado [status-20260922-final10.json](../../../70-runs/acceptance/status-20260922-final10.json)
   mantiene correctamente `accepted=false` hasta completar runtime y recetas.
 - [ ] Completar acciones permitidas por familia en fixture y actualizar los niveles de evidencia de
   cada fila. No se elevan tools de un schema por semejanza.
@@ -1128,15 +1143,17 @@ las llamadas y operaciones observadas en `90-tmp/e2e/20260921-iot2050-agent-prob
 | `tia-inspect / read` | Inspección y lectura; el roster live actual publica 53 schemas. | Doctor, tree, tags, blocks, source, compile, readback. | **Fixture** solo para las acciones enumeradas arriba; el resto sigue en **Schema**. |
 | `tia-inspect / write` | Snapshot aislado `--allow-write` actual, 84 schemas; la política exige fixture manifest. | No se usó este perfil para escribir en esta secuencia. | **Schema**; no atribuirle el write ejecutado vía `tia-create`. |
 | `tia-create / lite` | Snapshot de 55 schemas y búsqueda dinámica con `FindTools`/`CallTool`. | Preview/importación alternativa/export/delete de probe y compile/save en la secuencia documentada. `PlcBuildAndImport` apply falló por cultura. | **Fixture** por las acciones enumeradas, no por todo el perfil. |
-| `tia-create / full` | Snapshot de 222 schemas. | `Bootstrap → RunCapabilitySelfTest(connectIfNeeded=false) → Disconnect` terminó correctamente; además, `RunOnlineMonitoringSafetySelfTest` y `RunHmiActionScriptRecipeSafetySelfTest` pasaron offline sin abrir proyecto. [evidencia lite](../../../70-runs/tia-capabilities/20260922-create-lite-selftest.json), [evidencia full](../../../70-runs/tia-capabilities/20260922-create-full-selftest.json), [lote offline](../../../70-runs/tia-capabilities/20260922-offline-safe-tools-batch.md). | **Smoke/offline safety** para esas llamadas; el resto sigue en **Schema**. |
+| `tia-create / full` | Snapshot de 222 schemas. | `Bootstrap → RunCapabilitySelfTest(connectIfNeeded=false) → Disconnect` terminó correctamente; además, `RunOnlineMonitoringSafetySelfTest` y `RunHmiActionScriptRecipeSafetySelfTest` pasaron offline sin abrir proyecto. La auditoría final verificó también los planificadores de hardware/red y monitorización read-only. [evidencia lite](../../../70-runs/tia-capabilities/20260922-create-lite-selftest.json), [evidencia full](../../../70-runs/tia-capabilities/20260922-create-full-selftest.json), [lote offline](../../../70-runs/tia-capabilities/20260922-offline-safe-tools-batch.md), [auditoría final](../../../70-runs/tia-capabilities/20260922-final-noncu-hardware-comms-analog-audit.json). | **Smoke/offline safety** para esas llamadas; el resto sigue en **Schema**. |
 | Computer Use nativo | Puede inspeccionar y navegar la ventana TIA si el plugin nativo y el permiso para esa aplicación están activos. | En esta sesión se abrió el clon y se inspeccionó el árbol de proyecto; no se editó GUI ni se probó HMI Runtime. `cua_repl.apps=[]` no era un dato del inventario Windows. | **UI observada y disponible**; edición gráfica, runtime HMI y comunicación desde GUI siguen sin probar. |
 
 ### Límites y acciones siguientes
 
 - El perfil `tia-create / lite` no fue usado para todos sus métodos; `full` solo ejecutó el lote offline y el self-test, sin abrir proyecto.
 - No se probaron modificación de hardware, red/protocolos, escritura independiente de tags/UDT/DB,
-  HMI, mediciones, watch/force, descarga, PLCsim, Runtime ni escritura online. La tabla de tags del
-  scaffold sí fue exportada, normalizada y leída de vuelta como evidencia de inventario.
+  HMI, mediciones físicas, watch/force, descarga, PLCsim, Runtime ni escritura online. La auditoría
+  final sí verificó sin conexión las guardas de hardware/red y la planificación read-only de
+  monitorización/OPC UA; la tabla de tags del scaffold también fue exportada, normalizada y leída
+  de vuelta como evidencia de inventario.
 - La línea base y el test de fixture acreditan `GetBlocks.isFailsafe=false` antes/después del probe.
   Los tests de barrera acreditan rechazo sintético de safety o metadata incompleta; no se hizo una
   escritura real F ni se usó una F-CPU.
@@ -1147,7 +1164,7 @@ las llamadas y operaciones observadas en `90-tmp/e2e/20260921-iot2050-agent-prob
   en una aplicación .NET independiente; todavía no se mapeó cada MCP tool a un miembro concreto de
   `Siemens.Engineering` ni se probó CRUD de proyecto desde ese cliente.
 - El informe global de aceptación permanece `accepted=false`; PLCSIM/Runtime siguen pendientes o
-  bloqueados. Consultar [status-20260922-final9.json](../../../70-runs/acceptance/status-20260922-final9.json)
+  bloqueados. Consultar [status-20260922-final10.json](../../../70-runs/acceptance/status-20260922-final10.json)
   para el estado actual y volver a generarlo después de cada cambio relevante.
 - La suite `RunOfflineReleaseValidationSuite` es una validación de release separada del workspace
   TIA-Claude. Antes de llamarla, ejecutar [R21](../../../10-kb/20-recetas/R21-preflight-offline-release.md)
@@ -1177,4 +1194,3 @@ descarga o conexión física; PLCSIM solo entra si su instancia virtual desechab
 quedan identificados por el readiness actual.
 
 **Lectura segura:** usar las filas para decidir qué buscar y en qué perfil. Antes de llamar a una acción mutante, aplicar el contrato de [AGENTS.md](../../../AGENTS.md), obtener rutas de la instancia objetivo, preflight safety/protection, backup, preview, compilación y readback en fixture; la tabla no es autorización de llamada.
-
