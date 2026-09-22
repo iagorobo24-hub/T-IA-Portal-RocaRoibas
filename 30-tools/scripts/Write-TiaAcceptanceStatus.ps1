@@ -6,7 +6,8 @@ param(
     [string]$EnvironmentPath,
     [string]$ReadinessPath,
     [string]$PortableValidationPath,
-    [string]$PortableCoreManifestPath
+    [string]$PortableCoreManifestPath,
+    [string[]]$ComputerUseEvidencePaths
 )
 
 $ErrorActionPreference = 'Stop'
@@ -21,9 +22,81 @@ $EnvironmentPath = [IO.Path]::GetFullPath($EnvironmentPath)
 $ReadinessPath = [IO.Path]::GetFullPath($ReadinessPath)
 $PortableCoreManifestPath = [IO.Path]::GetFullPath($PortableCoreManifestPath)
 
+if (-not $ComputerUseEvidencePaths -or $ComputerUseEvidencePaths.Count -eq 0) {
+    $computerUseEvidenceDirectory = Join-Path $WorkspaceRoot '70-runs\environment'
+    $ComputerUseEvidencePaths = @(
+        Get-ChildItem -LiteralPath $computerUseEvidenceDirectory -Filter 'computer-use-*.json' -File -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime |
+            ForEach-Object { $_.FullName }
+    )
+}
+$ComputerUseEvidencePaths = @(
+    $ComputerUseEvidencePaths |
+        Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } |
+        ForEach-Object { [IO.Path]::GetFullPath([string]$_) } |
+        Select-Object -Unique
+)
+
 function Read-JsonIfPresent([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
     try { return Get-Content -Raw -LiteralPath $Path | ConvertFrom-Json } catch { return $null }
+}
+
+function Add-UniqueFinding([System.Collections.Generic.List[string]]$List, [string]$Value) {
+    if (-not [string]::IsNullOrWhiteSpace($Value) -and -not ($List -contains $Value)) {
+        $List.Add($Value) | Out-Null
+    }
+}
+
+function Get-ComputerUseAction($Evidence, [string]$ActionName) {
+    if (-not $Evidence -or -not $Evidence.actions) { return $null }
+    return @($Evidence.actions | Where-Object { $_.action -eq $ActionName } | Select-Object -First 1)[0]
+}
+
+function Test-ComputerUseAction($Evidence, [string]$ActionName) {
+    $action = Get-ComputerUseAction $Evidence $ActionName
+    return [bool]($action -and (($action.status -eq 'verified') -or ($action.result -eq 'verified')))
+}
+
+function Test-ComputerUseSafetyEvidencePresent($Evidence) {
+    if (-not $Evidence) { return $false }
+    if ($null -ne $Evidence.safetyAndHardware -or $null -ne $Evidence.safety) { return $true }
+    if ($Evidence.originalSourcePreserved -eq $true -or $Evidence.sourceBaselineCompared -eq $true) { return $true }
+    foreach ($actionName in @('physicalDownload', 'safetyOrKnowHowChange', 'originalProjectChange')) {
+        $action = Get-ComputerUseAction $Evidence $actionName
+        if ($action -and (
+                $action.status -in @('verified', 'not_performed') -or
+                $action.result -in @('verified', 'not_performed'))) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Test-ComputerUseSafetyBoundary($Evidence) {
+    if (-not (Test-ComputerUseSafetyEvidencePresent $Evidence)) { return $false }
+
+    $physicalDownload = ($Evidence.physicalDownload -eq $true) -or ($Evidence.safety -and $Evidence.safety.physical_download -eq $true)
+    $originalProjectModified = ($Evidence.originalProjectModified -eq $true) -or ($Evidence.safety -and $Evidence.safety.original_project_modified -eq $true)
+    if ($physicalDownload -or $originalProjectModified) { return $false }
+    if ($Evidence.safetyAndHardware -and (
+            $Evidence.safetyAndHardware.physicalDownload -eq $true -or
+            $Evidence.safetyAndHardware.safetyOrFBlockEdited -eq $true -or
+            $Evidence.safetyAndHardware.knowHowTouched -eq $true -or
+            $Evidence.safetyAndHardware.originalProjectModified -eq $true)) {
+        return $false
+    }
+    if ($Evidence.safety -and (
+            $Evidence.safety.f_blocks_or_safety_tags_modified -eq $true -or
+            $Evidence.safety.know_how_touched -eq $true)) {
+        return $false
+    }
+
+    foreach ($actionName in @('physicalDownload', 'safetyOrKnowHowChange', 'originalProjectChange')) {
+        $action = Get-ComputerUseAction $Evidence $actionName
+        if ($action -and (($action.status -eq 'verified') -or ($action.result -eq 'verified'))) { return $false }
+    }
+    return $true
 }
 
 $verified = [System.Collections.Generic.List[string]]::new()
@@ -122,6 +195,279 @@ $notVerified.Add('comportamiento funcional PLC probado en PLCSIM')
 $notVerified.Add('PA-1 ejecutada dos veces desde sesión fría en dos harnesses')
 $assumptions.Add('La compilación y el smoke MCP no demuestran comportamiento de runtime')
 
+# Computer Use is a separate evidence surface.  It is discovered from explicit
+# JSON reports and never inferred from browser inventory, a schema, or a TIA
+# process.  The checks below are deliberately structural: a free-form status
+# string alone cannot promote an operation to verified.
+$computerUseRecords = [System.Collections.Generic.List[object]]::new()
+$computerUseMissing = [System.Collections.Generic.List[string]]::new()
+$computerUseInvalid = [System.Collections.Generic.List[string]]::new()
+foreach ($computerUsePath in $ComputerUseEvidencePaths) {
+    if (-not (Test-Path -LiteralPath $computerUsePath -PathType Leaf)) {
+        $computerUseMissing.Add($computerUsePath) | Out-Null
+        continue
+    }
+    $computerUseEvidence = Read-JsonIfPresent $computerUsePath
+    if ($null -eq $computerUseEvidence) {
+        $computerUseInvalid.Add($computerUsePath) | Out-Null
+        continue
+    }
+    $computerUseRecords.Add([pscustomobject]@{
+        path = $computerUsePath
+        data = $computerUseEvidence
+    }) | Out-Null
+}
+
+$computerUseNativeWindowPaths = [System.Collections.Generic.List[string]]::new()
+$computerUseNativeWindowVerified = $false
+$computerUsePlcGuiPaths = [System.Collections.Generic.List[string]]::new()
+$computerUsePlcGuiVerified = $false
+$computerUseHmiPaths = [System.Collections.Generic.List[string]]::new()
+$computerUseHmiVisualVerified = $false
+$computerUseHmiCompileBlocked = $false
+$computerUseCreateDeletePaths = [System.Collections.Generic.List[string]]::new()
+$computerUseCreateDeleteVerified = $false
+$computerUsePlcsimPaths = [System.Collections.Generic.List[string]]::new()
+$computerUsePlcsimVerified = $false
+$computerUseRuntimePaths = [System.Collections.Generic.List[string]]::new()
+$computerUseRuntimeBlocked = $false
+$computerUseSafetyBoundaryPaths = [System.Collections.Generic.List[string]]::new()
+$computerUseSafetyBoundaryViolationPaths = [System.Collections.Generic.List[string]]::new()
+$computerUseSafetyBoundaryMissingPaths = [System.Collections.Generic.List[string]]::new()
+$computerUseSafetyBoundaryVerified = $false
+$computerUseSclCreationUnverified = $false
+
+foreach ($computerUseRecord in $computerUseRecords) {
+    $evidence = $computerUseRecord.data
+    $path = $computerUseRecord.path
+    $isNativeHarness = [bool](
+        ([string]$evidence.harness -match '(?i)native') -or
+        ([string]$evidence.harness -match '(?i)@oai/sky') -or
+        ([string]$evidence.surface -match '(?i)native Computer Use')
+    )
+    $isV20 = [bool](
+        ($evidence.tiaMajorVersion -eq 20) -or
+        ([string]$evidence.tiaWindow.app -match '(?i)Portal V20') -or
+        ([string]$evidence.app -match '(?i)Portal V20')
+    )
+    $hasTargetWindow = [bool](
+        ($evidence.windowSelection -and -not [string]::IsNullOrWhiteSpace([string]$evidence.windowSelection)) -or
+        ($evidence.tiaWindow -and
+            [string]$evidence.tiaWindow.app -match '(?i)Portal V20' -and
+            -not [string]::IsNullOrWhiteSpace([string]$evidence.tiaWindow.titleWhenIdle)) -or
+        ([string]$evidence.app -match '(?i)Portal V20' -and
+            (-not [string]::IsNullOrWhiteSpace([string]$evidence.titleBefore) -or
+             -not [string]::IsNullOrWhiteSpace([string]$evidence.titleAfter)))
+    )
+    if ($isNativeHarness -and $isV20 -and $hasTargetWindow) {
+        $computerUseNativeWindowVerified = $true
+        $computerUseNativeWindowPaths.Add($path) | Out-Null
+    }
+
+    $boundarySignal = Test-ComputerUseSafetyEvidencePresent $evidence
+    $boundaryOk = Test-ComputerUseSafetyBoundary $evidence
+    if ($boundarySignal -and $boundaryOk) {
+        $computerUseSafetyBoundaryPaths.Add($path) | Out-Null
+    } elseif ($boundarySignal) {
+        $computerUseSafetyBoundaryViolationPaths.Add($path) | Out-Null
+    } elseif ($isV20 -and ($evidence.actions -or $evidence.visualEdit -or $evidence.installedAndObserved)) {
+        $computerUseSafetyBoundaryMissingPaths.Add($path) | Out-Null
+    }
+
+    $compile = Get-ComputerUseAction $evidence 'compileSoftwareOnlyChanges'
+    $compileClean = [bool]($compile -and $null -ne $compile.errors -and $null -ne $compile.warnings -and
+        [int]$compile.errors -eq 0 -and [int]$compile.warnings -eq 0)
+    $plcGuiComplete = [bool](
+        $isV20 -and $boundaryOk -and
+        (Test-ComputerUseAction $evidence 'visualEdit') -and
+        $compileClean -and
+        (Test-ComputerUseAction $evidence 'saveProject') -and
+        (Test-ComputerUseAction $evidence 'visualReadback')
+    )
+    if ($plcGuiComplete) {
+        $computerUsePlcGuiVerified = $true
+        $computerUsePlcGuiPaths.Add($path) | Out-Null
+    }
+
+    $hmiVisualComplete = [bool](
+        $isV20 -and $boundaryOk -and
+        ($evidence.phase -eq 'computer-use-hmi-visual-edit' -or $evidence.visualEdit) -and
+        (
+            (
+                (Test-ComputerUseAction $evidence 'visualCreateTextObject') -and
+                (Test-ComputerUseAction $evidence 'setText') -and
+                (Test-ComputerUseAction $evidence 'saveProject') -and
+                (Test-ComputerUseAction $evidence 'closeAndReopen') -and
+                (Test-ComputerUseAction $evidence 'visualReadback')
+            ) -or
+            (
+                $evidence.visualEdit.status -eq 'verified_on_disposable_clone' -and
+                $evidence.visualEdit.saved -eq $true -and
+                $evidence.visualEdit.closedAndReopened -eq $true -and
+                $evidence.visualEdit.visualReadback -eq $true
+            )
+        )
+    )
+    if ($hmiVisualComplete) {
+        $computerUseHmiVisualVerified = $true
+        $computerUseHmiPaths.Add($path) | Out-Null
+    }
+    $hmiCompileAction = Get-ComputerUseAction $evidence 'compile'
+    if (($hmiCompileAction -and $hmiCompileAction.status -eq 'blocked') -or
+        ([string]$evidence.visualEdit.compile -match '(?i)^blocked_')) {
+        $computerUseHmiCompileBlocked = $true
+        $computerUseHmiPaths.Add($path) | Out-Null
+    }
+    if ($evidence.visualEdit -and [string]$evidence.visualEdit.status -match '(?i)verified' -and
+        [string]$evidence.visualEdit.objectPath -match '(?i)HMI') {
+        $computerUseHmiPaths.Add($path) | Out-Null
+    }
+
+    $createBlock = Get-ComputerUseAction $evidence 'create_standard_block'
+    $createReadback = Get-ComputerUseAction $evidence 'save_close_reopen_readback'
+    $deleteBlocks = Get-ComputerUseAction $evidence 'delete_created_blocks'
+    $createDeleteComplete = [bool]($boundaryOk -and
+        $createBlock -and $createBlock.result -eq 'verified' -and
+        $createReadback -and $createReadback.result -eq 'verified' -and
+        $deleteBlocks -and $deleteBlocks.result -eq 'verified')
+    if ($createDeleteComplete) {
+        $computerUseCreateDeleteVerified = $true
+        $computerUseCreateDeletePaths.Add($path) | Out-Null
+    }
+    foreach ($blockAction in @($evidence.actions | Where-Object { $_.action -eq 'create_standard_block' })) {
+        if ($blockAction.name -eq 'CU_ComputerUse_FB_SCL' -and $blockAction.language -eq 'not_verified') {
+            $computerUseSclCreationUnverified = $true
+        }
+    }
+
+    $plcsim = $evidence.installedAndObserved.plcsimAdvanced
+    if ($plcsim -and $plcsim.launched -eq $true -and $plcsim.closed -eq $true -and
+        $plcsim.activeInstanceObserved -eq $false -and $plcsim.instanceCreated -eq $false -and
+        $plcsim.downloadPerformed -eq $false) {
+        $computerUsePlcsimVerified = $true
+        $computerUsePlcsimPaths.Add($path) | Out-Null
+    }
+
+    $runtime = $evidence.installedAndObserved.hmiRuntimeAdvancedV20
+    if ($runtime -and $runtime.status -eq 'blocked') {
+        $computerUseRuntimeBlocked = $true
+        $computerUseRuntimePaths.Add($path) | Out-Null
+    } elseif ($evidence.visualEdit -and $evidence.visualEdit.runtime -eq 'not_performed') {
+        $computerUseRuntimePaths.Add($path) | Out-Null
+    }
+}
+
+$computerUseSafetyRelevantCount = $computerUseSafetyBoundaryPaths.Count +
+    $computerUseSafetyBoundaryViolationPaths.Count + $computerUseSafetyBoundaryMissingPaths.Count
+$computerUseSafetyBoundaryVerified = $computerUseSafetyRelevantCount -gt 0 -and
+    $computerUseMissing.Count -eq 0 -and $computerUseInvalid.Count -eq 0 -and
+    $computerUseSafetyBoundaryViolationPaths.Count -eq 0 -and
+    $computerUseSafetyBoundaryMissingPaths.Count -eq 0
+
+if ($computerUseNativeWindowVerified) {
+    Add-UniqueFinding $verified 'Computer Use nativo y ventana TIA V20 identificados'
+} else {
+    Add-UniqueFinding $notVerified 'Computer Use nativo y ventana TIA V20 identificados'
+}
+if ($computerUsePlcGuiVerified) {
+    Add-UniqueFinding $verified 'Computer Use: edición PLC, compilación 0/0, guardado y readback en clon'
+} else {
+    Add-UniqueFinding $notVerified 'Computer Use: edición PLC, compilación 0/0, guardado y readback en clon'
+}
+if ($computerUseHmiVisualVerified) {
+    Add-UniqueFinding $verified 'Computer Use: edición visual HMI y readback en clon'
+} else {
+    Add-UniqueFinding $notVerified 'Computer Use: edición visual HMI y readback en clon'
+}
+if ($computerUseCreateDeleteVerified) {
+    Add-UniqueFinding $verified 'Computer Use: creación y borrado de bloques estándar en clon'
+} else {
+    Add-UniqueFinding $notVerified 'Computer Use: creación y borrado de bloques estándar en clon'
+}
+if ($computerUsePlcsimVerified) {
+    Add-UniqueFinding $verified 'Computer Use: disponibilidad de PLCSIM Advanced observada'
+} else {
+    Add-UniqueFinding $notVerified 'Computer Use: disponibilidad de PLCSIM Advanced observada'
+}
+if ($computerUseSafetyBoundaryVerified) {
+    Add-UniqueFinding $verified 'Computer Use: límites de seguridad respetados en la evidencia'
+} else {
+    Add-UniqueFinding $notVerified 'Computer Use: límites de seguridad respetados en la evidencia'
+}
+if ($computerUseSafetyBoundaryViolationPaths.Count -gt 0) {
+    Add-UniqueFinding $blocked 'Computer Use evidence violates the physical/Safety/original-project boundary'
+}
+if ($computerUseSafetyBoundaryMissingPaths.Count -gt 0) {
+    Add-UniqueFinding $notVerified 'Computer Use: falta una declaración explícita de límites de seguridad'
+}
+if ($computerUseHmiCompileBlocked) {
+    Add-UniqueFinding $blocked 'Computer Use: compilación HMI bloqueada por dispositivo no soportado'
+}
+if ($computerUseRuntimeBlocked) {
+    Add-UniqueFinding $blocked 'Computer Use: Runtime Advanced V20 no disponible/verificado'
+} else {
+    Add-UniqueFinding $notVerified 'Computer Use: ejecución de runtime HMI'
+}
+if ($computerUseSclCreationUnverified) {
+    Add-UniqueFinding $notVerified 'Computer Use: lenguaje SCL del FB creado por GUI'
+}
+if ($computerUseMissing.Count -gt 0) {
+    Add-UniqueFinding $notVerified ('Computer Use: faltan evidencias (' + $computerUseMissing.Count + ')')
+}
+if ($computerUseInvalid.Count -gt 0) {
+    Add-UniqueFinding $notVerified ('Computer Use: hay evidencias JSON inválidas (' + $computerUseInvalid.Count + ')')
+}
+
+$computerUseAcceptanceReady = [bool]($computerUseNativeWindowVerified -and $computerUsePlcGuiVerified -and
+    $computerUseHmiVisualVerified -and $computerUseCreateDeleteVerified -and
+    $computerUsePlcsimVerified -and $computerUseSafetyBoundaryVerified -and
+    $computerUseSafetyBoundaryViolationPaths.Count -eq 0 -and
+    $computerUseSafetyBoundaryMissingPaths.Count -eq 0 -and
+    -not $computerUseHmiCompileBlocked -and -not $computerUseRuntimeBlocked -and
+    -not $computerUseSclCreationUnverified -and $computerUseMissing.Count -eq 0 -and
+    $computerUseInvalid.Count -eq 0)
+
+$computerUse = [ordered]@{
+    status = if ($computerUseRecords.Count -eq 0) { 'not_verified' } elseif ($computerUseAcceptanceReady) { 'verified' } else { 'verified_partial' }
+    acceptanceReady = $computerUseAcceptanceReady
+    nativeWindowInventory = [ordered]@{
+        status = if ($computerUseNativeWindowVerified) { 'verified' } else { 'not_verified' }
+        evidence = @($computerUseNativeWindowPaths)
+    }
+    plcGuiEdit = [ordered]@{
+        status = if ($computerUsePlcGuiVerified) { 'verified' } else { 'not_verified' }
+        evidence = @($computerUsePlcGuiPaths)
+    }
+    hmiGuiInspection = [ordered]@{
+        status = if ($computerUseHmiVisualVerified) { 'verified' } else { 'not_verified' }
+        compile = if ($computerUseHmiCompileBlocked) { 'blocked_device_unsupported' } else { 'not_verified' }
+        evidence = @($computerUseHmiPaths | Select-Object -Unique)
+    }
+    createDelete = [ordered]@{
+        status = if ($computerUseCreateDeleteVerified) { 'verified' } else { 'not_verified' }
+        evidence = @($computerUseCreateDeletePaths)
+    }
+    plcsimUiInspection = [ordered]@{
+        status = if ($computerUsePlcsimVerified) { 'verified_availability_only' } else { 'not_verified' }
+        behavior = 'not_verified'
+        evidence = @($computerUsePlcsimPaths)
+    }
+    runtimeUiInspection = [ordered]@{
+        status = if ($computerUseRuntimeBlocked) { 'blocked' } else { 'not_verified' }
+        evidence = @($computerUseRuntimePaths | Select-Object -Unique)
+    }
+    safetyBoundary = [ordered]@{
+        status = if ($computerUseSafetyBoundaryViolationPaths.Count -gt 0) { 'blocked' } elseif ($computerUseSafetyBoundaryVerified) { 'verified' } else { 'not_verified' }
+        evidence = @($computerUseSafetyBoundaryPaths | Select-Object -Unique)
+        violations = @($computerUseSafetyBoundaryViolationPaths | Select-Object -Unique)
+        missingDeclaration = @($computerUseSafetyBoundaryMissingPaths | Select-Object -Unique)
+    }
+    physicalDownload = if ($computerUseSafetyBoundaryViolationPaths.Count -gt 0) { 'violation' } else { 'not_performed' }
+    evidence = @($ComputerUseEvidencePaths | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
+    missingEvidence = @($computerUseMissing)
+    invalidEvidence = @($computerUseInvalid)
+}
+
 $result = [ordered]@{
     schemaVersion = 1
     generatedAt = [DateTimeOffset]::Now.ToString('o')
@@ -130,6 +476,7 @@ $result = [ordered]@{
     notVerified = @($notVerified)
     blocked = @($blocked)
     assumptions = @($assumptions)
+    computerUse = $computerUse
     checks = if ($checks) {
         [ordered]@{
             success = $checks.success
@@ -144,6 +491,7 @@ $result = [ordered]@{
         scaffold = if ($scaffoldFiles) { $scaffoldFiles[0].FullName } else { $null }
         portableValidation = if ($PortableValidationPath) { [IO.Path]::GetFullPath($PortableValidationPath) } else { $null }
         portableCoreManifest = $PortableCoreManifestPath
+        computerUse = @($ComputerUseEvidencePaths | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
     }
 }
 $json = $result | ConvertTo-Json -Depth 10

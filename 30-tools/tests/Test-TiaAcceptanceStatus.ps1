@@ -22,6 +22,15 @@ try {
     if ($report.notVerified -notcontains 'comportamiento funcional PLC probado en PLCSIM') {
         throw 'Acceptance status must preserve the missing PLCSIM behavior evidence.'
     }
+    if ($null -eq $report.computerUse -or $report.computerUse.status -eq 'not_verified') {
+        throw 'Acceptance status must expose native Computer Use evidence separately.'
+    }
+    if ($report.computerUse.safetyBoundary.status -ne 'verified') {
+        throw 'Computer Use safety boundary must remain verified in acceptance output.'
+    }
+    if ($null -eq $report.evidence.computerUse -or $report.evidence.computerUse.Count -lt 1) {
+        throw 'Acceptance status must reference the Computer Use evidence files.'
+    }
     if ($null -eq $report.checks) { throw 'Acceptance status must expose the aggregate check summary.' }
     Write-Output 'PASS: acceptance status distinguishes verified, incomplete and blocked work'
 }
