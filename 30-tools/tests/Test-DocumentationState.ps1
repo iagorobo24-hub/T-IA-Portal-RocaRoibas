@@ -11,6 +11,8 @@ $agentPolicy = Join-Path $WorkspaceRoot 'AGENTS.md'
 $analogRecipe = Join-Path $WorkspaceRoot '10-kb\20-recetas\R18-medidas-analogicas.md'
 $communicationsRecipe = Join-Path $WorkspaceRoot '10-kb\20-recetas\R19-diagnostico-comunicaciones.md'
 $hmiRecipe = Join-Path $WorkspaceRoot '10-kb\20-recetas\R20-aceptacion-hmi-por-modelo.md'
+$offlineReleaseRecipe = Join-Path $WorkspaceRoot '10-kb\20-recetas\R21-preflight-offline-release.md'
+$offlineReleasePreflight = Join-Path $WorkspaceRoot '30-tools\scripts\Test-TiaOfflineReleasePreconditions.ps1'
 
 if (-not (Test-Path -LiteralPath $readme -PathType Leaf)) {
     throw "Missing tia-inspect README: $readme"
@@ -21,10 +23,20 @@ if (-not (Test-Path -LiteralPath $errorCatalog -PathType Leaf)) {
 if (-not (Test-Path -LiteralPath $reportPath -PathType Leaf)) {
     throw "Missing environment report: $reportPath"
 }
-foreach ($path in @($agentPolicy, $analogRecipe, $communicationsRecipe, $hmiRecipe)) {
+foreach ($path in @($agentPolicy, $analogRecipe, $communicationsRecipe, $hmiRecipe, $offlineReleaseRecipe, $offlineReleasePreflight)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
         throw "Missing agent operating instruction or recipe: $path"
     }
+}
+
+$offlineText = Get-Content -Raw -LiteralPath $offlineReleaseRecipe
+$offlinePreflightText = Get-Content -Raw -LiteralPath $offlineReleasePreflight
+if ($offlineText -notmatch 'TMP_EXPORT[/\\]_verify' -or
+    $offlineText -notmatch 'TMP_EXPORT[/\\]Source' -or
+    $offlinePreflightText -notmatch '\$fixtureRoot .*Source' -or
+    $offlineText -notmatch '(?i)Bloqueado' -or
+    $offlineText -notmatch 'Test-TiaOfflineReleasePreconditions\.ps1') {
+    throw 'R21 must document the offline release fixture preflight and its blocking behavior.'
 }
 
 $report = Get-Content -Raw -LiteralPath $reportPath | ConvertFrom-Json
