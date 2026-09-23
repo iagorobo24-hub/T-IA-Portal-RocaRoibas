@@ -477,6 +477,11 @@ proyecto clonado y su backup. Hash del `.ap20` original/backup: `D5FA9E103B16E35
     [mcp-tagtable-acceptance-20260923.json](../../../70-runs/e2e/mcp-tagtable-acceptance-20260923.json)
     y receta [R24](../../../10-kb/20-recetas/R24-tabla-tags-offline.md). La importación XML de
     tablas sigue sin publicarse en `tia-inspect/write`.
+12. Se verificó un grupo vacío de bloques en raíz: `CreateBlockGroup` → árbol con path exacto →
+    `DeleteBlockGroup` → árbol sin el grupo → compile/save 0/0 y segunda sesión read-only sin
+    coincidencias. El hash del `.ap20` y de la fuente se restauró. No se introdujeron bloques dentro
+    del grupo. Evidencia en [mcp-blockgroup-acceptance-20260923.json](../../../70-runs/e2e/mcp-blockgroup-acceptance-20260923.json)
+    y receta [R25](../../../10-kb/20-recetas/R25-grupo-bloques-offline.md).
 
 Los artefactos completos están en `90-tmp/e2e/20260921-iot2050-agent-probe-clean/`, en especial
 `artifacts/01-prewrite-preflight.json`, `06-create-compile-save.json`, `16-import-external-source-root.json`,
@@ -777,7 +782,7 @@ Snapshot con --allow-write. El roster por sí solo no implica Attach. Snapshot: 
 | Connect | Project / session | req: —; opt: — | Solo schema | R1 | MCP conocido / Openness desconocido |
 | CopyBlock | PLC blocks / sources / import-export | req: softwarePath:string, blockPath:string, targetGroupPath:string; opt: overwrite:boolean=false | Solo schema | R2 | MCP conocido / Openness desconocido |
 | CopyType | PLC tags / DB / types | req: softwarePath:string, typePath:string, targetGroupPath:string; opt: overwrite:boolean=false | Solo schema | R2 | MCP conocido / Openness desconocido |
-| CreateBlockGroup | PLC blocks / sources / import-export | req: softwarePath:string, parentGroupPath:string, name:string; opt: — | Solo schema | R2 | MCP conocido / Openness desconocido |
+| CreateBlockGroup | PLC blocks / sources / import-export | req: softwarePath:string, parentGroupPath:string, name:string; opt: — | Fixture ejecutado | R2 | Verificado en raíz V20: path leído en `GetSoftwareTree`, borrado, compile/save 0/0 y readback independiente. |
 | CreateExternalSourceFromFile | PLC blocks / sources / import-export | req: softwarePath:string, groupPath:string, name:string, filePath:string; opt: — | Solo schema | R2 | MCP conocido / Openness desconocido |
 | CreateExternalSourceGroup | PLC blocks / sources / import-export | req: softwarePath:string, parentGroupPath:string, name:string; opt: — | Solo schema | R2 | MCP conocido / Openness desconocido |
 | CreateFB | Other / utility | req: softwarePath:string, groupPath:string, name:string; opt: language:string="LAD", autoNumber:boolean=true, number:integer=0 | Solo schema | R2 | MCP conocido / Openness desconocido |
@@ -790,7 +795,7 @@ Snapshot con --allow-write. El roster por sí solo no implica Attach. Snapshot: 
 | CreateWatchTable | PLC online / watch / monitor | req: softwarePath:string, groupPath:string, name:string; opt: — | Fixture ejecutado | R2 | Verificado en clon: raíz (`groupPath=""`), path leído, tabla estándar vacía y restauración posterior. |
 | CreateWatchTableGroup | PLC online / watch / monitor | req: softwarePath:string, parentGroupPath:string, name:string; opt: — | Solo schema | R2 | MCP conocido / Openness desconocido |
 | DeleteBlock | PLC blocks / sources / import-export | req: softwarePath:string, blockPath:string; opt: — | Fixture ejecutado | R2 | Verificado en el mismo ciclo Instance DB: path leído, borrado, compile/save 0/0 y cero coincidencias en sesión independiente. |
-| DeleteBlockGroup | PLC blocks / sources / import-export | req: softwarePath:string, groupPath:string; opt: — | Solo schema | R2 | MCP conocido / Openness desconocido |
+| DeleteBlockGroup | PLC blocks / sources / import-export | req: softwarePath:string, groupPath:string; opt: — | Fixture ejecutado | R2 | Verificado para grupo vacío; el grupo de sistema `Program blocks` y grupos con contenido quedan fuera. |
 | DeleteExternalSource | PLC blocks / sources / import-export | req: softwarePath:string, sourcePath:string; opt: — | Solo schema | R2 | MCP conocido / Openness desconocido |
 | DeleteExternalSourceGroup | PLC blocks / sources / import-export | req: softwarePath:string, groupPath:string; opt: — | Solo schema | R2 | MCP conocido / Openness desconocido |
 | DeleteTag | PLC tags / DB / types | req: softwarePath:string, tagPath:string; opt: — | Solo schema | R2 | MCP conocido / Openness desconocido |

@@ -78,6 +78,17 @@ try {
         $report.evidence.tagTableLifecycle.path -notmatch '(?i)mcp-tagtable-acceptance-.*\.json$') {
         throw 'Acceptance status must reference the mcp-tagtable-acceptance evidence file.'
     }
+    $blockGroupLifecycleFinding = 'MCP block-group lifecycle: create/delete/compile/save + independent readback'
+    if ($report.verified -notcontains $blockGroupLifecycleFinding) {
+        throw 'Acceptance status must include the verified MCP block-group lifecycle finding.'
+    }
+    if ($null -eq $report.evidence.blockGroupLifecycle -or $report.evidence.blockGroupLifecycle.status -ne 'verified') {
+        throw 'Acceptance status must expose verified MCP block-group lifecycle evidence.'
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$report.evidence.blockGroupLifecycle.path) -or
+        $report.evidence.blockGroupLifecycle.path -notmatch '(?i)mcp-blockgroup-acceptance-.*\.json$') {
+        throw 'Acceptance status must reference the mcp-blockgroup-acceptance evidence file.'
+    }
 
     # A window id and version alone cannot establish a native target or the
     # physical/Safety boundary. Keep this regression probe deliberately sparse
