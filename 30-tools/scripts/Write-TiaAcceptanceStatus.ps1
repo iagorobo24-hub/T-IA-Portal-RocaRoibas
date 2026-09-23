@@ -671,6 +671,88 @@ $watchLifecycle = [ordered]@{
     invalidEvidence = @($watchLifecycleInvalidEvidence)
 }
 
+# The Instance DB lifecycle report is an independent disposable-fixture result.
+# It is accepted only when the DB was classified safe, compiled before export,
+# saved, deleted, compiled/saved again, and absent in a separate read-only session.
+$instanceDbLifecycleFinding = 'MCP Instance DB lifecycle: create/compile/export/save/references/delete + independent readback'
+$instanceDbLifecycleFiles = @(
+    Get-ChildItem -LiteralPath (Join-Path $WorkspaceRoot '70-runs\e2e') -Recurse -Filter 'mcp-instancedb-acceptance-*.json' -File -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending
+)
+$instanceDbLifecyclePath = if ($instanceDbLifecycleFiles.Count -gt 0) { $instanceDbLifecycleFiles[0].FullName } else { $null }
+$instanceDbLifecycleInvalidEvidence = [System.Collections.Generic.List[string]]::new()
+$instanceDbLifecycleFailureReasons = [System.Collections.Generic.List[string]]::new()
+$instanceDbLifecycleEvidence = if ($instanceDbLifecyclePath) { Read-JsonIfPresent $instanceDbLifecyclePath } else { $null }
+$instanceDbLifecycleVerified = $false
+
+if (-not $instanceDbLifecyclePath) {
+    $instanceDbLifecycleFailureReasons.Add('No mcp-instancedb-acceptance evidence file was found.') | Out-Null
+} elseif ($null -eq $instanceDbLifecycleEvidence) {
+    $instanceDbLifecycleInvalidEvidence.Add($instanceDbLifecyclePath) | Out-Null
+    $instanceDbLifecycleFailureReasons.Add('The newest mcp-instancedb-acceptance evidence is not valid JSON.') | Out-Null
+} else {
+    if ($instanceDbLifecycleEvidence.success -ne $true -or
+        $instanceDbLifecycleEvidence.verdict -ne 'VERIFIED_INSTANCE_DB_CREATE_COMPILE_EXPORT_SAVE_DELETE_AND_INDEPENDENT_READBACK') {
+        $instanceDbLifecycleFailureReasons.Add('success and verdict must match the required Instance DB lifecycle.') | Out-Null
+    }
+
+    $fixture = $instanceDbLifecycleEvidence.fixture
+    if ($null -eq $fixture -or $fixture.restored -ne $true -or $fixture.sourceUntouched -ne $true -or
+        [string]::IsNullOrWhiteSpace([string]$fixture.initialSha256) -or
+        $fixture.initialSha256 -ne $fixture.backupSha256 -or
+        $fixture.initialSha256 -ne $fixture.projectSha256AfterRestore) {
+        $instanceDbLifecycleFailureReasons.Add('fixture must be restored, source-untouched, and have matching initial/backup/restored hashes.') | Out-Null
+    }
+
+    $preflight = $instanceDbLifecycleEvidence.preflight
+    if ($null -eq $preflight -or $preflight.allBlocksStandard -ne $true -or
+        $preflight.allTagsNonSafety -ne $true -or $preflight.sourceFailsafe -ne $false -or
+        $preflight.sourceKnowHowProtected -ne $false -or $preflight.destinationAbsentBefore -ne $true) {
+        $instanceDbLifecycleFailureReasons.Add('preflight must prove standard blocks, non-Safety tags, safe source metadata, and an absent destination.') | Out-Null
+    }
+
+    $mutation = $instanceDbLifecycleEvidence.mutation
+    if ($null -eq $mutation -or [string]::IsNullOrWhiteSpace([string]$mutation.instanceDbName) -or
+        $mutation.createdPath -ne $mutation.instanceDbName -or $mutation.createdType -ne 'InstanceDB' -or
+        $mutation.createdLanguage -ne 'DB' -or $mutation.createdFailsafe -ne $false -or
+        $mutation.createdKnowHowProtected -ne $false -or $mutation.number -le 0 -or
+        $mutation.autoNumber -ne $false -or $mutation.consistentAfterCompile -ne $true -or
+        $mutation.exported -ne $true -or [int]$mutation.exportLength -le 0 -or
+        [string]$mutation.exportSha256 -notmatch '(?i)^[0-9a-f]{64}$' -or
+        $mutation.saveSucceeded -ne $true -or $mutation.deleteSucceeded -ne $true -or
+        $mutation.afterDeleteCount -ne 0 -or $mutation.saveAfterDeleteSucceeded -ne $true) {
+        $instanceDbLifecycleFailureReasons.Add('mutation must prove explicit-number Instance DB creation, compile consistency, export, save, delete and zero remaining matches.') | Out-Null
+    }
+    foreach ($compileName in @('compileBeforeExport', 'compileAfterDelete')) {
+        $compile = if ($mutation) { $mutation.$compileName } else { $null }
+        if ($null -eq $compile -or $compile.state -ne 'Success' -or $compile.errors -ne 0 -or $compile.warnings -ne 0) {
+            $instanceDbLifecycleFailureReasons.Add("$compileName must report Success with zero errors and warnings.") | Out-Null
+        }
+    }
+
+    $independentReadback = $instanceDbLifecycleEvidence.independentReadback
+    if ($null -eq $independentReadback -or $independentReadback.success -ne $true -or
+        $independentReadback.allowWrite -ne $false -or $independentReadback.instanceDbCount -ne 0) {
+        $instanceDbLifecycleFailureReasons.Add('independentReadback must be read-only and show zero Instance DB matches.') | Out-Null
+    }
+    $instanceDbLifecycleVerified = $instanceDbLifecycleFailureReasons.Count -eq 0
+}
+
+if ($instanceDbLifecycleVerified) {
+    Add-UniqueFinding $verified $instanceDbLifecycleFinding
+} else {
+    Add-UniqueFinding $notVerified 'MCP Instance DB lifecycle evidence'
+}
+
+$instanceDbLifecycle = [ordered]@{
+    status = if ($instanceDbLifecycleVerified) { 'verified' } elseif ($instanceDbLifecycleInvalidEvidence.Count -gt 0) { 'invalid' } else { 'not_verified' }
+    finding = $instanceDbLifecycleFinding
+    path = $instanceDbLifecyclePath
+    verdict = if ($instanceDbLifecycleEvidence) { $instanceDbLifecycleEvidence.verdict } else { $null }
+    failureReasons = @($instanceDbLifecycleFailureReasons)
+    invalidEvidence = @($instanceDbLifecycleInvalidEvidence)
+}
+
 $result = [ordered]@{
     schemaVersion = 1
     generatedAt = [DateTimeOffset]::Now.ToString('o')
@@ -697,9 +779,11 @@ $result = [ordered]@{
         computerUse = @($ComputerUseEvidencePaths | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
         tagLifecycle = $tagLifecycle
         watchLifecycle = $watchLifecycle
+        instanceDbLifecycle = $instanceDbLifecycle
     }
     tagLifecycle = $tagLifecycle
     watchLifecycle = $watchLifecycle
+    instanceDbLifecycle = $instanceDbLifecycle
 }
 $json = $result | ConvertTo-Json -Depth 10
 New-Item -ItemType Directory -Path (Split-Path -Parent $OutputPath) -Force | Out-Null
