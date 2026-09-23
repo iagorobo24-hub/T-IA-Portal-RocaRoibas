@@ -906,6 +906,76 @@ $tagTableLifecycle = [ordered]@{
     invalidEvidence = @($tagTableLifecycleInvalidEvidence)
 }
 
+$blockGroupLifecycleFinding = 'MCP block-group lifecycle: create/delete/compile/save + independent readback'
+$blockGroupLifecycleFiles = @(
+    Get-ChildItem -LiteralPath (Join-Path $WorkspaceRoot '70-runs\e2e') -Recurse -Filter 'mcp-blockgroup-acceptance-*.json' -File -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending
+)
+$blockGroupLifecyclePath = if ($blockGroupLifecycleFiles.Count -gt 0) { $blockGroupLifecycleFiles[0].FullName } else { $null }
+$blockGroupLifecycleInvalidEvidence = [System.Collections.Generic.List[string]]::new()
+$blockGroupLifecycleFailureReasons = [System.Collections.Generic.List[string]]::new()
+$blockGroupLifecycleEvidence = if ($blockGroupLifecyclePath) { Read-JsonIfPresent $blockGroupLifecyclePath } else { $null }
+$blockGroupLifecycleVerified = $false
+
+if (-not $blockGroupLifecyclePath) {
+    $blockGroupLifecycleFailureReasons.Add('No mcp-blockgroup-acceptance evidence file was found.') | Out-Null
+} elseif ($null -eq $blockGroupLifecycleEvidence) {
+    $blockGroupLifecycleInvalidEvidence.Add($blockGroupLifecyclePath) | Out-Null
+    $blockGroupLifecycleFailureReasons.Add('The newest mcp-blockgroup-acceptance evidence is not valid JSON.') | Out-Null
+} else {
+    if ($blockGroupLifecycleEvidence.success -ne $true -or
+        $blockGroupLifecycleEvidence.verdict -ne 'VERIFIED_BLOCK_GROUP_CREATE_DELETE_COMPILE_SAVE_AND_INDEPENDENT_READBACK') {
+        $blockGroupLifecycleFailureReasons.Add('success and verdict must match the required block-group lifecycle.') | Out-Null
+    }
+    $fixture = $blockGroupLifecycleEvidence.fixture
+    if ($null -eq $fixture -or $fixture.restored -ne $true -or $fixture.sourceUntouched -ne $true -or
+        $fixture.initialSha256 -ne $fixture.backupSha256 -or $fixture.initialSha256 -ne $fixture.projectSha256AfterRestore -or
+        [string]::IsNullOrWhiteSpace([string]$fixture.source) -or [string]::IsNullOrWhiteSpace([string]$fixture.sourceSha256) -or
+        -not (Test-Path -LiteralPath ([string]$fixture.source) -PathType Leaf) -or
+        (Get-FileHash -LiteralPath ([string]$fixture.source) -Algorithm SHA256).Hash -ne $fixture.sourceSha256 -or
+        $fixture.sourceSha256 -ne $fixture.initialSha256) {
+        $blockGroupLifecycleFailureReasons.Add('fixture must be restored, source-untouched, and have matching hashes.') | Out-Null
+    }
+    $preflight = $blockGroupLifecycleEvidence.preflight
+    $mutation = $blockGroupLifecycleEvidence.mutation
+    if ($null -eq $preflight -or $preflight.allBlocksStandard -ne $true -or $preflight.allTagsNonSafety -ne $true -or
+        $preflight.destinationAbsentBefore -ne $true -or $preflight.forceTablesUntouched -ne $true -or
+        $null -eq $mutation -or $mutation.createdPath -ne $mutation.groupName -or
+        $mutation.createdKind -notmatch '(?i)^Block group$' -or $mutation.treeAfterCreateContains -ne $true -or
+        $mutation.deleteSucceeded -ne $true -or $mutation.treeAfterDeleteAbsent -ne $true -or
+        $mutation.compile.state -ne 'Success' -or $mutation.compile.errors -ne 0 -or $mutation.compile.warnings -ne 0 -or
+        $mutation.saveSucceeded -ne $true) {
+        $blockGroupLifecycleFailureReasons.Add('mutation must prove an empty group was created, visible, deleted, compiled 0/0 and saved.') | Out-Null
+    }
+    $independentReadback = $blockGroupLifecycleEvidence.independentReadback
+    if ($null -eq $independentReadback -or $independentReadback.success -ne $true -or
+        $independentReadback.allowWrite -ne $false -or $independentReadback.treeAbsent -ne $true -or
+        $independentReadback.blockMatches -ne 0 -or [string]::IsNullOrWhiteSpace([string]$independentReadback.report)) {
+        $blockGroupLifecycleFailureReasons.Add('independentReadback must be read-only and show an absent group/zero probe matches.') | Out-Null
+    } else {
+        $independentReport = Read-JsonIfPresent ([string]$independentReadback.report)
+        if ($null -eq $independentReport -or $independentReport.success -ne $true) {
+            $blockGroupLifecycleFailureReasons.Add('independentReadback.report must be valid and successful.') | Out-Null
+        }
+    }
+    $blockGroupLifecycleVerified = $blockGroupLifecycleFailureReasons.Count -eq 0
+}
+
+if ($blockGroupLifecycleVerified) {
+    Add-UniqueFinding $verified $blockGroupLifecycleFinding
+} else {
+    Add-UniqueFinding $notVerified 'MCP block-group lifecycle evidence'
+}
+
+$blockGroupLifecycle = [ordered]@{
+    status = if ($blockGroupLifecycleVerified) { 'verified' } elseif ($blockGroupLifecycleInvalidEvidence.Count -gt 0) { 'invalid' } else { 'not_verified' }
+    finding = $blockGroupLifecycleFinding
+    path = $blockGroupLifecyclePath
+    verdict = if ($blockGroupLifecycleEvidence) { $blockGroupLifecycleEvidence.verdict } else { $null }
+    failureReasons = @($blockGroupLifecycleFailureReasons)
+    invalidEvidence = @($blockGroupLifecycleInvalidEvidence)
+}
+
 $result = [ordered]@{
     schemaVersion = 1
     generatedAt = [DateTimeOffset]::Now.ToString('o')
@@ -934,11 +1004,13 @@ $result = [ordered]@{
         watchLifecycle = $watchLifecycle
         instanceDbLifecycle = $instanceDbLifecycle
         tagTableLifecycle = $tagTableLifecycle
+        blockGroupLifecycle = $blockGroupLifecycle
     }
     tagLifecycle = $tagLifecycle
     watchLifecycle = $watchLifecycle
     instanceDbLifecycle = $instanceDbLifecycle
     tagTableLifecycle = $tagTableLifecycle
+    blockGroupLifecycle = $blockGroupLifecycle
 }
 $json = $result | ConvertTo-Json -Depth 10
 New-Item -ItemType Directory -Path (Split-Path -Parent $OutputPath) -Force | Out-Null
