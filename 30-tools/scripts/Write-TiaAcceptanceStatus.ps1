@@ -700,15 +700,22 @@ if (-not $instanceDbLifecyclePath) {
     if ($null -eq $fixture -or $fixture.restored -ne $true -or $fixture.sourceUntouched -ne $true -or
         [string]::IsNullOrWhiteSpace([string]$fixture.initialSha256) -or
         $fixture.initialSha256 -ne $fixture.backupSha256 -or
-        $fixture.initialSha256 -ne $fixture.projectSha256AfterRestore) {
-        $instanceDbLifecycleFailureReasons.Add('fixture must be restored, source-untouched, and have matching initial/backup/restored hashes.') | Out-Null
+        $fixture.initialSha256 -ne $fixture.projectSha256AfterRestore -or
+        [string]::IsNullOrWhiteSpace([string]$fixture.source) -or
+        [string]::IsNullOrWhiteSpace([string]$fixture.sourceSha256) -or
+        -not (Test-Path -LiteralPath ([string]$fixture.source) -PathType Leaf) -or
+        (Get-FileHash -LiteralPath ([string]$fixture.source) -Algorithm SHA256).Hash -ne $fixture.sourceSha256 -or
+        $fixture.sourceSha256 -ne $fixture.initialSha256) {
+        $instanceDbLifecycleFailureReasons.Add('fixture must be restored, source-untouched, and have matching initial/backup/restored/source hashes.') | Out-Null
     }
 
     $preflight = $instanceDbLifecycleEvidence.preflight
     if ($null -eq $preflight -or $preflight.allBlocksStandard -ne $true -or
         $preflight.allTagsNonSafety -ne $true -or $preflight.sourceFailsafe -ne $false -or
-        $preflight.sourceKnowHowProtected -ne $false -or $preflight.destinationAbsentBefore -ne $true) {
-        $instanceDbLifecycleFailureReasons.Add('preflight must prove standard blocks, non-Safety tags, safe source metadata, and an absent destination.') | Out-Null
+        $preflight.sourceKnowHowProtected -ne $false -or $preflight.destinationAbsentBefore -ne $true -or
+        $preflight.instanceDbNumberFree -ne $true -or $preflight.instanceDbNumber -le 0 -or
+        @($preflight.occupiedBlockNumbers) -contains $preflight.instanceDbNumber) {
+        $instanceDbLifecycleFailureReasons.Add('preflight must prove standard blocks, non-Safety tags, safe source metadata, absent destination, and a free positive DB number.') | Out-Null
     }
 
     $mutation = $instanceDbLifecycleEvidence.mutation
@@ -723,6 +730,38 @@ if (-not $instanceDbLifecyclePath) {
         $mutation.afterDeleteCount -ne 0 -or $mutation.saveAfterDeleteSucceeded -ne $true) {
         $instanceDbLifecycleFailureReasons.Add('mutation must prove explicit-number Instance DB creation, compile consistency, export, save, delete and zero remaining matches.') | Out-Null
     }
+    if ($mutation -and $mutation.crossReferenceCount -le 0) {
+        $instanceDbLifecycleFailureReasons.Add('crossReferenceCount must be positive for the instance DB to prove its FB dependency.') | Out-Null
+    }
+    $deleteReport = if ($instanceDbLifecycleEvidence.reports -and $instanceDbLifecycleEvidence.reports.delete) {
+        Read-JsonIfPresent ([string]$instanceDbLifecycleEvidence.reports.delete)
+    } else { $null }
+    $crossReferenceCall = if ($deleteReport) {
+        $deleteReport.calls | Where-Object { $_.name -eq 'GetCrossReferences' } | Select-Object -Last 1
+    } else { $null }
+    $crossReferences = if ($crossReferenceCall) { $crossReferenceCall.response.structuredContent } else { $null }
+    $crossReferenceSourceNames = if ($crossReferences) {
+        @($crossReferences.sources | ForEach-Object {
+            [string]$_.name
+            @($_.references | ForEach-Object { [string]$_.name })
+        })
+    } else { @() }
+    if ($null -eq $deleteReport -or $deleteReport.success -ne $true -or $null -eq $crossReferenceCall -or
+        $null -eq $crossReferences -or $crossReferences.referenceCount -le 0 -or
+        [string]$preflight.sourceBlock -notin $crossReferenceSourceNames) {
+        $instanceDbLifecycleFailureReasons.Add('the delete-session report must contain successful cross references to the preflight source FB.') | Out-Null
+    }
+    if ($mutation -and [string]$mutation.exported -eq 'True') {
+        if ([string]::IsNullOrWhiteSpace([string]$mutation.exportPath) -or
+            -not (Test-Path -LiteralPath ([string]$mutation.exportPath) -PathType Leaf)) {
+            $instanceDbLifecycleFailureReasons.Add('the exported XML path must exist as a file.') | Out-Null
+        } else {
+            $actualExportHash = (Get-FileHash -LiteralPath ([string]$mutation.exportPath) -Algorithm SHA256).Hash
+            if ($actualExportHash -ne [string]$mutation.exportSha256) {
+                $instanceDbLifecycleFailureReasons.Add('the exported XML SHA-256 must match the file on disk.') | Out-Null
+            }
+        }
+    }
     foreach ($compileName in @('compileBeforeExport', 'compileAfterDelete')) {
         $compile = if ($mutation) { $mutation.$compileName } else { $null }
         if ($null -eq $compile -or $compile.state -ne 'Success' -or $compile.errors -ne 0 -or $compile.warnings -ne 0) {
@@ -734,6 +773,20 @@ if (-not $instanceDbLifecyclePath) {
     if ($null -eq $independentReadback -or $independentReadback.success -ne $true -or
         $independentReadback.allowWrite -ne $false -or $independentReadback.instanceDbCount -ne 0) {
         $instanceDbLifecycleFailureReasons.Add('independentReadback must be read-only and show zero Instance DB matches.') | Out-Null
+    }
+    if ($independentReadback -and [string]::IsNullOrWhiteSpace([string]$independentReadback.report)) {
+        $instanceDbLifecycleFailureReasons.Add('independentReadback.report is required.') | Out-Null
+    } elseif ($independentReadback) {
+        $independentReport = Read-JsonIfPresent ([string]$independentReadback.report)
+        $stateCall = if ($independentReport) { $independentReport.calls | Where-Object { $_.name -eq 'GetState' } | Select-Object -Last 1 } else { $null }
+        $blocksCall = if ($independentReport) { $independentReport.calls | Where-Object { $_.name -eq 'GetBlocks' } | Select-Object -Last 1 } else { $null }
+        $independentState = if ($stateCall) { $stateCall.response.structuredContent } else { $null }
+        $independentBlocks = if ($blocksCall) { $blocksCall.response.structuredContent.items } else { $null }
+        if ($null -eq $independentReport -or $independentReport.success -ne $true -or
+            $null -eq $independentState -or $independentState.allowWrite -ne $false -or
+            $null -eq $blocksCall -or @($independentBlocks).Count -ne 0) {
+            $instanceDbLifecycleFailureReasons.Add('independentReadback.report must be valid, read-only, successful and contain zero probe blocks.') | Out-Null
+        }
     }
     $instanceDbLifecycleVerified = $instanceDbLifecycleFailureReasons.Count -eq 0
 }
@@ -751,6 +804,106 @@ $instanceDbLifecycle = [ordered]@{
     verdict = if ($instanceDbLifecycleEvidence) { $instanceDbLifecycleEvidence.verdict } else { $null }
     failureReasons = @($instanceDbLifecycleFailureReasons)
     invalidEvidence = @($instanceDbLifecycleInvalidEvidence)
+}
+
+# The PLC tag-table lifecycle report is another disposable-fixture result. It
+# covers an empty user table only; tag values and Safety tags stay out of scope.
+$tagTableLifecycleFinding = 'MCP PLC tag table lifecycle: create/export/compile/save/delete + independent readback'
+$tagTableLifecycleFiles = @(
+    Get-ChildItem -LiteralPath (Join-Path $WorkspaceRoot '70-runs\e2e') -Recurse -Filter 'mcp-tagtable-acceptance-*.json' -File -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending
+)
+$tagTableLifecyclePath = if ($tagTableLifecycleFiles.Count -gt 0) { $tagTableLifecycleFiles[0].FullName } else { $null }
+$tagTableLifecycleInvalidEvidence = [System.Collections.Generic.List[string]]::new()
+$tagTableLifecycleFailureReasons = [System.Collections.Generic.List[string]]::new()
+$tagTableLifecycleEvidence = if ($tagTableLifecyclePath) { Read-JsonIfPresent $tagTableLifecyclePath } else { $null }
+$tagTableLifecycleVerified = $false
+
+if (-not $tagTableLifecyclePath) {
+    $tagTableLifecycleFailureReasons.Add('No mcp-tagtable-acceptance evidence file was found.') | Out-Null
+} elseif ($null -eq $tagTableLifecycleEvidence) {
+    $tagTableLifecycleInvalidEvidence.Add($tagTableLifecyclePath) | Out-Null
+    $tagTableLifecycleFailureReasons.Add('The newest mcp-tagtable-acceptance evidence is not valid JSON.') | Out-Null
+} else {
+    if ($tagTableLifecycleEvidence.success -ne $true -or
+        $tagTableLifecycleEvidence.verdict -ne 'VERIFIED_TAG_TABLE_CREATE_EXPORT_COMPILE_SAVE_DELETE_AND_INDEPENDENT_READBACK') {
+        $tagTableLifecycleFailureReasons.Add('success and verdict must match the required tag-table lifecycle.') | Out-Null
+    }
+    $fixture = $tagTableLifecycleEvidence.fixture
+    if ($null -eq $fixture -or $fixture.restored -ne $true -or $fixture.sourceUntouched -ne $true -or
+        $fixture.initialSha256 -ne $fixture.backupSha256 -or $fixture.initialSha256 -ne $fixture.projectSha256AfterRestore -or
+        [string]::IsNullOrWhiteSpace([string]$fixture.source) -or [string]::IsNullOrWhiteSpace([string]$fixture.sourceSha256) -or
+        -not (Test-Path -LiteralPath ([string]$fixture.source) -PathType Leaf) -or
+        (Get-FileHash -LiteralPath ([string]$fixture.source) -Algorithm SHA256).Hash -ne $fixture.sourceSha256 -or
+        $fixture.sourceSha256 -ne $fixture.initialSha256) {
+        $tagTableLifecycleFailureReasons.Add('fixture must be restored, source-untouched, and have matching initial/backup/restored/source hashes.') | Out-Null
+    }
+    $preflight = $tagTableLifecycleEvidence.preflight
+    if ($null -eq $preflight -or $preflight.allBlocksStandard -ne $true -or
+        $preflight.allTagsNonSafety -ne $true -or $preflight.destinationAbsentBefore -ne $true -or
+        $preflight.forceTablesUntouched -ne $true) {
+        $tagTableLifecycleFailureReasons.Add('preflight must prove standard blocks, non-Safety tags, absent destination, and untouched force tables.') | Out-Null
+    }
+    $mutation = $tagTableLifecycleEvidence.mutation
+    if ($null -eq $mutation -or [string]::IsNullOrWhiteSpace([string]$mutation.tagTableName) -or
+        $mutation.createdPath -ne $mutation.tagTableName -or $mutation.createdKind -notmatch '(?i)^Tag table$' -or
+        $mutation.createdReadback -ne 1 -or $mutation.tagCount -ne 0 -or $mutation.userConstantCount -ne 0 -or
+        $mutation.exported -ne $true -or [int]$mutation.exportLength -le 0 -or
+        [string]$mutation.exportSha256 -notmatch '(?i)^[0-9a-f]{64}$' -or
+        $mutation.saveBeforeDeleteSucceeded -ne $true -or $mutation.deleteSucceeded -ne $true -or
+        $mutation.afterDeleteCount -ne 0 -or $mutation.saveAfterDeleteSucceeded -ne $true) {
+        $tagTableLifecycleFailureReasons.Add('mutation must prove one empty user table, export, save, delete and zero remaining matches.') | Out-Null
+    }
+    if ($mutation -and [string]$mutation.exported -eq 'True') {
+        if ([string]::IsNullOrWhiteSpace([string]$mutation.exportPath) -or
+            -not (Test-Path -LiteralPath ([string]$mutation.exportPath) -PathType Leaf)) {
+            $tagTableLifecycleFailureReasons.Add('the exported tag-table XML path must exist as a file.') | Out-Null
+        } else {
+            $actualExportHash = (Get-FileHash -LiteralPath ([string]$mutation.exportPath) -Algorithm SHA256).Hash
+            if ($actualExportHash -ne [string]$mutation.exportSha256) {
+                $tagTableLifecycleFailureReasons.Add('the exported tag-table XML SHA-256 must match the file on disk.') | Out-Null
+            }
+        }
+    }
+    foreach ($compileName in @('compileBeforeDelete', 'compileAfterDelete')) {
+        $compile = if ($mutation) { $mutation.$compileName } else { $null }
+        if ($null -eq $compile -or $compile.state -ne 'Success' -or $compile.errors -ne 0 -or $compile.warnings -ne 0) {
+            $tagTableLifecycleFailureReasons.Add("$compileName must report Success with zero errors and warnings.") | Out-Null
+        }
+    }
+    $independentReadback = $tagTableLifecycleEvidence.independentReadback
+    if ($null -eq $independentReadback -or $independentReadback.success -ne $true -or
+        $independentReadback.allowWrite -ne $false -or $independentReadback.tagTableCount -ne 0 -or
+        [string]::IsNullOrWhiteSpace([string]$independentReadback.report)) {
+        $tagTableLifecycleFailureReasons.Add('independentReadback must be read-only and show zero tag tables.') | Out-Null
+    } else {
+        $independentReport = Read-JsonIfPresent ([string]$independentReadback.report)
+        $stateCall = if ($independentReport) { $independentReport.calls | Where-Object { $_.name -eq 'GetState' } | Select-Object -Last 1 } else { $null }
+        $tablesCall = if ($independentReport) { $independentReport.calls | Where-Object { $_.name -eq 'GetTagTables' } | Select-Object -Last 1 } else { $null }
+        $independentState = if ($stateCall) { $stateCall.response.structuredContent } else { $null }
+        $independentTables = if ($tablesCall) { $tablesCall.response.structuredContent.items } else { $null }
+        if ($null -eq $independentReport -or $independentReport.success -ne $true -or
+            $null -eq $independentState -or $independentState.allowWrite -ne $false -or
+            $null -eq $tablesCall -or @($independentTables).Count -ne 0) {
+            $tagTableLifecycleFailureReasons.Add('independentReadback.report must be valid, read-only, successful and contain zero probe tables.') | Out-Null
+        }
+    }
+    $tagTableLifecycleVerified = $tagTableLifecycleFailureReasons.Count -eq 0
+}
+
+if ($tagTableLifecycleVerified) {
+    Add-UniqueFinding $verified $tagTableLifecycleFinding
+} else {
+    Add-UniqueFinding $notVerified 'MCP PLC tag table lifecycle evidence'
+}
+
+$tagTableLifecycle = [ordered]@{
+    status = if ($tagTableLifecycleVerified) { 'verified' } elseif ($tagTableLifecycleInvalidEvidence.Count -gt 0) { 'invalid' } else { 'not_verified' }
+    finding = $tagTableLifecycleFinding
+    path = $tagTableLifecyclePath
+    verdict = if ($tagTableLifecycleEvidence) { $tagTableLifecycleEvidence.verdict } else { $null }
+    failureReasons = @($tagTableLifecycleFailureReasons)
+    invalidEvidence = @($tagTableLifecycleInvalidEvidence)
 }
 
 $result = [ordered]@{
@@ -780,10 +933,12 @@ $result = [ordered]@{
         tagLifecycle = $tagLifecycle
         watchLifecycle = $watchLifecycle
         instanceDbLifecycle = $instanceDbLifecycle
+        tagTableLifecycle = $tagTableLifecycle
     }
     tagLifecycle = $tagLifecycle
     watchLifecycle = $watchLifecycle
     instanceDbLifecycle = $instanceDbLifecycle
+    tagTableLifecycle = $tagTableLifecycle
 }
 $json = $result | ConvertTo-Json -Depth 10
 New-Item -ItemType Directory -Path (Split-Path -Parent $OutputPath) -Force | Out-Null

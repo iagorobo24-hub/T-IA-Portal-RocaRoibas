@@ -23,6 +23,8 @@ La ruta aceptada usó `autoNumber=false` y el número libre `2`. El nuevo objeto
 con `isConsistent=false`; solo se exportó después de compilar y leer
 `isConsistent=true`. El XML exportado mide 2884 bytes. El proyecto se restauró al hash
 original `1F7A19A7537E209633D165503F853F930BA2C21A7ACAD06EB07AA4E44131B526`.
+Las referencias se leyeron en la sesión aislada de borrado, después de reabrir el proyecto;
+la sesión independiente posterior fue solo lectura.
 
 ## Hallazgo obligatorio sobre `autoNumber`
 
@@ -93,10 +95,10 @@ El `blockPath` usado para exportar, borrar o leer debe ser el path exacto devuel
    el SHA-256 y comprueba que el nombre coincide.
 8. Llama `SaveProject` por separado. La lectura posterior debe confirmar el número,
    tipo, lenguaje y consistencia.
-9. Ejecuta `GetCrossReferences` sobre la DB con `objectKind=block` y guarda las
-   referencias a su FB y a sus miembros.
-10. En una sesión aislada de borrado, vuelve a leer el path exacto y ejecuta
-    `DeleteBlock`. Lista el nombre y exige cero coincidencias.
+9. En una sesión aislada de borrado, vuelve a abrir el proyecto, lee el path exacto y
+   ejecuta `GetCrossReferences` sobre la DB con `objectKind=block`; guarda las referencias
+   a su FB y a sus miembros.
+10. En esa misma sesión ejecuta `DeleteBlock`. Lista el nombre y exige cero coincidencias.
 11. Compila y guarda después del borrado, ambos con 0 errores y 0 advertencias.
 12. En una tercera sesión independiente de solo lectura, abre el mismo proyecto y exige
     cero coincidencias del nombre. Finaliza con `Disconnect`.
