@@ -571,6 +571,106 @@ $tagLifecycle = [ordered]@{
     invalidEvidence = @($tagLifecycleInvalidEvidence)
 }
 
+# The watch-table lifecycle report is an independent disposable-fixture result.
+# Use the newest report as the authoritative candidate and fail closed if it is
+# malformed or misses any part of the offline create/export/compile/save/delete
+# and independent-readback contract. A previous valid run must not mask a newer
+# failed or incomplete run.
+$watchLifecycleFinding = 'MCP watch table lifecycle: create/export/compile/save/delete + independent readback'
+$watchLifecycleFiles = @(
+    Get-ChildItem -LiteralPath (Join-Path $WorkspaceRoot '70-runs\e2e') -Recurse -Filter 'mcp-watch-acceptance-*.json' -File -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending
+)
+$watchLifecyclePath = if ($watchLifecycleFiles.Count -gt 0) { $watchLifecycleFiles[0].FullName } else { $null }
+$watchLifecycleInvalidEvidence = [System.Collections.Generic.List[string]]::new()
+$watchLifecycleFailureReasons = [System.Collections.Generic.List[string]]::new()
+$watchLifecycleEvidence = if ($watchLifecyclePath) { Read-JsonIfPresent $watchLifecyclePath } else { $null }
+$watchLifecycleVerified = $false
+
+if (-not $watchLifecyclePath) {
+    $watchLifecycleFailureReasons.Add('No mcp-watch-acceptance evidence file was found.') | Out-Null
+} elseif ($null -eq $watchLifecycleEvidence) {
+    $watchLifecycleInvalidEvidence.Add($watchLifecyclePath) | Out-Null
+    $watchLifecycleFailureReasons.Add('The newest mcp-watch-acceptance evidence is not valid JSON.') | Out-Null
+} else {
+    if ($watchLifecycleEvidence.success -ne $true) {
+        $watchLifecycleFailureReasons.Add('success must be true.') | Out-Null
+    }
+    if ($watchLifecycleEvidence.verdict -ne 'VERIFIED_WATCH_TABLE_CREATE_EXPORT_COMPILE_SAVE_DELETE_AND_INDEPENDENT_READBACK') {
+        $watchLifecycleFailureReasons.Add('verdict does not match the required watch-table lifecycle verdict.') | Out-Null
+    }
+
+    $fixture = $watchLifecycleEvidence.fixture
+    if ($null -eq $fixture -or $fixture.restored -ne $true -or $fixture.sourceUntouched -ne $true) {
+        $watchLifecycleFailureReasons.Add('fixture.restored and fixture.sourceUntouched must both be true.') | Out-Null
+    }
+    if ($null -eq $fixture -or [string]::IsNullOrWhiteSpace([string]$fixture.initialSha256) -or
+        $fixture.initialSha256 -ne $fixture.backupSha256 -or
+        $fixture.initialSha256 -ne $fixture.projectSha256AfterRestore -or
+        $fixture.initialSha256 -ne $fixture.sourceSha256) {
+        $watchLifecycleFailureReasons.Add('fixture initial, backup, source, and restored project hashes must match.') | Out-Null
+    }
+
+    $preflight = $watchLifecycleEvidence.preflight
+    if ($null -eq $preflight -or $preflight.allBlocksStandard -ne $true -or
+        $preflight.allTagsNonSafety -ne $true -or $preflight.watchTablesBefore -ne 0 -or
+        $preflight.forceTablesUntouched -ne $true) {
+        $watchLifecycleFailureReasons.Add('preflight must prove standard blocks, non-Safety tags, no probe table, and untouched force tables.') | Out-Null
+    }
+
+    $mutation = $watchLifecycleEvidence.mutation
+    if ($null -eq $mutation) {
+        $watchLifecycleFailureReasons.Add('mutation evidence is required.') | Out-Null
+    } else {
+        if ([string]::IsNullOrWhiteSpace([string]$mutation.watchName) -or
+            [string]::IsNullOrWhiteSpace([string]$mutation.createdPath) -or
+            $mutation.watchName -ne $mutation.createdPath -or
+            [string]$mutation.createdKind -notmatch '(?i)^Watch table$' -or
+            $mutation.createdReadback -ne 1 -or $mutation.createdConsistent -ne $true -or
+            $mutation.createdEntryCount -ne 0) {
+            $watchLifecycleFailureReasons.Add('created path/kind/readback must prove one empty consistent Watch table.') | Out-Null
+        }
+        if ($mutation.exported -ne $true -or [string]::IsNullOrWhiteSpace([string]$mutation.exportPath) -or
+            [int]$mutation.exportLength -le 0 -or
+            [string]$mutation.exportSha256 -notmatch '(?i)^[0-9a-f]{64}$') {
+            $watchLifecycleFailureReasons.Add('the created watch table must have a non-empty exported XML artifact and SHA-256.') | Out-Null
+        }
+        foreach ($compileName in @('compileBeforeDelete', 'compileAfterDelete')) {
+            $compile = $mutation.$compileName
+            if ($null -eq $compile -or $compile.state -ne 'Success' -or
+                $compile.errors -ne 0 -or $compile.warnings -ne 0) {
+                $watchLifecycleFailureReasons.Add("$compileName must report Success with zero errors and warnings.") | Out-Null
+            }
+        }
+        if ($mutation.saveBeforeDeleteSucceeded -ne $true -or $mutation.deleteSucceeded -ne $true -or
+            $mutation.afterDeleteCount -ne 0 -or $mutation.saveAfterDeleteSucceeded -ne $true) {
+            $watchLifecycleFailureReasons.Add('save/delete/readback cleanup must succeed and leave zero probe tables.') | Out-Null
+        }
+    }
+
+    $independentReadback = $watchLifecycleEvidence.independentReadback
+    if ($null -eq $independentReadback -or $independentReadback.success -ne $true -or
+        $independentReadback.watchTableCount -ne 0) {
+        $watchLifecycleFailureReasons.Add('independentReadback must succeed with zero watch tables.') | Out-Null
+    }
+    $watchLifecycleVerified = $watchLifecycleFailureReasons.Count -eq 0
+}
+
+if ($watchLifecycleVerified) {
+    Add-UniqueFinding $verified $watchLifecycleFinding
+} else {
+    Add-UniqueFinding $notVerified 'MCP watch table lifecycle evidence'
+}
+
+$watchLifecycle = [ordered]@{
+    status = if ($watchLifecycleVerified) { 'verified' } elseif ($watchLifecycleInvalidEvidence.Count -gt 0) { 'invalid' } else { 'not_verified' }
+    finding = $watchLifecycleFinding
+    path = $watchLifecyclePath
+    verdict = if ($watchLifecycleEvidence) { $watchLifecycleEvidence.verdict } else { $null }
+    failureReasons = @($watchLifecycleFailureReasons)
+    invalidEvidence = @($watchLifecycleInvalidEvidence)
+}
+
 $result = [ordered]@{
     schemaVersion = 1
     generatedAt = [DateTimeOffset]::Now.ToString('o')
@@ -596,8 +696,10 @@ $result = [ordered]@{
         portableCoreManifest = $PortableCoreManifestPath
         computerUse = @($ComputerUseEvidencePaths | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
         tagLifecycle = $tagLifecycle
+        watchLifecycle = $watchLifecycle
     }
     tagLifecycle = $tagLifecycle
+    watchLifecycle = $watchLifecycle
 }
 $json = $result | ConvertTo-Json -Depth 10
 New-Item -ItemType Directory -Path (Split-Path -Parent $OutputPath) -Force | Out-Null
