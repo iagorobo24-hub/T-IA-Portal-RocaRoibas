@@ -78,6 +78,17 @@ try {
         $report.evidence.tagTableLifecycle.path -notmatch '(?i)mcp-tagtable-acceptance-.*\.json$') {
         throw 'Acceptance status must reference the mcp-tagtable-acceptance evidence file.'
     }
+    $tagTableImportLifecycleFinding = 'MCP PLC tag table import: import/compile/save + independent readback and directory restore'
+    if ($report.verified -notcontains $tagTableImportLifecycleFinding) {
+        throw 'Acceptance status must include the verified PLC tag-table import lifecycle finding.'
+    }
+    if ($null -eq $report.evidence.tagTableImportLifecycle -or $report.evidence.tagTableImportLifecycle.status -ne 'verified') {
+        throw 'Acceptance status must expose verified PLC tag-table import evidence.'
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$report.evidence.tagTableImportLifecycle.path) -or
+        $report.evidence.tagTableImportLifecycle.path -notmatch '(?i)mcp-import-tagtable-acceptance-.*\.json$') {
+        throw 'Acceptance status must reference the mcp-import-tagtable-acceptance evidence file.'
+    }
     $blockGroupLifecycleFinding = 'MCP block-group lifecycle: create/delete/compile/save + independent readback'
     if ($report.verified -notcontains $blockGroupLifecycleFinding) {
         throw 'Acceptance status must include the verified MCP block-group lifecycle finding.'

@@ -5,7 +5,8 @@ $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $recipes = @{
     'R05-proyecto-nuevo.md' = @('ScaffoldProject', 'dryRun=true', 'SearchHardwareCatalog')
-    'R06-tags-io.md' = @('GetPlcTagTables', 'CreateTag', 'ImportPlcTagTable')
+    'R06-tags-io.md' = @('GetPlcTagTables', 'CreateTag')
+    'R26-importar-tabla-tags.md' = @('ImportPlcTagTable', 'preflight', 'restaur')
     'R07-udt-db.md' = @('PlcBuildAndImport', 'kind="udt"', 'UDT → global DB')
 }
 foreach ($entry in $recipes.GetEnumerator()) {

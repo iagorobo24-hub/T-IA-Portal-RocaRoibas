@@ -48,6 +48,36 @@ function Add-UniqueFinding([System.Collections.Generic.List[string]]$List, [stri
     }
 }
 
+function Get-ProjectDirectoryInventory([string]$DirectoryPath) {
+    if ([string]::IsNullOrWhiteSpace($DirectoryPath) -or
+        -not (Test-Path -LiteralPath $DirectoryPath -PathType Container)) { return $null }
+    $root = [IO.Path]::GetFullPath($DirectoryPath).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    return @(Get-ChildItem -LiteralPath $root -File -Recurse -Force | ForEach-Object {
+        [pscustomobject]@{
+            path = $_.FullName.Substring($root.Length).TrimStart([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+            length = [long]$_.Length
+            sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
+        }
+    } | Sort-Object path)
+}
+
+function Compare-ProjectDirectoryInventories([string]$LeftPath, [string]$RightPath) {
+    $left = Get-ProjectDirectoryInventory $LeftPath
+    $right = Get-ProjectDirectoryInventory $RightPath
+    if ($null -eq $left -or $null -eq $right) {
+        return [pscustomobject]@{ comparable = $false; leftCount = 0; rightCount = 0; differences = @('missing directory') }
+    }
+    $leftMap = @{}
+    foreach ($entry in $left) { $leftMap[[string]$entry.path] = "$($entry.length)|$($entry.sha256)" }
+    $rightMap = @{}
+    foreach ($entry in $right) { $rightMap[[string]$entry.path] = "$($entry.length)|$($entry.sha256)" }
+    $keys = @(@($leftMap.Keys) + @($rightMap.Keys) | Select-Object -Unique)
+    $differences = @($keys | Where-Object {
+        -not $leftMap.ContainsKey($_) -or -not $rightMap.ContainsKey($_) -or $leftMap[$_] -cne $rightMap[$_]
+    })
+    return [pscustomobject]@{ comparable = $true; leftCount = $left.Count; rightCount = $right.Count; differences = $differences }
+}
+
 function Get-ComputerUseAction($Evidence, [string]$ActionName) {
     if (-not $Evidence -or -not $Evidence.actions) { return $null }
     return @($Evidence.actions | Where-Object { $_.action -eq $ActionName } | Select-Object -First 1)[0]
@@ -906,6 +936,180 @@ $tagTableLifecycle = [ordered]@{
     invalidEvidence = @($tagTableLifecycleInvalidEvidence)
 }
 
+# ImportPlcTagTable is exposed by tia-create/full rather than the default
+# tia-inspect/write profile.  Keep its acceptance separate from the create /
+# delete lifecycle above: the tool has no dryRun and TIA V20 persists index
+# state in System/PEData.* alongside the .ap20, so the fixture must be restored
+# as a complete directory and read back in a read-only session.
+$tagTableImportLifecycleFinding = 'MCP PLC tag table import: import/compile/save + independent readback and directory restore'
+$tagTableImportLifecycleFiles = @(
+    Get-ChildItem -LiteralPath (Join-Path $WorkspaceRoot '70-runs\e2e') -Recurse -Filter 'mcp-import-tagtable-acceptance-*.json' -File -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending
+)
+$tagTableImportLifecyclePath = if ($tagTableImportLifecycleFiles.Count -gt 0) { $tagTableImportLifecycleFiles[0].FullName } else { $null }
+$tagTableImportLifecycleInvalidEvidence = [System.Collections.Generic.List[string]]::new()
+$tagTableImportLifecycleFailureReasons = [System.Collections.Generic.List[string]]::new()
+$tagTableImportLifecycleEvidence = if ($tagTableImportLifecyclePath) { Read-JsonIfPresent $tagTableImportLifecyclePath } else { $null }
+$tagTableImportLifecycleVerified = $false
+
+if (-not $tagTableImportLifecyclePath) {
+    $tagTableImportLifecycleFailureReasons.Add('No mcp-import-tagtable-acceptance evidence file was found.') | Out-Null
+} elseif ($null -eq $tagTableImportLifecycleEvidence) {
+    $tagTableImportLifecycleInvalidEvidence.Add($tagTableImportLifecyclePath) | Out-Null
+    $tagTableImportLifecycleFailureReasons.Add('The newest mcp-import-tagtable-acceptance evidence is not valid JSON.') | Out-Null
+} else {
+    if ($tagTableImportLifecycleEvidence.success -ne $true -or
+        $tagTableImportLifecycleEvidence.verdict -ne 'VERIFIED_PLC_TAG_TABLE_IMPORT_COMPILE_SAVE_INDEPENDENT_READBACK_AND_DIRECTORY_RESTORE') {
+        $tagTableImportLifecycleFailureReasons.Add('success and verdict must match the required PLC tag-table import lifecycle.') | Out-Null
+    }
+    $fixture = $tagTableImportLifecycleEvidence.fixture
+    $fixtureHashesMatch = $fixture -and
+        $fixture.initialSha256 -eq $fixture.backupSha256 -and
+        $fixture.initialSha256 -eq $fixture.projectSha256AfterRestore -and
+        $fixture.initialSha256 -eq $fixture.sourceSha256
+    if ($null -eq $fixture -or $fixture.restored -ne $true -or $fixture.sourceUntouched -ne $true -or
+        $fixture.directoryRestored -ne $true -or $fixture.directoryFileDiffCountAfterRestore -ne 0 -or
+        -not $fixtureHashesMatch -or
+        [string]::IsNullOrWhiteSpace([string]$fixture.source) -or
+        -not (Test-Path -LiteralPath ([string]$fixture.source) -PathType Leaf) -or
+        (Get-FileHash -LiteralPath ([string]$fixture.source) -Algorithm SHA256).Hash -ne [string]$fixture.sourceSha256) {
+        $tagTableImportLifecycleFailureReasons.Add('fixture must restore the complete project directory, preserve the source, and match all baseline hashes.') | Out-Null
+    } else {
+        $projectPath = [string]$fixture.project
+        $backupPath = [string]$fixture.backup
+        $projectDirectory = if (Test-Path -LiteralPath $projectPath -PathType Leaf) { Split-Path -Parent $projectPath } else { $null }
+        $backupDirectory = if (Test-Path -LiteralPath $backupPath -PathType Leaf) { Split-Path -Parent $backupPath } else { $null }
+        $directoryComparison = Compare-ProjectDirectoryInventories $projectDirectory $backupDirectory
+        if (-not $directoryComparison.comparable -or $directoryComparison.differences.Count -ne 0 -or
+            $directoryComparison.leftCount -ne $fixture.directoryFileCount -or
+            $directoryComparison.rightCount -ne $fixture.directoryFileCount) {
+            $tagTableImportLifecycleFailureReasons.Add('the restored project directory must match its backup on disk by file path, size and SHA-256, including TIA sidecars.') | Out-Null
+        }
+    }
+    $preflight = $tagTableImportLifecycleEvidence.preflight
+    if ($null -eq $preflight -or $preflight.allBlocksStandard -ne $true -or
+        $preflight.allBlocksNonFailsafe -ne $true -or $preflight.allBlocksUnprotected -ne $true -or
+        $preflight.allTagsNonSafety -ne $true -or $preflight.destinationAbsentBefore -ne $true -or
+        $preflight.importToolHasDryRun -ne $false -or
+        [string]::IsNullOrWhiteSpace([string]$preflight.report)) {
+        $tagTableImportLifecycleFailureReasons.Add('preflight must prove standard unprotected non-Safety content, an absent destination, and the no-dryRun import guard.') | Out-Null
+    } else {
+        $preflightReport = Read-JsonIfPresent ([string]$preflight.report)
+        $preflightBlocksCall = if ($preflightReport) { $preflightReport.calls | Where-Object { $_.name -eq 'GetBlocks' } | Select-Object -Last 1 } else { $null }
+        $preflightTagsCall = if ($preflightReport) { $preflightReport.calls | Where-Object { $_.name -eq 'GetTags' } | Select-Object -Last 1 } else { $null }
+        $preflightTablesCall = if ($preflightReport) { $preflightReport.calls | Where-Object { $_.name -eq 'GetTagTables' } | Select-Object -Last 1 } else { $null }
+        $preflightBlocks = if ($preflightBlocksCall) { $preflightBlocksCall.response.structuredContent.items } else { $null }
+        $preflightTags = if ($preflightTagsCall) { $preflightTagsCall.response.structuredContent.items } else { $null }
+        $preflightTables = if ($preflightTablesCall) { $preflightTablesCall.response.structuredContent.items } else { $null }
+        $probeName = [string]$tagTableImportLifecycleEvidence.mutation.tableName
+        if ($null -eq $preflightReport -or $preflightReport.success -ne $true -or
+            $null -eq $preflightBlocksCall -or $preflightBlocksCall.success -ne $true -or
+            @($preflightBlocks | Where-Object { $_.isFailsafe -ne $false -or $_.isKnowHowProtected -ne $false -or [string]::IsNullOrWhiteSpace([string]$_.programmingLanguage) }).Count -gt 0 -or
+            $null -eq $preflightTagsCall -or $preflightTagsCall.success -ne $true -or
+            @($preflightTags | Where-Object { $_.isSafety -ne $false }).Count -gt 0 -or
+            $null -eq $preflightTablesCall -or $preflightTablesCall.success -ne $true -or
+            @($preflightTables | Where-Object { $_.path -eq $probeName }).Count -ne 0) {
+            $tagTableImportLifecycleFailureReasons.Add('preflight.report must be successful and independently confirm non-Safety blocks/tags and an absent destination table.') | Out-Null
+        }
+    }
+    $mutation = $tagTableImportLifecycleEvidence.mutation
+    if ($null -eq $mutation -or $mutation.tool -ne 'ImportPlcTagTable' -or
+        [string]::IsNullOrWhiteSpace([string]$mutation.tableName) -or $mutation.importSucceeded -ne $true -or
+        $mutation.beforeTagTableCount -ne 2 -or $mutation.afterImportTagTableCount -eq $mutation.beforeTagTableCount -or
+        $mutation.afterSaveTagTableCount -ne $mutation.afterImportTagTableCount -or $mutation.createdReadback -ne $true -or
+        $mutation.createdKind -notmatch '(?i)^Tag table$' -or $mutation.tagCount -ne 0 -or
+        $mutation.userConstantCount -ne 0 -or $mutation.compile.state -ne 'Success' -or
+        $mutation.compile.errors -ne 0 -or $mutation.compile.warnings -ne 0 -or
+        $mutation.saveSucceeded -ne $true -or $mutation.noPhysicalHardwareTouched -ne $true -or
+        $mutation.noSafetyBlocksOrTagsTouched -ne $true -or [string]::IsNullOrWhiteSpace([string]$mutation.report)) {
+        $tagTableImportLifecycleFailureReasons.Add('mutation must prove one imported table, compile 0/0, save, and the safety/hardware boundaries.') | Out-Null
+    } else {
+        $mutationReport = Read-JsonIfPresent ([string]$mutation.report)
+        $importCall = if ($mutationReport) { $mutationReport.calls | Where-Object { $_.name -eq 'ImportPlcTagTable' } | Select-Object -Last 1 } else { $null }
+        $compileCall = if ($mutationReport) { $mutationReport.calls | Where-Object { $_.name -eq 'CompileSoftware' } | Select-Object -Last 1 } else { $null }
+        $saveCall = if ($mutationReport) { $mutationReport.calls | Where-Object { $_.name -eq 'SaveProject' } | Select-Object -Last 1 } else { $null }
+        $compileData = if ($compileCall) { $compileCall.text | ConvertFrom-Json -ErrorAction SilentlyContinue } else { $null }
+        $importData = if ($importCall) { $importCall.text | ConvertFrom-Json -ErrorAction SilentlyContinue } else { $null }
+        $tableCalls = if ($mutationReport) { @($mutationReport.calls | Where-Object { $_.name -eq 'GetPlcTagTables' }) } else { @() }
+        $beforeTables = if ($tableCalls.Count -ge 1) { ($tableCalls[0].text | ConvertFrom-Json -ErrorAction SilentlyContinue).items } else { $null }
+        $afterImportTables = if ($tableCalls.Count -ge 2) { ($tableCalls[1].text | ConvertFrom-Json -ErrorAction SilentlyContinue).items } else { $null }
+        $afterSaveTables = if ($tableCalls.Count -ge 3) { ($tableCalls[2].text | ConvertFrom-Json -ErrorAction SilentlyContinue).items } else { $null }
+        $inputXmlPath = [string]$mutation.importPath
+        $xmlValid = $false
+        if (-not [string]::IsNullOrWhiteSpace($inputXmlPath) -and (Test-Path -LiteralPath $inputXmlPath -PathType Leaf)) {
+            try {
+                [xml]$importXml = Get-Content -LiteralPath $inputXmlPath -Raw
+                $xmlTables = @($importXml.Document.'SW.Tags.PlcTagTable')
+                $xmlTableName = [string]$xmlTables[0].AttributeList.Name
+                $xmlValid = $xmlTables.Count -eq 1 -and $xmlTableName -ceq [string]$mutation.tableName -and
+                    $importXml.Document.Engineering.version -eq 'V20' -and
+                    $null -eq $xmlTables[0].SelectSingleNode('.//SW.Tags.PlcTag') -and
+                    $null -eq $xmlTables[0].SelectSingleNode('.//SW.Tags.PlcUserConstant')
+            } catch { $xmlValid = $false }
+        }
+        if ($null -eq $mutationReport -or $mutationReport.success -ne $true -or
+            $null -eq $importCall -or $importCall.success -ne $true -or
+            $null -eq $importData -or $importData.meta.success -ne $true -or
+            -not $xmlValid -or
+            $null -eq $compileCall -or $compileCall.success -ne $true -or
+            $null -eq $compileData -or $compileData.state -ne 'Success' -or $compileData.errorCount -ne 0 -or $compileData.warningCount -ne 0 -or
+            $null -eq $saveCall -or $saveCall.success -ne $true -or
+            $tableCalls.Count -lt 3 -or @($beforeTables).Count -ne $mutation.beforeTagTableCount -or
+            @($afterImportTables | Where-Object { $_ -ceq [string]$mutation.tableName }).Count -ne 1 -or
+            @($afterSaveTables | Where-Object { $_ -ceq [string]$mutation.tableName }).Count -ne 1) {
+            $tagTableImportLifecycleFailureReasons.Add('mutation.report must prove the exact V20 empty-table XML import, table readback before/after save, CompileSoftware 0/0, and SaveProject.') | Out-Null
+        }
+    }
+    $independentReadback = $tagTableImportLifecycleEvidence.independentReadback
+    if ($null -eq $independentReadback -or $independentReadback.success -ne $true -or
+        $independentReadback.allowWrite -ne $false -or $independentReadback.probeTableCount -ne 1 -or
+        [string]::IsNullOrWhiteSpace([string]$independentReadback.report) -or
+        $null -eq $independentReadback.restored -or $independentReadback.restored.success -ne $true -or
+        $independentReadback.restored.allowWrite -ne $false -or $independentReadback.restored.probeTableCount -ne 0 -or
+        $independentReadback.restored.tableAbsentAfterFullDirectoryRestore -ne $true -or
+        [string]::IsNullOrWhiteSpace([string]$independentReadback.restored.report)) {
+        $tagTableImportLifecycleFailureReasons.Add('independentReadback must prove read-only visibility after import and absence after complete directory restoration.') | Out-Null
+    } else {
+        $independentReport = Read-JsonIfPresent ([string]$independentReadback.report)
+        $restoredReport = Read-JsonIfPresent ([string]$independentReadback.restored.report)
+        $independentStateCall = if ($independentReport) { $independentReport.calls | Where-Object { $_.name -eq 'GetState' } | Select-Object -Last 1 } else { $null }
+        $independentTablesCall = if ($independentReport) { $independentReport.calls | Where-Object { $_.name -eq 'GetTagTables' } | Select-Object -Last 1 } else { $null }
+        $restoredStateCall = if ($restoredReport) { $restoredReport.calls | Where-Object { $_.name -eq 'GetState' } | Select-Object -Last 1 } else { $null }
+        $restoredTablesCall = if ($restoredReport) { $restoredReport.calls | Where-Object { $_.name -eq 'GetTagTables' } | Select-Object -Last 1 } else { $null }
+        $independentState = if ($independentStateCall) { $independentStateCall.response.structuredContent } else { $null }
+        $independentTables = if ($independentTablesCall) { $independentTablesCall.response.structuredContent.items } else { $null }
+        $restoredState = if ($restoredStateCall) { $restoredStateCall.response.structuredContent } else { $null }
+        $restoredTables = if ($restoredTablesCall) { $restoredTablesCall.response.structuredContent.items } else { $null }
+        $probeName = [string]$tagTableImportLifecycleEvidence.mutation.tableName
+        $importedTable = @($independentTables | Where-Object { $_.path -eq $probeName }) | Select-Object -First 1
+        if ($null -eq $independentReport -or $independentReport.success -ne $true -or
+            $null -eq $independentState -or $independentState.allowWrite -ne $false -or
+            $null -eq $independentTablesCall -or @($importedTable).Count -ne 1 -or
+            $importedTable.isDefault -ne $false -or $importedTable.tagCount -ne 0 -or $importedTable.userConstantCount -ne 0 -or
+            $null -eq $restoredReport -or $restoredReport.success -ne $true -or
+            $null -eq $restoredState -or $restoredState.allowWrite -ne $false -or
+            $null -eq $restoredTablesCall -or @($restoredTables | Where-Object { $_.path -eq $probeName }).Count -ne 0) {
+            $tagTableImportLifecycleFailureReasons.Add('independent and restored reports must be valid read-only sessions with the expected table presence/absence.') | Out-Null
+        }
+    }
+    $tagTableImportLifecycleVerified = $tagTableImportLifecycleFailureReasons.Count -eq 0
+}
+
+if ($tagTableImportLifecycleVerified) {
+    Add-UniqueFinding $verified $tagTableImportLifecycleFinding
+} else {
+    Add-UniqueFinding $notVerified 'MCP PLC tag table import lifecycle evidence'
+}
+
+$tagTableImportLifecycle = [ordered]@{
+    status = if ($tagTableImportLifecycleVerified) { 'verified' } elseif ($tagTableImportLifecycleInvalidEvidence.Count -gt 0) { 'invalid' } else { 'not_verified' }
+    finding = $tagTableImportLifecycleFinding
+    path = $tagTableImportLifecyclePath
+    verdict = if ($tagTableImportLifecycleEvidence) { $tagTableImportLifecycleEvidence.verdict } else { $null }
+    failureReasons = @($tagTableImportLifecycleFailureReasons)
+    invalidEvidence = @($tagTableImportLifecycleInvalidEvidence)
+}
+
 $blockGroupLifecycleFinding = 'MCP block-group lifecycle: create/delete/compile/save + independent readback'
 $blockGroupLifecycleFiles = @(
     Get-ChildItem -LiteralPath (Join-Path $WorkspaceRoot '70-runs\e2e') -Recurse -Filter 'mcp-blockgroup-acceptance-*.json' -File -ErrorAction SilentlyContinue |
@@ -1004,12 +1208,14 @@ $result = [ordered]@{
         watchLifecycle = $watchLifecycle
         instanceDbLifecycle = $instanceDbLifecycle
         tagTableLifecycle = $tagTableLifecycle
+        tagTableImportLifecycle = $tagTableImportLifecycle
         blockGroupLifecycle = $blockGroupLifecycle
     }
     tagLifecycle = $tagLifecycle
     watchLifecycle = $watchLifecycle
     instanceDbLifecycle = $instanceDbLifecycle
     tagTableLifecycle = $tagTableLifecycle
+    tagTableImportLifecycle = $tagTableImportLifecycle
     blockGroupLifecycle = $blockGroupLifecycle
 }
 $json = $result | ConvertTo-Json -Depth 10

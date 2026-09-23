@@ -92,6 +92,7 @@ Si falla        los modos de fallo conocidos y su arreglo
 | [R23](R23-instance-db.md) | Instance DB de un FB estándar: crear, compilar, exportar, guardar, borrar y leer | ✅ ciclo V20 verificado con número explícito; `autoNumber=true`/DB0 bloqueado |
 | [R24](R24-tabla-tags-offline.md) | Tabla de tags PLC vacía: crear, exportar, compilar, guardar, borrar y leer | ✅ ciclo V20 verificado en fixture aislado; importación y tags Safety excluidos |
 | [R25](R25-grupo-bloques-offline.md) | Grupo vacío de bloques PLC: crear, borrar, compilar, guardar y leer | ✅ ciclo V20 verificado en fixture aislado; grupos con bloques excluidos |
+| [R26](R26-importar-tabla-tags.md) | Importar tabla de tags PLC vacía, compilar, guardar, leer y restaurar carpeta | ✅ `tia-create/full` V20 verificado; tabla vacía, tags Safety y hardware excluidos |
 
 El orden y su porqué están en [ADR-004](../../00-meta/decisiones/ADR-004-prioridades.md).
 
