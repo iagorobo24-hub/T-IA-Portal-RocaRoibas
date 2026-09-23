@@ -88,7 +88,7 @@ foreach ($definition in $definitions) {
     }
     $output = (& $pwsh -NoProfile -NonInteractive -File $path 2>&1 | Out-String).Trim()
     $exitCode = $LASTEXITCODE
-    $status = if ($exitCode -eq 0) { 'PASS' } else { 'BLOCKED' }
+    $status = if ($exitCode -ne 0) { 'BLOCKED' } elseif ($output -match '^WARN:') { 'WARN' } else { 'PASS' }
     $checks.Add([ordered]@{
         name = $definition.name
         status = $status
