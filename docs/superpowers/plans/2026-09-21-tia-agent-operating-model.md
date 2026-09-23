@@ -470,6 +470,13 @@ proyecto clonado y su backup. Hash del `.ap20` original/backup: `D5FA9E103B16E35
     bloqueada hasta corregir o probar el wrapper. Evidencia resumida en
     [mcp-instancedb-acceptance-20260923.json](../../../70-runs/e2e/mcp-instancedb-acceptance-20260923.json)
     y receta [R23](../../../10-kb/20-recetas/R23-instance-db.md).
+11. En otro fixture aislado se verificó la tabla PLC de usuario vacía: `CreateTagTable` en raíz,
+    `GetTagTableInfo`, `ExportTagTable` (XML 1464 bytes), compile/save 0/0, `DeleteTagTable`,
+    segundo compile/save y lectura independiente read-only con cero coincidencias. El proyecto y
+    la fuente volvieron a sus hashes iniciales. Evidencia en
+    [mcp-tagtable-acceptance-20260923.json](../../../70-runs/e2e/mcp-tagtable-acceptance-20260923.json)
+    y receta [R24](../../../10-kb/20-recetas/R24-tabla-tags-offline.md). La importación XML de
+    tablas sigue sin publicarse en `tia-inspect/write`.
 
 Los artefactos completos están en `90-tmp/e2e/20260921-iot2050-agent-probe-clean/`, en especial
 `artifacts/01-prewrite-preflight.json`, `06-create-compile-save.json`, `16-import-external-source-root.json`,
@@ -776,7 +783,7 @@ Snapshot con --allow-write. El roster por sí solo no implica Attach. Snapshot: 
 | CreateFB | Other / utility | req: softwarePath:string, groupPath:string, name:string; opt: language:string="LAD", autoNumber:boolean=true, number:integer=0 | Solo schema | R2 | MCP conocido / Openness desconocido |
 | CreateInstanceDB | Other / utility | req: softwarePath:string, groupPath:string, name:string, instanceOfName:string; opt: autoNumber:boolean=true, number:integer=0 | Fixture ejecutado | R2 | Verificado en fixture V20 con `autoNumber=false`, número 2, compile 0/0, readback seguro y restauración; `autoNumber=true`/`number=0` bloqueado por DB0 inválida. |
 | CreateTag | PLC tags / DB / types | req: softwarePath:string, tagTablePath:string, name:string; opt: dataTypeName:string="", logicalAddress:string="" | Solo schema | R2 | MCP conocido / Openness desconocido |
-| CreateTagTable | PLC tags / DB / types | req: softwarePath:string, groupPath:string, name:string; opt: — | Solo schema | R2 | MCP conocido / Openness desconocido |
+| CreateTagTable | PLC tags / DB / types | req: softwarePath:string, groupPath:string, name:string; opt: — | Fixture ejecutado | R2 | Verificado con tabla de usuario vacía en V20: path/metadata, exportación, compile/save 0/0, borrado y readback independiente. |
 | CreateTagTableGroup | PLC tags / DB / types | req: softwarePath:string, parentGroupPath:string, name:string; opt: — | Solo schema | R2 | MCP conocido / Openness desconocido |
 | CreateTypeGroup | PLC tags / DB / types | req: softwarePath:string, parentGroupPath:string, name:string; opt: — | Solo schema | R2 | MCP conocido / Openness desconocido |
 | CreateUserConstant | PLC tags / DB / types | req: softwarePath:string, tagTablePath:string, name:string; opt: dataTypeName:string="", value:string="" | Solo schema | R2 | MCP conocido / Openness desconocido |
@@ -787,7 +794,7 @@ Snapshot con --allow-write. El roster por sí solo no implica Attach. Snapshot: 
 | DeleteExternalSource | PLC blocks / sources / import-export | req: softwarePath:string, sourcePath:string; opt: — | Solo schema | R2 | MCP conocido / Openness desconocido |
 | DeleteExternalSourceGroup | PLC blocks / sources / import-export | req: softwarePath:string, groupPath:string; opt: — | Solo schema | R2 | MCP conocido / Openness desconocido |
 | DeleteTag | PLC tags / DB / types | req: softwarePath:string, tagPath:string; opt: — | Solo schema | R2 | MCP conocido / Openness desconocido |
-| DeleteTagTable | PLC tags / DB / types | req: softwarePath:string, tagTablePath:string; opt: — | Solo schema | R2 | MCP conocido / Openness desconocido |
+| DeleteTagTable | PLC tags / DB / types | req: softwarePath:string, tagTablePath:string; opt: — | Fixture ejecutado | R2 | Verificado en el mismo ciclo: path leído, cero coincidencias tras borrar, compile/save 0/0 y segunda sesión read-only. |
 | DeleteTagTableGroup | PLC tags / DB / types | req: softwarePath:string, groupPath:string; opt: — | Solo schema | R2 | MCP conocido / Openness desconocido |
 | DeleteType | PLC tags / DB / types | req: softwarePath:string, typePath:string; opt: — | Solo schema | R2 | MCP conocido / Openness desconocido |
 | DeleteTypeGroup | PLC tags / DB / types | req: softwarePath:string, groupPath:string; opt: — | Solo schema | R2 | MCP conocido / Openness desconocido |
@@ -801,7 +808,7 @@ Snapshot con --allow-write. El roster por sí solo no implica Attach. Snapshot: 
 | ExportBlocks | PLC blocks / sources / import-export | req: softwarePath:string, exportPath:string; opt: regexName:string="", preservePath:boolean=false | Solo schema | R1 | MCP conocido / Openness desconocido |
 | ExportBlocksAsDocuments | PLC blocks / sources / import-export | req: softwarePath:string, exportPath:string; opt: regexName:string="", preservePath:boolean=false | Solo schema | R1 | MCP conocido / Openness desconocido |
 | ExportPlcAsSourceTree | PLC blocks / sources / import-export | req: softwarePath:string, exportPath:string; opt: — | Solo schema | R1 | MCP conocido / Openness desconocido |
-| ExportTagTable | PLC tags / DB / types | req: softwarePath:string, tagTablePath:string, exportPath:string; opt: preservePath:boolean=false | Solo schema | R1 | MCP conocido / Openness desconocido |
+| ExportTagTable | PLC tags / DB / types | req: softwarePath:string, tagTablePath:string, exportPath:string; opt: preservePath:boolean=false | Fixture ejecutado | R1 | XML de tabla vacía V20 exportado (1464 bytes) y hash recalculado en `mcp-tagtable-acceptance-20260923.json`. |
 | ExportType | PLC tags / DB / types | req: softwarePath:string, exportPath:string, typePath:string; opt: preservePath:boolean=false | Solo schema | R1 | MCP conocido / Openness desconocido |
 | ExportTypeAsDocuments | PLC tags / DB / types | req: softwarePath:string, typePath:string, exportPath:string; opt: preservePath:boolean=false | Solo schema | R1 | MCP conocido / Openness desconocido |
 | ExportTypes | PLC tags / DB / types | req: softwarePath:string, exportPath:string; opt: regexName:string="", preservePath:boolean=false | Solo schema | R1 | MCP conocido / Openness desconocido |

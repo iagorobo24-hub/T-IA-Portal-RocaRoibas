@@ -90,6 +90,7 @@ Si falla        los modos de fallo conocidos y su arreglo
 |---|---|---|
 | [R22](R22-tablas-watch.md) | Tabla Watch vacía: crear, exportar, compilar, guardar, borrar y leer | ✅ ciclo V20 verificado en fixture aislado; online/force excluidos |
 | [R23](R23-instance-db.md) | Instance DB de un FB estándar: crear, compilar, exportar, guardar, borrar y leer | ✅ ciclo V20 verificado con número explícito; `autoNumber=true`/DB0 bloqueado |
+| [R24](R24-tabla-tags-offline.md) | Tabla de tags PLC vacía: crear, exportar, compilar, guardar, borrar y leer | ✅ ciclo V20 verificado en fixture aislado; importación y tags Safety excluidos |
 
 El orden y su porqué están en [ADR-004](../../00-meta/decisiones/ADR-004-prioridades.md).
 
