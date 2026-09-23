@@ -56,6 +56,18 @@ try {
         throw 'Acceptance status must reference the mcp-watch-acceptance evidence file.'
     }
 
+    $instanceDbLifecycleFinding = 'MCP Instance DB lifecycle: create/compile/export/save/references/delete + independent readback'
+    if ($report.verified -notcontains $instanceDbLifecycleFinding) {
+        throw 'Acceptance status must include the verified MCP Instance DB lifecycle finding.'
+    }
+    if ($null -eq $report.evidence.instanceDbLifecycle -or $report.evidence.instanceDbLifecycle.status -ne 'verified') {
+        throw 'Acceptance status must expose verified MCP Instance DB lifecycle evidence.'
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$report.evidence.instanceDbLifecycle.path) -or
+        $report.evidence.instanceDbLifecycle.path -notmatch '(?i)mcp-instancedb-acceptance-.*\.json$') {
+        throw 'Acceptance status must reference the mcp-instancedb-acceptance evidence file.'
+    }
+
     # A window id and version alone cannot establish a native target or the
     # physical/Safety boundary. Keep this regression probe deliberately sparse
     # so a future parser change cannot turn metadata into a false PASS.

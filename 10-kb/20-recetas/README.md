@@ -84,6 +84,13 @@ Si falla        los modos de fallo conocidos y su arreglo
 | [R20](R20-aceptacion-hmi-por-modelo.md) | Aceptación HMI según modelo y Runtime | 📄 matriz documentada; Runtime/licencia local pendiente |
 | [R21](R21-preflight-offline-release.md) | Preflight de la suite offline de release | ✅ preflight ejecutable; paquete de golden fixtures externo aún bloqueado |
 
+### Tanda 6 — ciclos PLC offline aceptados
+
+| # | Receta | Estado |
+|---|---|---|
+| [R22](R22-tablas-watch.md) | Tabla Watch vacía: crear, exportar, compilar, guardar, borrar y leer | ✅ ciclo V20 verificado en fixture aislado; online/force excluidos |
+| [R23](R23-instance-db.md) | Instance DB de un FB estándar: crear, compilar, exportar, guardar, borrar y leer | ✅ ciclo V20 verificado con número explícito; `autoNumber=true`/DB0 bloqueado |
+
 El orden y su porqué están en [ADR-004](../../00-meta/decisiones/ADR-004-prioridades.md).
 
 ## Dónde probar todo esto
