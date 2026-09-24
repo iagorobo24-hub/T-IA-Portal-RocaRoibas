@@ -21,6 +21,8 @@ param(
     [string]$CallsJson,
     [string]$OutputPath,
     [switch]$CaptureStderr,
+    # Solo para inventario de capacidades en fixture de lectura. Ver el comentario en el bucle.
+    [switch]$ContinueOnError,
     [int]$TimeoutSeconds = 120,
     [string]$LeaseName = 'Local\TIA-Claude-McpSession',
     [int]$LeaseTimeoutSeconds = 60
@@ -240,7 +242,14 @@ try {
             $item.assertionsPassed = $assertionsPassed
         }
         $results.Add($item)
-        if ($isError -or ($hasAssertions -and -not $assertionsPassed)) { $sequenceSuccess = $false; break }
+        if ($isError -or ($hasAssertions -and -not $assertionsPassed)) {
+            $sequenceSuccess = $false
+            # -ContinueOnError existe para el inventario de capacidades: recorrer un roster entero y
+            # registrar cual falla es justo lo que se quiere medir, y parar en la primera obligaria a
+            # reabrir TIA por cada herramienta. NO usarlo en secuencias que muten un proyecto: ahi
+            # una llamada fallida debe detener el resto. El informe sigue marcando success=false.
+            if (-not $ContinueOnError) { break }
+        }
     }
 }
 finally {
