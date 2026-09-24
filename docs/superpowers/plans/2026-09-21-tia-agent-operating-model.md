@@ -253,6 +253,17 @@ de una sola declaración y resultado íntegro; mantener desregistrada la importa
 Después, compilar y reconciliar `tools/list`, probar negativos y hacer roundtrip en clon. No se ha probado
 en runtime `SafetySignatureProvider` con una F-CPU, y esa prueba no forma parte del alcance permitido.
 
+**Revalidación 2026-09-24:** el helper actual exige `isFailsafe=false`, `programmingLanguage=SCL`,
+`isKnowHowProtected=false` e `isConsistent=true`, y bloquea propiedades ausentes/nulas o idioma F.
+La revisión de la ruta del runner confirma que esta barrera se repite después de `GetBlocks` antes
+de importar y después de volver a leer el bloque importado. Pasaron
+`Test-TiaSclSafetyGate.ps1` y `Test-TiaSclProposalApply.ps1`; el informe fechado está en
+[priority-remediation-tests](../../../70-runs/tia-capabilities/20260924-priority-remediation-tests.json).
+La suite CI segura actual terminó con 13 PASS, 1 WARN y 0 BLOCKED; el único aviso es que no hay
+ejecuciones de evaluación en `00-meta/eval/runs` ([informe](../../../70-runs/checks/20260924-priority-ci-safe.json)).
+Esto verifica la lógica local y sus regresiones, no una importación F ni una ejecución live del runner:
+el perfil aislado actual sigue sin registrar el importador y no se intentó mutar TIA.
+
 ### Fase 2 — Credencial del Node-RED (P0)
 
 **Fuente:** 50-examples/npatel-iot/node-red/07_MindSphereflow.json; revisar copias de paquete y
@@ -269,8 +280,19 @@ dist con búsquedas que sólo revelen rutas, nunca valores.
 5. [ ] Rotar/revocar en el proveedor. El agente no tiene evidencia de acceso al tenant; dejar esto como
    bloqueado hasta que lo confirme el propietario.
 
-Aceptación: JSON parseable, valor ausente de git y paquete, secret scan limpio, revocación registrada.
-El valor se tratará comprometido hasta confirmación.
+**Revalidación 2026-09-24:** la fuente versionada sigue siendo JSON parseable, el nodo MindConnect
+contiene `privatekey` vacío y `agentconfig.content` usa solo el marcador de configuración local. El
+escaneo actual devuelve cero hallazgos en `50-examples/` y `TIA-Claude_Portable/dist/`; ambos flujos
+coinciden en SHA-256. También pasaron `Test-TiaExampleSecrets.ps1` y
+`Test-PortablePackageContent.ps1` ([evidencia](../../../70-runs/tia-capabilities/20260924-priority-remediation-tests.json),
+[scan y hashes](../../../70-runs/tia-capabilities/20260924-priority-secret-recheck.json)). La ficha del
+ejemplo registra que el secreto estuvo en commits anteriores; por tanto “limpio” describe el árbol
+actual y el paquete generado, no el historial Git. Antes de publicar/compartir el historial hay que
+confirmar la revocación con el propietario y coordinar un saneamiento de historial.
+
+Aceptación: JSON parseable, secreto ausente del árbol actual y paquete distribuible, escaneo limpio,
+revocación registrada y cualquier limpieza de historial coordinada. El valor se tratará comprometido
+hasta confirmar la revocación.
 
 ### Fase 3 — Alinear instrucciones técnicas (P1)
 
