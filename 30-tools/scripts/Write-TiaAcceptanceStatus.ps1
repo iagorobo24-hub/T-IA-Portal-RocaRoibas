@@ -1110,6 +1110,195 @@ $tagTableImportLifecycle = [ordered]@{
     invalidEvidence = @($tagTableImportLifecycleInvalidEvidence)
 }
 
+# The empty-table import above does not prove that table members survive the
+# V20 import/compile/save path. Keep a separate acceptance gate for ordinary,
+# explicitly non-Safety tags and require independent readback plus full restore.
+$tagTableMemberImportFinding = 'MCP PLC tag table import with two standard tags: compile/save/readback/restore'
+$tagTableMemberImportFiles = @(
+    Get-ChildItem -LiteralPath (Join-Path $WorkspaceRoot '70-runs\e2e') -Filter 'mcp-import-tagtable-member-acceptance-*.json' -File -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending
+)
+$tagTableMemberImportPath = if ($tagTableMemberImportFiles.Count -gt 0) { $tagTableMemberImportFiles[0].FullName } else { $null }
+$tagTableMemberImportInvalidEvidence = [System.Collections.Generic.List[string]]::new()
+$tagTableMemberImportFailureReasons = [System.Collections.Generic.List[string]]::new()
+$tagTableMemberImportEvidence = if ($tagTableMemberImportPath) { Read-JsonIfPresent $tagTableMemberImportPath } else { $null }
+$tagTableMemberImportVerified = $false
+
+if (-not $tagTableMemberImportPath) {
+    $tagTableMemberImportFailureReasons.Add('No mcp-import-tagtable-member-acceptance evidence file was found.') | Out-Null
+} elseif ($null -eq $tagTableMemberImportEvidence) {
+    $tagTableMemberImportInvalidEvidence.Add($tagTableMemberImportPath) | Out-Null
+    $tagTableMemberImportFailureReasons.Add('The newest non-empty tag-table import evidence is not valid JSON.') | Out-Null
+} else {
+    if ($tagTableMemberImportEvidence.success -ne $true -or
+        $tagTableMemberImportEvidence.verdict -ne 'VERIFIED_PLC_TAG_TABLE_IMPORT_WITH_TWO_NONSAFETY_TAGS_COMPILE_SAVE_READBACK_AND_DIRECTORY_RESTORE') {
+        $tagTableMemberImportFailureReasons.Add('success and verdict must match the two-tag PLC table import lifecycle.') | Out-Null
+    }
+    $fixture = $tagTableMemberImportEvidence.fixture
+    $fixtureHashesMatch = $fixture -and $fixture.initialSha256 -eq $fixture.backupSha256 -and
+        $fixture.initialSha256 -eq $fixture.projectSha256AfterRestore -and $fixture.initialSha256 -eq $fixture.sourceSha256
+    if ($null -eq $fixture -or $fixture.restored -ne $true -or $fixture.sourceUntouched -ne $true -or
+        $fixture.directoryRestored -ne $true -or $fixture.directoryFileDiffCountAfterRestore -ne 0 -or
+        $fixture.directoryFileCount -ne 9 -or -not $fixtureHashesMatch -or
+        $fixture.projectSha256AfterImport -eq $fixture.initialSha256 -or
+        $fixture.preRestoreDifferenceCount -lt 1 -or
+        [string]::IsNullOrWhiteSpace([string]$fixture.preRestoreInventory) -or
+        -not (Test-Path -LiteralPath ([string]$fixture.preRestoreInventory) -PathType Leaf) -or
+        [string]::IsNullOrWhiteSpace([string]$fixture.source) -or
+        -not (Test-Path -LiteralPath ([string]$fixture.source) -PathType Leaf) -or
+        (Get-FileHash -LiteralPath ([string]$fixture.source) -Algorithm SHA256).Hash -ne [string]$fixture.sourceSha256) {
+        $tagTableMemberImportFailureReasons.Add('fixture must show the pre-restore inventory, a changed project after import, full directory restoration, matching baseline hashes and an untouched source.') | Out-Null
+    } else {
+        $preRestoreInventory = Read-JsonIfPresent ([string]$fixture.preRestoreInventory)
+        $preRestoreProjectFile = @($preRestoreInventory | Where-Object { $_.path -eq (Split-Path -Leaf ([string]$fixture.project)) }) | Select-Object -First 1
+        if ($null -eq $preRestoreInventory -or $null -eq $preRestoreProjectFile -or
+            [string]$preRestoreProjectFile.sha256 -ne [string]$fixture.projectSha256AfterImport) {
+            $tagTableMemberImportFailureReasons.Add('preRestoreInventory must independently match the recorded post-import .ap20 hash.') | Out-Null
+        }
+        $directoryComparison = Compare-ProjectDirectoryInventories (Split-Path -Parent ([string]$fixture.project)) (Split-Path -Parent ([string]$fixture.backup))
+        if (-not $directoryComparison.comparable -or $directoryComparison.differences.Count -ne 0 -or
+            $directoryComparison.leftCount -ne 9 -or $directoryComparison.rightCount -ne 9) {
+            $tagTableMemberImportFailureReasons.Add('the restored project directory must match all nine backup files by path, size and SHA-256.') | Out-Null
+        }
+    }
+
+    $preflight = $tagTableMemberImportEvidence.preflight
+    $mutation = $tagTableMemberImportEvidence.mutation
+    $independent = $tagTableMemberImportEvidence.independentReadback
+    $restoredReadback = $tagTableMemberImportEvidence.restoredReadback
+    $probeName = [string]$mutation.tableName
+    $expectedTagNames = @('Agent_ImportProbe_Enable', 'Agent_ImportProbe_Status')
+    if ($null -eq $preflight -or $preflight.independent -ne $true -or
+        $preflight.allBlocksStandard -ne $true -or $preflight.allBlocksNonFailsafe -ne $true -or
+        $preflight.allBlocksUnprotected -ne $true -or $preflight.allBlocksConsistent -ne $true -or
+        $preflight.allBlockLanguagesClassified -ne $true -or $preflight.allTagsNonSafety -ne $true -or
+        $preflight.destinationAbsentBefore -ne $true -or $preflight.existingTagTableCount -ne 2 -or
+        $preflight.existingTagCount -ne 2 -or $preflight.importToolHasDryRun -ne $false -or
+        -not (Test-Path -LiteralPath ([string]$preflight.report) -PathType Leaf)) {
+        $tagTableMemberImportFailureReasons.Add('preflight must independently classify every block/tag, verify the absent target, and record the no-dryRun condition.') | Out-Null
+    } else {
+        $preflightReport = Read-JsonIfPresent ([string]$preflight.report)
+        $preflightBlocksCall = if ($preflightReport) { $preflightReport.calls | Where-Object { $_.name -eq 'GetBlocks' } | Select-Object -Last 1 } else { $null }
+        $preflightTagsCall = if ($preflightReport) { $preflightReport.calls | Where-Object { $_.name -eq 'GetTags' } | Select-Object -Last 1 } else { $null }
+        $preflightTablesCall = if ($preflightReport) { $preflightReport.calls | Where-Object { $_.name -eq 'GetTagTables' } | Select-Object -Last 1 } else { $null }
+        $preflightBlocks = if ($preflightBlocksCall) { $preflightBlocksCall.response.structuredContent.items } else { $null }
+        $preflightTags = if ($preflightTagsCall) { $preflightTagsCall.response.structuredContent.items } else { $null }
+        $preflightTables = if ($preflightTablesCall) { $preflightTablesCall.response.structuredContent.items } else { $null }
+        if ($null -eq $preflightReport -or $preflightReport.success -ne $true -or
+            $null -eq $preflightBlocksCall -or $preflightBlocksCall.success -ne $true -or @($preflightBlocks).Count -ne 2 -or
+            @($preflightBlocks | Where-Object { $_.isFailsafe -ne $false -or $_.isKnowHowProtected -ne $false -or $_.isConsistent -ne $true -or [string]::IsNullOrWhiteSpace([string]$_.programmingLanguage) }).Count -gt 0 -or
+            $null -eq $preflightTagsCall -or $preflightTagsCall.success -ne $true -or @($preflightTags).Count -ne 2 -or
+            @($preflightTags | Where-Object { $_.isSafety -ne $false }).Count -gt 0 -or
+            $null -eq $preflightTablesCall -or @($preflightTables).Count -ne 2 -or
+            @($preflightTables | Where-Object { $_.name -eq $probeName }).Count -ne 0) {
+            $tagTableMemberImportFailureReasons.Add('preflight report must show two standard non-F blocks, two explicitly non-Safety tags and no destination table.') | Out-Null
+        }
+    }
+
+    if ($null -eq $mutation -or $mutation.tool -ne 'ImportPlcTagTable' -or $mutation.importSucceeded -ne $true -or
+        [string]::IsNullOrWhiteSpace($probeName) -or $mutation.inputTagCount -ne 2 -or $mutation.tagCount -ne 2 -or
+        $mutation.userConstantCount -ne 0 -or $mutation.beforeTagTableCount -ne 2 -or
+        $mutation.afterImportTagTableCount -ne 3 -or $mutation.afterSaveTagTableCount -ne 3 -or
+        $mutation.compile.state -ne 'Success' -or $mutation.compile.errors -ne 0 -or $mutation.compile.warnings -ne 0 -or
+        $mutation.saveSucceeded -ne $true -or $mutation.noPhysicalHardwareTouched -ne $true -or
+        $mutation.noSafetyBlocksOrTagsTouched -ne $true -or @($mutation.tags).Count -ne 2 -or
+        @($mutation.tags | Where-Object { $_.isSafety -ne $false -or $_.dataTypeName -ne 'Bool' }).Count -gt 0 -or
+        [string]::IsNullOrWhiteSpace([string]$mutation.report) -or
+        -not (Test-Path -LiteralPath ([string]$mutation.importPath) -PathType Leaf) -or
+        -not (Test-Path -LiteralPath ([string]$mutation.exportPath) -PathType Leaf)) {
+        $tagTableMemberImportFailureReasons.Add('mutation must prove two non-Safety Bool tags, compile 0/0, save, export and untouched physical/Safety boundaries.') | Out-Null
+    } else {
+        $mutationReport = Read-JsonIfPresent ([string]$mutation.report)
+        $importCall = if ($mutationReport) { $mutationReport.calls | Where-Object { $_.name -eq 'ImportPlcTagTable' } | Select-Object -Last 1 } else { $null }
+        $compileCall = if ($mutationReport) { $mutationReport.calls | Where-Object { $_.name -eq 'CompileSoftware' } | Select-Object -Last 1 } else { $null }
+        $saveCall = if ($mutationReport) { $mutationReport.calls | Where-Object { $_.name -eq 'SaveProject' } | Select-Object -Last 1 } else { $null }
+        $tagTableCalls = if ($mutationReport) { @($mutationReport.calls | Where-Object { $_.name -eq 'GetPlcTagTables' }) } else { @() }
+        $beforeTables = if ($tagTableCalls.Count -ge 1) { $tagTableCalls[0].text | ConvertFrom-Json } else { $null }
+        $afterImportTables = if ($tagTableCalls.Count -ge 2) { $tagTableCalls[1].text | ConvertFrom-Json } else { $null }
+        $afterSaveTables = if ($tagTableCalls.Count -ge 3) { $tagTableCalls[2].text | ConvertFrom-Json } else { $null }
+        $compileData = if ($compileCall) { $compileCall.text | ConvertFrom-Json } else { $null }
+        [xml]$inputXml = Get-Content -LiteralPath ([string]$mutation.importPath) -Raw
+        [xml]$exportXml = Get-Content -LiteralPath ([string]$mutation.exportPath) -Raw
+        $inputTable = $inputXml.SelectSingleNode("//*[local-name()='SW.Tags.PlcTagTable']")
+        $exportTable = $exportXml.SelectSingleNode("//*[local-name()='SW.Tags.PlcTagTable']")
+        $inputMembers = if ($inputTable) { @($inputTable.SelectNodes(".//*[local-name()='SW.Tags.PlcTag']")) } else { @() }
+        $exportMembers = if ($exportTable) { @($exportTable.SelectNodes(".//*[local-name()='SW.Tags.PlcTag']")) } else { @() }
+        if ($null -eq $mutationReport -or $mutationReport.success -ne $true -or
+            $null -eq $importCall -or $importCall.success -ne $true -or
+            $null -eq $compileCall -or $compileCall.success -ne $true -or
+            $null -eq $compileData -or $compileData.state -ne 'Success' -or $compileData.errorCount -ne 0 -or $compileData.warningCount -ne 0 -or
+            $null -eq $saveCall -or $saveCall.success -ne $true -or
+            $tagTableCalls.Count -ne 3 -or
+            @($beforeTables.items).Count -ne 2 -or @($beforeTables.items | Where-Object { $_ -eq $probeName }).Count -ne 0 -or
+            @($afterImportTables.items).Count -ne 3 -or @($afterImportTables.items | Where-Object { $_ -eq $probeName }).Count -ne 1 -or
+            @($afterSaveTables.items).Count -ne 3 -or @($afterSaveTables.items | Where-Object { $_ -eq $probeName }).Count -ne 1 -or
+            @($mutationReport.calls | Where-Object { $_.name -eq 'ExportPlcTagTable' -and $_.success }).Count -lt 2 -or
+            @($inputMembers).Count -ne 2 -or @($exportMembers).Count -ne 2 -or
+            $inputTable.SelectSingleNode("./*[local-name()='AttributeList']/*[local-name()='Name']").InnerText -ne $probeName -or
+            $exportTable.SelectSingleNode("./*[local-name()='AttributeList']/*[local-name()='Name']").InnerText -ne $probeName) {
+            $tagTableMemberImportFailureReasons.Add('mutation report and exact XML input/output must prove two table members, successful export, compile 0/0 and SaveProject.') | Out-Null
+        }
+        foreach ($member in $exportMembers) {
+            $attributes = $member.SelectSingleNode("./*[local-name()='AttributeList']")
+            $tagName = $attributes.SelectSingleNode("./*[local-name()='Name']").InnerText
+            $dataType = $attributes.SelectSingleNode("./*[local-name()='DataTypeName']").InnerText
+            $address = $attributes.SelectSingleNode("./*[local-name()='LogicalAddress']").InnerText
+            if ($tagName -notin $expectedTagNames -or $dataType -ne 'Bool' -or $address -notin @('%M100.0', '%M100.1')) {
+                $tagTableMemberImportFailureReasons.Add('exported PLC tag members do not match the two exact probe names, Bool type and marker addresses.') | Out-Null
+                break
+            }
+        }
+    }
+
+    if ($null -eq $independent -or $independent.success -ne $true -or $independent.allowWrite -ne $false -or
+        $independent.tableWasVisibleAfterSave -ne $true -or $independent.isDefault -ne $false -or
+        $independent.tagCount -ne 2 -or $independent.userConstantCount -ne 0 -or $independent.tagsExplicitlyNonSafety -ne $true -or
+        $null -eq $restoredReadback -or $restoredReadback.success -ne $true -or $restoredReadback.allowWrite -ne $false -or
+        $restoredReadback.tableAbsentAfterFullDirectoryRestore -ne $true -or $restoredReadback.probeTableCount -ne 0 -or
+        $restoredReadback.probeTagCount -ne 0 -or [string]::IsNullOrWhiteSpace([string]$independent.report) -or
+        [string]::IsNullOrWhiteSpace([string]$restoredReadback.report)) {
+        $tagTableMemberImportFailureReasons.Add('independent read-only reports must prove exact table/tag persistence before restore and absence after restore.') | Out-Null
+    } else {
+        $independentReport = Read-JsonIfPresent ([string]$independent.report)
+        $restoredReport = Read-JsonIfPresent ([string]$restoredReadback.report)
+        $independentTagsCall = if ($independentReport) { $independentReport.calls | Where-Object { $_.name -eq 'GetTags' } | Select-Object -Last 1 } else { $null }
+        $independentTablesCall = if ($independentReport) { $independentReport.calls | Where-Object { $_.name -eq 'GetTagTables' } | Select-Object -Last 1 } else { $null }
+        $restoredTagsCall = if ($restoredReport) { $restoredReport.calls | Where-Object { $_.name -eq 'GetTags' } | Select-Object -Last 1 } else { $null }
+        $restoredTablesCall = if ($restoredReport) { $restoredReport.calls | Where-Object { $_.name -eq 'GetTagTables' } | Select-Object -Last 1 } else { $null }
+        $independentTags = if ($independentTagsCall) { $independentTagsCall.response.structuredContent.items } else { $null }
+        $independentTables = if ($independentTablesCall) { $independentTablesCall.response.structuredContent.items } else { $null }
+        $restoredTags = if ($restoredTagsCall) { $restoredTagsCall.response.structuredContent.items } else { $null }
+        $restoredTables = if ($restoredTablesCall) { $restoredTablesCall.response.structuredContent.items } else { $null }
+        $probeTags = @($independentTags | Where-Object { $_.tableName -eq $probeName })
+        if ($null -eq $independentReport -or $independentReport.success -ne $true -or
+            $null -eq $independentTagsCall -or $independentTagsCall.success -ne $true -or
+            @($probeTags).Count -ne 2 -or @($probeTags | Where-Object { $_.isSafety -ne $false -or $_.dataTypeName -ne 'Bool' }).Count -gt 0 -or
+            @($independentTables | Where-Object { $_.name -eq $probeName -and $_.isDefault -eq $false -and $_.tagCount -eq 2 -and $_.userConstantCount -eq 0 }).Count -ne 1 -or
+            $null -eq $restoredReport -or $restoredReport.success -ne $true -or
+            $null -eq $restoredTagsCall -or $restoredTagsCall.success -ne $true -or
+            @($restoredTags | Where-Object { $_.tableName -eq $probeName -or $_.name -in $expectedTagNames }).Count -ne 0 -or
+            @($restoredTables | Where-Object { $_.name -eq $probeName }).Count -ne 0) {
+            $tagTableMemberImportFailureReasons.Add('independent reports must read back both non-Safety members, then show no probe tags/table after restoring the directory.') | Out-Null
+        }
+    }
+    $tagTableMemberImportVerified = $tagTableMemberImportFailureReasons.Count -eq 0
+}
+
+if ($tagTableMemberImportVerified) {
+    Add-UniqueFinding $verified $tagTableMemberImportFinding
+} else {
+    Add-UniqueFinding $notVerified 'MCP PLC tag table import with members evidence'
+}
+
+$tagTableMemberImportLifecycle = [ordered]@{
+    status = if ($tagTableMemberImportVerified) { 'verified' } elseif ($tagTableMemberImportInvalidEvidence.Count -gt 0) { 'invalid' } else { 'not_verified' }
+    finding = $tagTableMemberImportFinding
+    path = $tagTableMemberImportPath
+    verdict = if ($tagTableMemberImportEvidence) { $tagTableMemberImportEvidence.verdict } else { $null }
+    failureReasons = @($tagTableMemberImportFailureReasons)
+    invalidEvidence = @($tagTableMemberImportInvalidEvidence)
+}
+
 $blockGroupLifecycleFinding = 'MCP block-group lifecycle: create/delete/compile/save + independent readback'
 $blockGroupLifecycleFiles = @(
     Get-ChildItem -LiteralPath (Join-Path $WorkspaceRoot '70-runs\e2e') -Recurse -Filter 'mcp-blockgroup-acceptance-*.json' -File -ErrorAction SilentlyContinue |
@@ -1209,6 +1398,7 @@ $result = [ordered]@{
         instanceDbLifecycle = $instanceDbLifecycle
         tagTableLifecycle = $tagTableLifecycle
         tagTableImportLifecycle = $tagTableImportLifecycle
+        tagTableMemberImportLifecycle = $tagTableMemberImportLifecycle
         blockGroupLifecycle = $blockGroupLifecycle
     }
     tagLifecycle = $tagLifecycle
@@ -1216,6 +1406,7 @@ $result = [ordered]@{
     instanceDbLifecycle = $instanceDbLifecycle
     tagTableLifecycle = $tagTableLifecycle
     tagTableImportLifecycle = $tagTableImportLifecycle
+    tagTableMemberImportLifecycle = $tagTableMemberImportLifecycle
     blockGroupLifecycle = $blockGroupLifecycle
 }
 $json = $result | ConvertTo-Json -Depth 10
