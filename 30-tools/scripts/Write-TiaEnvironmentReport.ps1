@@ -61,15 +61,16 @@ function Get-OpennessGroupMembership {
 }
 
 function Get-McpServers {
-    $mcpRoot = Join-Path $WorkspaceRoot '30-tools\mcp'
+    # Los binarios viven bajo 35-runtime\v<N>\bin\<servidor>\, un subarbol por version de TIA.
+    $mcpRoot = Join-Path $WorkspaceRoot '35-runtime'
     if (-not (Test-Path -LiteralPath $mcpRoot -PathType Container)) { return @() }
 
     $items = Get-ChildItem -LiteralPath $mcpRoot -Recurse -File -Filter '*.exe' -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -eq 'TiaMcpServer.exe' } |
         ForEach-Object {
             $relative = $_.FullName.Substring($WorkspaceRoot.Length).TrimStart('\').Replace('\', '/')
-            if ($relative -notmatch '^30-tools/mcp/[^/]+/bin/v20/TiaMcpServer\.exe$') { return }
-            $serverRoot = Split-Path (Split-Path $_.DirectoryName -Parent) -Parent
+            if ($relative -notmatch '^35-runtime/v[0-9.]+/bin/[^/]+/TiaMcpServer\.exe$') { return }
+            $serverRoot = $_.DirectoryName
             [pscustomobject]@{
                 name = Split-Path $serverRoot -Leaf
                 path = $relative

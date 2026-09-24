@@ -12,7 +12,7 @@ param(
 #
 # Excluded on purpose even though they pass on a dev machine with the binaries already built:
 # server-manifest, harness-config, harness-adapters, sync-harness-configs, portable-package-content
-# (all resolve 30-tools/mcp/*/bin/v20/TiaMcpServer.exe or the gitignored .mcp.json/servers.local.json).
+# (all resolve 35-runtime/v*/bin/*/TiaMcpServer.exe or the gitignored .mcp.json/servers.local.json).
 $ciSafeCheckNames = @(
     'knowledge', 'public-boundary', 'runtime-media-discovery', 'tag-export-converter',
     'semantic-workflow', 'check-tia-standards', 'eval-freshness', 'tia-block-metadata',
