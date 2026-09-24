@@ -1253,6 +1253,24 @@ de importación de tabla enlaza el fixture V20 separado de R26.
 
 #### API Openness y Computer Use
 
+Cruce inicial de importadores PLC basado en documentación oficial Siemens V20. Esto identifica
+miembros API documentados; no demuestra que un wrapper MCP concreto los llame ni que la acción se
+haya ejecutado localmente:
+
+| Objeto | API Siemens V20 documentada | Evidencia local | Estado |
+|---|---|---|---|
+| Bloque PLC, incluido GlobalDB estándar | `PlcSoftware.BlockGroup.Blocks.Import(FileInfo, ImportOptions.Override)` | `ImportBlock`/`PlcBuildAndImport` aparecen en roster; falta roundtrip GlobalDB V20. `BuildPlcGlobalDbXml` genera XML V21 y no autoriza importarlo como V20. | API documentada; wrapper MCP y fixture V20 no verificados. [Importing block](https://docs.tia.siemens.cloud/r/en-us/v20/tia-portal-openness-api-for-automation-of-engineering-workflows/export/import/importing/exporting-data-of-a-plc-device/blocks/importing-block), [UDT & DB](https://docs.tia.siemens.cloud/r/en-us/v20/tia-portal-openness-api-for-automation-of-engineering-workflows/export/import/importing/exporting-data-of-a-plc-device/blocks/export/import-of-udt-db) |
+| UDT desde SimaticML XML | `plcSoftware.TypeGroup.Types.Import(FileInfo, ImportOptions.Override)` | `ImportType` aparece en los rosters; no se ejecutó una importación V20. | API documentada; wrapper MCP y fixture V20 no verificados. [Importing user data type](https://docs.tia.siemens.cloud/r/en-us/v20/tia-portal-openness-api-for-automation-of-engineering-workflows/export/import/importing/exporting-data-of-a-plc-device/blocks/importing-user-data-type) |
+| UDT desde documento `.s7dcl` | `plcSoftware.TypeGroup.Types.ImportFromDocuments(DirectoryInfo, fileNameWithoutExtension, ImportDocumentOptions.Override)`; devuelve estado, tipos importados y mensajes | El roster publica `ImportTypesFromDocuments`; no se han probado conteos ni readback exacto para una importación UDT. | API documentada; wrapper MCP y fixture V20 no verificados. [Importing UDT from document](https://docs.tia.siemens.cloud/r/en-us/v20/tia-portal-openness-api-for-automation-of-engineering-workflows/export/import/importing/exporting-data-of-a-plc-device/blocks/importing-udt-from-document) |
+| Tabla de tags PLC | `plcSoftware.TagTableGroup.TagTables.Import(FileInfo, ImportOptions.Override)` | Dos fixtures V20 aceptadas: tabla vacía y dos tags Bool estándar no Safety, compile/save 0/0, readback independiente y restauración. | API documentada y ruta MCP fixture verificada; cliente Openness independiente pendiente. [Importing PLC tag table](https://docs.tia.siemens.cloud/r/es-es/v20/tia-portal-openness-api-para-la-automatizacion-de-flujos-de-trabajo-de-ingenieria/exportacion/importacion/importacion/exportacion-de-datos-de-un-dispositivo-plc/tablas-de-variables/importar-tabla-de-variables-plc) |
+
+Siemens V20 documenta que la API puede importar/exportar F-blocks. La capacidad de Siemens no elimina
+la exclusión local: no importar ni editar F-blocks/tags Safety. Todo XML debe corresponder a la
+versión/objeto y pasar el preflight local. Siemens también exige que los objetos raíz de un mismo
+archivo sean de una sola clase y que todos sean válidos; si uno falla, no se importa ninguno. Por eso
+las primeras aceptaciones deben usar un objeto por operación y leer el resultado completo después.
+[Reglas oficiales de importación](https://docs.tia.siemens.cloud/r/en-us/v20/tia-portal-openness-api-for-automation-of-engineering-workflows/export/import/overview/importing-configuration-data).
+
 | Superficie | Capacidad conocida | Evidencia local de acción | Estado |
 |---|---|---|---|
 | Siemens Openness V20 | Siemens documenta leer, crear, modificar, borrar, compilar, importar/exportar y diagnosticar ciertos objetos; depende de versión/tipo/modelo. | Probe independiente `.NET Framework 4.8/x64`: `Api.Global.Openness().Initialize(20)`, grupo Openness, carga de `Siemens.Engineering 20.0.0.0` y `TiaPortal.GetProcesses()` en solo lectura; no Attach/OpenProject/escritura. [evidencia](../../../70-runs/environment/direct-openness-20260922-final.json) | **Fixture read-only** para inicialización/enum. El mapeo acción a acción MCP → miembro Openness sigue sin probar. |
