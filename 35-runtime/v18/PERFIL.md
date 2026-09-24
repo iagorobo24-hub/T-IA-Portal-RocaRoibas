@@ -17,7 +17,7 @@
 | Compilación | **0 errores** |
 | Doctor | `Active Version: V18`; ve V16/V17/V18 con `Engineering: OK`; grupo `True` |
 | Herramientas MCP (perfil `read`) | **49**, ninguna de documentos |
-| **Las 49 a nivel `Fixture`** | ✅ **todas ejecutadas** contra un `.ap18` real — [INVENTARIO-LECTURA.md](runs/INVENTARIO-LECTURA.md) |
+| **Las 49 a nivel `Fixture`** | ✅ **todas ejecutadas** contra un `.ap18` real — [INVENTARIO-LECTURA.md](INVENTARIO-LECTURA.md) |
 | `GetSoftwareTree`, `GetBlocks` | ✅ — `isFailsafe:false`, `isKnowHowProtected:false` |
 | **Export textual** `GenerateBlockSource` | ✅ — `.scl`, `.db` y `.udt` legibles |
 | **`GetCrossReferences`** / `WhereUsed` | ✅ — referencias reales con `%FB1` / `%DB1` |

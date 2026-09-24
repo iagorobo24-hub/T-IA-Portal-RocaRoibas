@@ -8,9 +8,13 @@
 
 ## 1. Qué es esto
 
-Un workspace para operar **Siemens TIA Portal V20** mediante la API Openness, a través de dos
+Un workspace para operar **Siemens TIA Portal** mediante la API Openness, a través de dos
 servidores MCP. El objetivo no es "tener herramientas": es que el agente **sepa de automatización
 industrial** y trabaje como lo haría el ingeniero responsable.
+
+La versión de TIA no es una propiedad del workspace sino **de cada máquina**: hoy hay perfiles
+verificados para **V18** y **V20**. Cuál aplica aquí lo dice la §9, y solo el artefacto
+`70-runs/doctor/<hostname>.json` lo decide.
 
 - `10-kb/` — cómo funciona TIA Portal. Lo que hay que saber.
 - `20-standards/` — cómo se hacen las cosas aquí. Lo que hay que respetar.
@@ -252,15 +256,72 @@ adaptador virtual de Siemens y el target debe ser una instancia virtual desechab
 
 ---
 
-## 9. Estado del entorno
+## 9. Estado del entorno — **es por máquina, no global**
 
-| | |
-|---|---|
-| TIA Portal | **V20** (V19 instalado pero no soportado — ADR-002; receta V21 preparada y sin verificar en esta máquina — ADR-014) |
-| PLCSIM | V19 |
-| PLCSIM Advanced | **V6.0.0.1**; API nativa V6 inicializada por probe de solo lectura; la conducta runtime sigue pendiente |
-| `tia-inspect` | `30-tools/mcp/tia-inspect/bin/v20/TiaMcpServer.exe --tia-major-version 20` |
-| `tia-create` | **V20 2.7.2**, perfil `lite`, compilado y verificado localmente |
+> **El entorno NO se declara aquí.** Este workspace vive en más de un ordenador y cada uno tiene
+> versiones distintas de TIA Portal. Un contrato que afirme un estado global induce al agente a
+> operar sobre una premisa falsa, que es justo lo que el resto de este documento existe para
+> impedir. Ver `00-meta/decisiones/ADR-015-estado-equipo-equipotecnico.md`.
 
-Si `Doctor` dice `User in 'Siemens TIA Openness' user group: False`, **nada va a funcionar**.
-Manda al usuario al README: hay que añadirse al grupo como administrador y cerrar sesión.
+**La fuente de verdad es `70-runs/doctor/<hostname>.json`**, generado en esa misma máquina.
+
+**Y todo lo que depende de la versión vive en `35-runtime/v<N>/`** — binarios, fixtures, evidencia y
+el `PERFIL.md` que declara qué funciona en esa versión. El conocimiento (`10-kb/`), los estándares
+(`20-standards/`), la librería (`60-library/`), los ADRs (`00-meta/`) y los proyectos
+(`40-projects/`) **no se duplican por versión**: son compartidos. Ver `35-runtime/README.md`.
+
+### Regla de arranque
+
+1. Mira si existe `70-runs/doctor/<hostname>.json` para el hostname actual.
+2. **Si no existe, el entorno está NO VERIFICADO: para antes de tocar TIA** y genera el artefacto.
+3. `70-runs/` está en `.gitignore`: el artefacto **no viaja con el repo**, es local por diseño.
+   Que otra máquina tenga el suyo no dice nada de ésta.
+4. **Ninguna evidencia heredada vale como verificación local.** Los logs, manifiestos y
+   `package-info.json` que llegan con una copia son histórico, no estado. El
+   `TiaMcpServer.startup.log` del equipo anterior está archivado en `70-runs/heredado/`.
+
+### Máquinas conocidas
+
+| | `EQUIPOTECNICO` (usuario `Dpto. Técnico`) | el equipo de origen |
+|---|---|---|
+| TIA Portal | **V15.1 Upd5, V16 Upd6, V17 Upd7, V18 SP1 Upd5** — ninguna ≥ V19 | V19 y **V20** |
+| Openness | instalado y registrado en las cuatro | V20 |
+| PLCSIM clásico | V15.1, V17, **V18 SP2**, V5.4 legacy. **No hay V16** | V19 |
+| PLCSIM Advanced | **V5.0 Upd2** (API 5.0) | V6.0.0.1 |
+| Perfil activo | **`35-runtime/v18/`** ✅ | `35-runtime/v20/` |
+| `tia-inspect` | `35-runtime/v18/bin/tia-inspect/TiaMcpServer.exe --tia-major-version 18` | `35-runtime/v20/bin/tia-inspect/...` |
+| `tia-create` | ❌ **no disponible**: su bundle es V20/V21 y no hay vía de port | V20 2.7.2, perfil `lite` |
+| Estado | `70-runs/doctor/equipotecnico.json` · port: `35-runtime/v18/runs/RESUMEN.md` | sin artefacto local aún |
+
+Cada perfil declara lo suyo en `35-runtime/v<N>/PERFIL.md`. **Léelo antes de operar con esa versión.**
+
+Los binarios de `35-runtime/v20/` **arrancan** en `EQUIPOTECNICO` pero no sirven: Doctor reporta
+`none found (>= V19)`. No los uses aquí. Y el port a V18 **está pendiente de revalidar en el equipo
+que tiene V20** — ver `35-runtime/v20/PERFIL.md`.
+
+### Qué NO tienes en V18
+
+El port a V18 conserva lectura de árbol, bloques, tipos, tags, watch tables, compilación,
+**export textual `.scl`/`.awl`/`.db`/`.udt`** (`GenerateSource`) y **`GetCrossReferences`**.
+No tienes:
+
+- **SIMATIC Source Documents** (`.s7dcl`/`.s7res`): la API no existe antes de V20. `GetBlockSource`
+  con `format=document` **cae a XML automáticamente** y lo dice en `Format`. No es un fallo.
+- **Renombrar tags y tablas de tags**: `PlcTagTable.Name` y `PlcTag.Name` son de solo lectura antes
+  de V20; devuelven `NotSupported`. Renombrar bloques y tipos **sí** funciona.
+- **`tia-create` entero**: nada de crear proyectos, hardware, redes ni HMI.
+
+Por debajo de V18 no se soporta: V17 pierde `GetCrossReferences`, y V16/V15.1 pierden la API
+`Safety`, sin la cual **no se puede construir la barrera `isFailsafe` que exige §3.3** — ahí solo
+cabe lectura pura. Detalle en `00-meta/07-viabilidad-openness-v15-v18.md`.
+
+### Dos cosas que parecen averías y no lo son
+
+- **`EngineeringSecurityException: Security error` con un binario recién compilado.** TIA **V18**
+  mantiene una whitelist de aplicaciones Openness en
+  `HKLM\SOFTWARE\Siemens\Automation\Openness\18.0\Whitelist\<app>.exe`. Un ejecutable nunca visto
+  **falla el primer intento y ese intento crea la entrada: reintenta antes de diagnosticar nada
+  más.** No es el grupo de Windows ni la licencia. V15.1, V16 y V17 no tienen whitelist.
+- **`Doctor` dice `User in 'Siemens TIA Openness' user group: False`.** Entonces nada va a
+  funcionar. Manda al usuario al README: hay que añadirse al grupo como administrador y **cerrar
+  sesión y volver a entrar**. El agente no se añade solo.
