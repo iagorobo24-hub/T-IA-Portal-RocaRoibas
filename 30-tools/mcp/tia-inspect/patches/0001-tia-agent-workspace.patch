@@ -1,5 +1,5 @@
 diff --git a/src/TiaMcpServer/CliOptions.cs b/src/TiaMcpServer/CliOptions.cs
-index 7c9f3b3186f0881c9030f7d254d5d767c175f2ca..ba578f86aa33fe3488856cb8b9ea98edabfdd064 100644
+index 7c9f3b3..ba578f8 100644
 --- a/src/TiaMcpServer/CliOptions.cs
 +++ b/src/TiaMcpServer/CliOptions.cs
 @@ -6,6 +6,8 @@ public class CliOptions
@@ -31,8 +31,61 @@ index 7c9f3b3186f0881c9030f7d254d5d767c175f2ca..ba578f86aa33fe3488856cb8b9ea98ed
                      case "-logging":
                      case "--logging":
                          if (i + 1 < args.Length && int.TryParse(args[i + 1], out int l))
+diff --git a/src/TiaMcpServer/ModelContextProtocol/Helper.cs b/src/TiaMcpServer/ModelContextProtocol/Helper.cs
+index 60a493d..95deb53 100644
+--- a/src/TiaMcpServer/ModelContextProtocol/Helper.cs
++++ b/src/TiaMcpServer/ModelContextProtocol/Helper.cs
+@@ -19,7 +19,7 @@ public static List<Attribute> GetAttributeList(IEngineeringObject obj)
+                     attributes.Add(new Attribute
+                     {
+                         Name = attr.Name,
+-                        Value = value,
++                        Value = NormalizeAttributeValue(value),
+                         AccessMode = Enum.GetName(typeof(EngineeringAttributeAccessMode), attr.AccessMode)
+                     });
+                 }
+@@ -28,6 +28,39 @@ public static List<Attribute> GetAttributeList(IEngineeringObject obj)
+             return attributes;
+         }
+ 
++        /// <summary>
++        /// Deja pasar los valores simples y convierte a texto cualquier otra cosa.
++        ///
++        /// Algunos atributos de Openness devuelven objetos del modelo (DirectoryInfo, CultureInfo,
++        /// MultilingualText...) cuyo grafo tiene ciclos Parent/Root. Serializarlos tal cual hacia
++        /// que System.Text.Json abortara con "A possible object cycle was detected" y la herramienta
++        /// entera fallara: le pasaba a GetProject, GetDevices, GetDeviceInfo y GetDeviceItemInfo.
++        ///
++        /// Es el mismo criterio que ya aplica ResponseConstantInfo.Value, que se stringifica a
++        /// proposito para que el esquema de salida sea estable.
++        ///
++        /// Los tipos simples se conservan con su tipo JSON original, asi que la salida de los
++        /// atributos que ya funcionaban no cambia.
++        /// </summary>
++        private static object? NormalizeAttributeValue(object? value)
++        {
++            if (value == null)
++            {
++                return null;
++            }
++
++            var type = value.GetType();
++            if (type.IsPrimitive || type.IsEnum
++                || value is string || value is decimal
++                || value is DateTime || value is DateTimeOffset
++                || value is TimeSpan || value is Guid)
++            {
++                return value;
++            }
++
++            return value.ToString();
++        }
++
+         /// <summary>
+         /// First available translation of a MultilingualText (tag and constant comments), or
+         /// null when the text has no items. Openness returns one item per project language.
 diff --git a/src/TiaMcpServer/ModelContextProtocol/McpPrompts.cs b/src/TiaMcpServer/ModelContextProtocol/McpPrompts.cs
-index f4d06680a5b0143921e3627cb01892348eb54881..f4e2f37c8f34918a840bb9f14399e41b3bbbbe66 100644
+index f4d0668..f4e2f37 100644
 --- a/src/TiaMcpServer/ModelContextProtocol/McpPrompts.cs
 +++ b/src/TiaMcpServer/ModelContextProtocol/McpPrompts.cs
 @@ -38,24 +38,26 @@ public static string Connect()
@@ -96,8 +149,25 @@ index f4d06680a5b0143921e3627cb01892348eb54881..f4e2f37c8f34918a840bb9f14399e41b
          public static string ImportBlocksFromDocuments(string softwarePath, string importPath, string groupPath = "", string regexName = "", string importOption = "Override")
          {
              return $@"Import multiple program blocks from SIMATIC SD documents into PLC software (requires TIA Portal V20 or newer).
+diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServer.Documents.cs b/src/TiaMcpServer/ModelContextProtocol/McpServer.Documents.cs
+index 31b67ff..c7684f0 100644
+--- a/src/TiaMcpServer/ModelContextProtocol/McpServer.Documents.cs
++++ b/src/TiaMcpServer/ModelContextProtocol/McpServer.Documents.cs
+@@ -1,3 +1,7 @@
++#if TIA_V20_PLUS
++// SIMATIC Source Documents (.s7dcl/.s7res). La API (ImportDocumentOptions,
++// DocumentExportResult, PlcBlock.ExportAsDocuments) no existe antes de Openness V20.
++// Compilado fuera para TIA < V20. Ver 00-meta/07-viabilidad-openness-v15-v18.md.
+ using Microsoft.Extensions.Logging;
+ using ModelContextProtocol;
+ using ModelContextProtocol.Server;
+@@ -168,3 +172,4 @@ public static async Task<ResponseExportTypesAsDocuments> ExportTypesAsDocuments(
+         #endregion
+     }
+ }
++#endif // TIA_V20_PLUS
 diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServer.Lookup.cs b/src/TiaMcpServer/ModelContextProtocol/McpServer.Lookup.cs
-index 0012dd32781fea5c9d7fe36b001b2d9d424e4e71..0d13df0005d33e41e005b4aeace1ed8b4a8fd0f0 100644
+index 0012dd3..0d13df0 100644
 --- a/src/TiaMcpServer/ModelContextProtocol/McpServer.Lookup.cs
 +++ b/src/TiaMcpServer/ModelContextProtocol/McpServer.Lookup.cs
 @@ -68,6 +68,12 @@ public static ResponseOpenTiaProject OpenTiaProject(
@@ -114,7 +184,7 @@ index 0012dd32781fea5c9d7fe36b001b2d9d424e4e71..0d13df0005d33e41e005b4aeace1ed8b
  
                  if (!connected && !Portal.ConnectPortal())
 diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServer.cs b/src/TiaMcpServer/ModelContextProtocol/McpServer.cs
-index eb1ec81fbaeac658f057f17b4feeb1f4aeaf6a51..591ba819be44712371599a5e17c283c8a764c02f 100644
+index eb1ec81..0b8a98b 100644
 --- a/src/TiaMcpServer/ModelContextProtocol/McpServer.cs
 +++ b/src/TiaMcpServer/ModelContextProtocol/McpServer.cs
 @@ -4,6 +4,7 @@
@@ -254,7 +324,19 @@ index eb1ec81fbaeac658f057f17b4feeb1f4aeaf6a51..591ba819be44712371599a5e17c283c8
          public static ResponseImportType ImportType(
              [Description("softwarePath: defines the path in the project structure to the plc software")] string softwarePath,
              [Description("groupPath: defines the path in the project structure to the group, where to import the type")] string groupPath,
-@@ -1701,7 +1740,7 @@ public static async Task<ResponseExportBlocksAsDocuments> ExportBlocksAsDocument
+@@ -1545,6 +1584,11 @@ public static async Task<ResponseExportTypes> ExportTypes(
+         #endregion
+ 
+         #region documents
++#if TIA_V20_PLUS
++        // SIMATIC Source Documents (.s7dcl/.s7res). ImportDocumentOptions y DocumentExportResult
++        // no existen antes de Openness V20. Compilado fuera para TIA < V20: estas herramientas no
++        // se registran y el servidor no las anuncia en tools/list.
++        // Ver 00-meta/07-viabilidad-openness-v15-v18.md.
+ 
+         [McpServerTool(Name = "ExportAsDocuments", Title = "Export block as documents", Destructive = true, Idempotent = true, OpenWorld = false), Description("Export as documents (.s7dcl/.s7res) from a block in the plc software to path")]
+         public static ResponseExportAsDocuments ExportAsDocuments(
+@@ -1701,7 +1745,7 @@ public static async Task<ResponseExportBlocksAsDocuments> ExportBlocksAsDocument
              }
          }
  
@@ -263,7 +345,7 @@ index eb1ec81fbaeac658f057f17b4feeb1f4aeaf6a51..591ba819be44712371599a5e17c283c8
          public static ResponseImportFromDocuments ImportFromDocuments(
              [Description("softwarePath: defines the path in the project structure to the plc software")] string softwarePath,
              [Description("groupPath: optional path within the PLC program where the block should be placed (empty for root)")] string groupPath,
-@@ -1763,7 +1802,7 @@ public static ResponseImportFromDocuments ImportFromDocuments(
+@@ -1763,7 +1807,7 @@ public static ResponseImportFromDocuments ImportFromDocuments(
              }
          }
  
@@ -272,8 +354,16 @@ index eb1ec81fbaeac658f057f17b4feeb1f4aeaf6a51..591ba819be44712371599a5e17c283c8
          public static async Task<ResponseImportBlocksFromDocuments> ImportBlocksFromDocuments(
              IProgress<ProgressNotificationValue> progress,
              [Description("softwarePath: defines the path in the project structure to the plc software")] string softwarePath,
+@@ -1934,6 +1978,7 @@ internal static List<string> GetResMissingEnUsIds(string directory, string baseN
+             }
+             return missing;
+         }
++#endif // TIA_V20_PLUS
+ 
+         #endregion
+     }
 diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Blocks.cs b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Blocks.cs
-index c747acd418c58770a190dc275f4fc7802ee1c5d8..6de4260290d494483632f64e09eb7cb81e44aaea 100644
+index c747acd..6de4260 100644
 --- a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Blocks.cs
 +++ b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Blocks.cs
 @@ -1,5 +1,8 @@
@@ -333,10 +423,18 @@ index c747acd418c58770a190dc275f4fc7802ee1c5d8..6de4260290d494483632f64e09eb7cb8
                  return Created("FB", block.Name, Join(groupPath, block.Name));
              });
 diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Documents.cs b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Documents.cs
-index bb1c61a0e6c2d351ab9afc9c3f58b41a344850d9..e9f68c3ee027622a2c1bfecb283542ffe4acb8ce 100644
+index bb1c61a..9c34953 100644
 --- a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Documents.cs
 +++ b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Documents.cs
-@@ -17,17 +17,15 @@ namespace TiaMcpServer.ModelContextProtocol
+@@ -1,3 +1,7 @@
++#if TIA_V20_PLUS
++// SIMATIC Source Documents (.s7dcl/.s7res). La API (ImportDocumentOptions,
++// DocumentExportResult, PlcBlock.ExportAsDocuments) no existe antes de Openness V20.
++// Compilado fuera para TIA < V20. Ver 00-meta/07-viabilidad-openness-v15-v18.md.
+ using ModelContextProtocol;
+ using ModelContextProtocol.Server;
+ using System;
+@@ -17,17 +21,15 @@ namespace TiaMcpServer.ModelContextProtocol
      /// none existing - both tools are new. File I/O: reads the caller's '.s7dcl'/'.s7res' files;
      /// writes none.
      ///
@@ -358,7 +456,7 @@ index bb1c61a0e6c2d351ab9afc9c3f58b41a344850d9..e9f68c3ee027622a2c1bfecb283542ff
          public static ResponseImportTypeFromDocuments ImportTypeFromDocuments(
              [Description("softwarePath: defines the path in the project structure to the plc software")] string softwarePath,
              [Description("groupPath: root-relative PLC data type group that receives the type; empty uses the PLC data types root. A leading 'PLC data types' segment, as written by preservePath exports, is accepted and ignored")] string groupPath,
-@@ -51,8 +49,7 @@ public static ResponseImportTypeFromDocuments ImportTypeFromDocuments(
+@@ -51,8 +53,7 @@ public static ResponseImportTypeFromDocuments ImportTypeFromDocuments(
              });
          }
  
@@ -368,8 +466,13 @@ index bb1c61a0e6c2d351ab9afc9c3f58b41a344850d9..e9f68c3ee027622a2c1bfecb283542ff
          public static async Task<ResponseImportTypesFromDocuments> ImportTypesFromDocuments(
              IProgress<ProgressNotificationValue> progress,
              [Description("softwarePath: defines the path in the project structure to the plc software")] string softwarePath,
+@@ -128,3 +129,4 @@ private static JsonObject ImportMeta(int importedCount, List<string> warnings)
+         #endregion
+     }
+ }
++#endif // TIA_V20_PLUS
 diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.ImportSources.cs b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.ImportSources.cs
-index ca306577000b0d43ad49b3ed495ca3cedbe3463d..1f0c5f93baf3605cdeda910cf66feb9eb8ddf4dc 100644
+index ca30657..1f0c5f9 100644
 --- a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.ImportSources.cs
 +++ b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.ImportSources.cs
 @@ -23,8 +23,7 @@ public static partial class McpServerWrite
@@ -384,10 +487,10 @@ index ca306577000b0d43ad49b3ed495ca3cedbe3463d..1f0c5f93baf3605cdeda910cf66feb9e
              [Description("importPath: directory on this machine to walk recursively for *.db, *.awl, *.scl and *.udt files")] string importPath,
 diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.LegacyMutations.cs b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.LegacyMutations.cs
 new file mode 100644
-index 0000000000000000000000000000000000000000..a3c10eeaf457390426ae94e40c7e872ee95bdb46
+index 0000000..59af1b3
 --- /dev/null
 +++ b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.LegacyMutations.cs
-@@ -0,0 +1,259 @@
+@@ -0,0 +1,264 @@
 +using ModelContextProtocol;
 +using ModelContextProtocol.Server;
 +using Microsoft.Extensions.Logging;
@@ -454,6 +557,10 @@ index 0000000000000000000000000000000000000000..a3c10eeaf457390426ae94e40c7e872e
 +                };
 +            });
 +        }
++
++#if TIA_V20_PLUS
++        // SIMATIC Source Documents: la API no existe antes de Openness V20.
++        // Ver 00-meta/07-viabilidad-openness-v15-v18.md.
 +
 +        // Deliberately not registered until every incoming document and collision is classified.
 +        public static ResponseImportFromDocuments ImportFromDocuments(
@@ -602,6 +709,7 @@ index 0000000000000000000000000000000000000000..a3c10eeaf457390426ae94e40c7e872e
 +
 +            return Task.FromResult(response);
 +        }
++#endif // TIA_V20_PLUS
 +
 +        [McpServerTool(Name = "SaveProject", Title = "Save project", Destructive = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true),
 +         Description("Save the current TIA Portal local project/session; available only in --allow-write mode")]
@@ -648,7 +756,7 @@ index 0000000000000000000000000000000000000000..a3c10eeaf457390426ae94e40c7e872e
 +    }
 +}
 diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.MoveCopy.cs b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.MoveCopy.cs
-index e5eb0d3185b8c77a8c792279fc781b4665c28aa4..958d7d66b6c2bbaf50cc4048ddd78d3129541f9d 100644
+index e5eb0d3..958d7d6 100644
 --- a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.MoveCopy.cs
 +++ b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.MoveCopy.cs
 @@ -66,8 +66,8 @@ public static ResponseRenamed MoveBlock(
@@ -674,7 +782,7 @@ index e5eb0d3185b8c77a8c792279fc781b4665c28aa4..958d7d66b6c2bbaf50cc4048ddd78d31
              [Description("softwarePath: defines the path in the project structure to the plc software")] string softwarePath,
              [Description("typePath: root-relative path of the type to move")] string typePath,
 diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Tables.cs b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Tables.cs
-index 44fb5cc64ca9e88fc9704131436a6af92b5aab1a..596e49a53b83be5ffa10c08b2d2bcc3fe286422f 100644
+index 44fb5cc..596e49a 100644
 --- a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Tables.cs
 +++ b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Tables.cs
 @@ -162,8 +162,7 @@ public static ResponseDeleted DeleteExternalSourceGroup(
@@ -688,7 +796,7 @@ index 44fb5cc64ca9e88fc9704131436a6af92b5aab1a..596e49a53b83be5ffa10c08b2d2bcc3f
              [Description("softwarePath: defines the path in the project structure to the plc software")] string softwarePath,
              [Description("sourcePath: root-relative path of the external source, e.g. SourceGroup1/Source_1")] string sourcePath,
 diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Tags.cs b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Tags.cs
-index b3d9d902832a6baacf3a39406d9122e8014c9a6b..94c393070259d44dc75fe71bd337bc52481c16bf 100644
+index b3d9d90..94c3930 100644
 --- a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Tags.cs
 +++ b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Tags.cs
 @@ -85,8 +85,7 @@ public static ResponseDeleted DeleteTagTableGroup(
@@ -702,7 +810,7 @@ index b3d9d902832a6baacf3a39406d9122e8014c9a6b..94c393070259d44dc75fe71bd337bc52
              [Description("softwarePath: defines the path in the project structure to the plc software")] string softwarePath,
              [Description("groupPath: root-relative tag table group that receives the table; empty uses the PLC tags root. A leading 'PLC tags' segment, as written by preservePath exports, is accepted and ignored")] string groupPath,
 diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.cs b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.cs
-index ce9f73749b66e8a16181bdca977a88c057370d92..48f64154cd9b0380bf450782f0aad999b50e1cbf 100644
+index ce9f737..48f6415 100644
 --- a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.cs
 +++ b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.cs
 @@ -10,8 +10,8 @@ namespace TiaMcpServer.ModelContextProtocol
@@ -737,7 +845,7 @@ index ce9f73749b66e8a16181bdca977a88c057370d92..48f64154cd9b0380bf450782f0aad999
              catch (PortalException pex)
              {
 diff --git a/src/TiaMcpServer/ModelContextProtocol/Responses.cs b/src/TiaMcpServer/ModelContextProtocol/Responses.cs
-index f3bcdde2278e95cf2f3a671357050b510ff3b841..74b30f2e20023e83df70b223e576d6c407ae987c 100644
+index f3bcdde..74b30f2 100644
 --- a/src/TiaMcpServer/ModelContextProtocol/Responses.cs
 +++ b/src/TiaMcpServer/ModelContextProtocol/Responses.cs
 @@ -42,6 +42,8 @@ public class ResponseBlockInfo : ResponseAttributes
@@ -750,7 +858,7 @@ index f3bcdde2278e95cf2f3a671357050b510ff3b841..74b30f2e20023e83df70b223e576d6c4
          public bool? IsConsistent { get; set; }
          public string? HeaderName { get; set; }
 diff --git a/src/TiaMcpServer/ModelContextProtocol/WritePolicy.cs b/src/TiaMcpServer/ModelContextProtocol/WritePolicy.cs
-index 8ce0c6e4c06ca98d17837ba7646dac703831aaec..6808f7f295e45d965d2957e24d556e55f39f533e 100644
+index 8ce0c6e..6808f7f 100644
 --- a/src/TiaMcpServer/ModelContextProtocol/WritePolicy.cs
 +++ b/src/TiaMcpServer/ModelContextProtocol/WritePolicy.cs
 @@ -1,4 +1,5 @@
@@ -781,10 +889,10 @@ index 8ce0c6e4c06ca98d17837ba7646dac703831aaec..6808f7f295e45d965d2957e24d556e55
      }
  }
 diff --git a/src/TiaMcpServer/Program.cs b/src/TiaMcpServer/Program.cs
-index 5ba4aa35b04cc171168a5966ca56ea04edbe4d08..77c4516d294857621a5820643d41494377cd3909 100644
+index 5ba4aa3..0027802 100644
 --- a/src/TiaMcpServer/Program.cs
 +++ b/src/TiaMcpServer/Program.cs
-@@ -18,6 +18,8 @@ public static async Task Main(string[] args)
+@@ -18,12 +18,19 @@ public static async Task Main(string[] args)
              var options = CliOptions.ParseArgs(args);
  
              Engineering.TiaMajorVersion = options.TiaMajorVersion ?? 21;
@@ -793,7 +901,19 @@ index 5ba4aa35b04cc171168a5966ca56ea04edbe4d08..77c4516d294857621a5820643d414943
  
              // Set before the --doctor branch below, which reports the write mode, and before the
              // host registers its tool types.
-@@ -59,7 +61,7 @@ public static void RunDoctor()
+             WritePolicy.AllowWrite = options.AllowWrite;
+ 
+-            if (Engineering.TiaMajorVersion >= 20)
++            // El suelo era 20. Con V18 no se inicializaba el resolver de Openness y Doctor
++            // reportaba 'Active Version: V0', de modo que Connect no habria podido resolver
++            // Siemens.Engineering. El paquete NuGet de Openness resuelve contra la instalacion
++            // local de TIA, asi que basta con que la version pedida corresponda a una instalada.
++            // Ver 00-meta/07-viabilidad-openness-v15-v18.md.
++            if (Engineering.TiaMajorVersion >= 16)
+             {
+                 Openness.Initialize(Engineering.TiaMajorVersion);
+             }
+@@ -59,7 +66,7 @@ public static void RunDoctor()
              try
              {
                  // Fully qualified: 'Diagnostics' alone would collide with the System.Diagnostics namespace.
@@ -802,7 +922,7 @@ index 5ba4aa35b04cc171168a5966ca56ea04edbe4d08..77c4516d294857621a5820643d414943
  
                  Console.WriteLine(report.Text);
              }
-@@ -72,15 +74,14 @@ public static void RunDoctor()
+@@ -72,15 +79,14 @@ public static void RunDoctor()
          }
  
          /// <summary>
@@ -821,7 +941,7 @@ index 5ba4aa35b04cc171168a5966ca56ea04edbe4d08..77c4516d294857621a5820643d414943
              {
                  toolTypes.Add(typeof(McpServerWrite));
              }
-@@ -142,7 +143,7 @@ public static async Task RunStdioHost(CliOptions? options)
+@@ -142,7 +148,7 @@ public static async Task RunStdioHost(CliOptions? options)
                              "absolute .apXX project or .alsXX session path. Use 'GetProjectTree' or 'GetSoftwareTree' to " +
                              "discover the path strings that the other tools expect. Export and import tools operate on " +
                              "the local file system of the machine running this server." +
@@ -831,7 +951,7 @@ index 5ba4aa35b04cc171168a5966ca56ea04edbe4d08..77c4516d294857621a5820643d414943
                                    "available. Their changes stay in memory until 'SaveProject' (or 'SaveSession')."
                                  : string.Empty);
 diff --git a/src/TiaMcpServer/Siemens/Diagnostics.cs b/src/TiaMcpServer/Siemens/Diagnostics.cs
-index 2c622904ffc13f0db8d5cccf909eead95dddba21..955335d6e49141f235812455f5235cb752fbaf15 100644
+index 2c62290..ef6d821 100644
 --- a/src/TiaMcpServer/Siemens/Diagnostics.cs
 +++ b/src/TiaMcpServer/Siemens/Diagnostics.cs
 @@ -1,4 +1,4 @@
@@ -840,18 +960,23 @@ index 2c622904ffc13f0db8d5cccf909eead95dddba21..955335d6e49141f235812455f5235cb7
  using System.Collections.Generic;
  using System.IO;
  using System.Linq;
-@@ -39,8 +39,8 @@ public sealed class DiagnosticsReport
+@@ -39,8 +39,13 @@ public sealed class DiagnosticsReport
      /// </summary>
      public static class Diagnostics
      {
 -        // Openness of this server targets V20+; V21 is the oldest version worth reporting.
 -        private const int MinTiaMajorVersion = 21;
-+        // Patched for this workspace: report installs from V19 up, not only V21.
-+        private const int MinTiaMajorVersion = 19;
++        // Patched for this workspace: report installs from V16 up, not only V21.
++        // V16 es el suelo de deteccion, no el de soporte: build.ps1 solo compila 18/20/21.
++        // Se informa de V16/V17 para que Doctor diga la verdad sobre la maquina en vez de
++        // 'none found', que es lo que hacia el suelo V19 en un equipo con V15.1-V18.
++        // V15.1 no se detecta: su clave de registro es TIAP15_1 y este bucle formatea enteros.
++        // Ver 00-meta/07-viabilidad-openness-v15-v18.md.
++        private const int MinTiaMajorVersion = 16;
          private const int MaxTiaMajorVersion = 30;
  
          // V20+ splits Openness into Siemens.Engineering.Base.dll and friends; older installations
-@@ -72,39 +72,39 @@ public static DiagnosticsReport Run(Portal portal, bool allowWrite = false)
+@@ -72,39 +77,39 @@ public static DiagnosticsReport Run(Portal portal, bool allowWrite = false)
  
              var status = $"Diagnose:";
  
@@ -902,7 +1027,7 @@ index 2c622904ffc13f0db8d5cccf909eead95dddba21..955335d6e49141f235812455f5235cb7
  
              return new DiagnosticsReport
              {
-@@ -120,7 +120,7 @@ public static DiagnosticsReport Run(Portal portal, bool allowWrite = false)
+@@ -120,7 +125,7 @@ public static DiagnosticsReport Run(Portal portal, bool allowWrite = false)
          }
  
          /// <summary>
@@ -912,10 +1037,14 @@ index 2c622904ffc13f0db8d5cccf909eead95dddba21..955335d6e49141f235812455f5235cb7
          /// </summary>
          public static IReadOnlyList<TiaInstallation> GetInstalledTiaPortalVersions()
 diff --git a/src/TiaMcpServer/Siemens/Engineering.cs b/src/TiaMcpServer/Siemens/Engineering.cs
-index 322b6ff5572453449c1a5813bae65e6d3211b706..c58d0e60077aaafd10b7c55f3aa393fae67d9026 100644
+index 322b6ff..ff61121 100644
 --- a/src/TiaMcpServer/Siemens/Engineering.cs
 +++ b/src/TiaMcpServer/Siemens/Engineering.cs
-@@ -4,6 +4,7 @@
+@@ -1,9 +1,11 @@
+ ﻿using Microsoft.Win32;
+ using System;
+ using System.Collections.Generic;
++using System.Globalization;
  using System.IO;
  using System.Linq;
  using System.Reflection;
@@ -923,7 +1052,7 @@ index 322b6ff5572453449c1a5813bae65e6d3211b706..c58d0e60077aaafd10b7c55f3aa393fa
  
  namespace TiaMcpServer.Siemens
  {
-@@ -11,6 +12,69 @@ namespace TiaMcpServer.Siemens
+@@ -11,6 +13,73 @@ namespace TiaMcpServer.Siemens
      public class Engineering
      {
          public static int TiaMajorVersion { get; set; }
@@ -963,7 +1092,11 @@ index 322b6ff5572453449c1a5813bae65e6d3211b706..c58d0e60077aaafd10b7c55f3aa393fa
 +                var fullPath = Path.GetFullPath(path);
 +                var rootPrefix = root + Path.DirectorySeparatorChar;
 +                if (!fullPath.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase)) return false;
-+                if (!string.Equals(Path.GetExtension(fullPath), ".ap20", StringComparison.OrdinalIgnoreCase)) return false;
++                // La extension se ata a la version para la que se compilo este servidor, no a un
++                // literal '.ap20'. La barrera no se afloja: sigue siendo UNA sola extension exacta,
++                // la unica que este binario puede abrir. En V18 es '.ap18', en V20 '.ap20'.
++                var expectedExtension = ".ap" + TiaMajorVersion.ToString(CultureInfo.InvariantCulture);
++                if (!string.Equals(Path.GetExtension(fullPath), expectedExtension, StringComparison.OrdinalIgnoreCase)) return false;
 +                if (!File.Exists(fullPath)) return false;
 +
 +                var manifestPath = Path.Combine(root, ".tia-agent-fixture.json");
@@ -993,9 +1126,64 @@ index 322b6ff5572453449c1a5813bae65e6d3211b706..c58d0e60077aaafd10b7c55f3aa393fa
  
          // Registry sub keys below 'TIAP{version}' that hold the installation path, most specific first.
          private static readonly string[] PreferredInstallPathSubKeys = { "TIA_Opns", "Global", "EditionMain" };
+diff --git a/src/TiaMcpServer/Siemens/Portal.Documents.cs b/src/TiaMcpServer/Siemens/Portal.Documents.cs
+index 34b70b9..d87e268 100644
+--- a/src/TiaMcpServer/Siemens/Portal.Documents.cs
++++ b/src/TiaMcpServer/Siemens/Portal.Documents.cs
+@@ -1,3 +1,7 @@
++#if TIA_V20_PLUS
++// SIMATIC Source Documents (.s7dcl/.s7res). La API (ImportDocumentOptions,
++// DocumentExportResult, PlcBlock.ExportAsDocuments) no existe antes de Openness V20.
++// Compilado fuera para TIA < V20. Ver 00-meta/07-viabilidad-openness-v15-v18.md.
+ using Microsoft.Extensions.Logging;
+ using Siemens.Engineering;
+ using Siemens.Engineering.SW;
+@@ -599,3 +603,4 @@ public class TypeDocumentExportResult
+         public List<string> Failures { get; set; } = new List<string>();
+     }
+ }
++#endif // TIA_V20_PLUS
+diff --git a/src/TiaMcpServer/Siemens/Portal.ImportSources.cs b/src/TiaMcpServer/Siemens/Portal.ImportSources.cs
+index 338df54..d549eca 100644
+--- a/src/TiaMcpServer/Siemens/Portal.ImportSources.cs
++++ b/src/TiaMcpServer/Siemens/Portal.ImportSources.cs
+@@ -232,6 +232,33 @@ private static string RelativeDirectory(string root, string file)
+                 .Replace('\\', '/');
+         }
+ 
++#if !TIA_V20_PLUS
++        /// <summary>
++        /// Copia local de un helper que en upstream vive en Portal.Documents.cs. Ese fichero se
++        /// compila fuera para TIA &lt; V20, pero este metodo solo manipula cadenas y no depende de
++        /// la API de documentos: ImportSources lo necesita igual. No se toca el original para no
++        /// alterar la ruta V20/V21, que sigue compilandolo desde Portal.Documents.cs.
++        /// Ver 00-meta/07-viabilidad-openness-v15-v18.md.
++        /// </summary>
++        private static string StripSystemRootSegment(string rootName, string path)
++        {
++            if (string.IsNullOrEmpty(path))
++            {
++                return path;
++            }
++
++            var separator = path.IndexOf('/');
++            var head = separator < 0 ? path : path.Substring(0, separator);
++
++            if (!head.Equals(rootName, StringComparison.OrdinalIgnoreCase))
++            {
++                return path;
++            }
++
++            return separator < 0 ? string.Empty : path.Substring(separator + 1);
++        }
++#endif
++
+         #endregion
+     }
+ 
 diff --git a/src/TiaMcpServer/Siemens/Portal.Safety.cs b/src/TiaMcpServer/Siemens/Portal.Safety.cs
 new file mode 100644
-index 0000000000000000000000000000000000000000..d2fb620538879efab492dc6bce7ccbf26993da4b
+index 0000000..d2fb620
 --- /dev/null
 +++ b/src/TiaMcpServer/Siemens/Portal.Safety.cs
 @@ -0,0 +1,188 @@
@@ -1187,8 +1375,78 @@ index 0000000000000000000000000000000000000000..d2fb620538879efab492dc6bce7ccbf2
 +        }
 +    }
 +}
+diff --git a/src/TiaMcpServer/Siemens/Portal.Source.cs b/src/TiaMcpServer/Siemens/Portal.Source.cs
+index 2131c58..a5519c9 100644
+--- a/src/TiaMcpServer/Siemens/Portal.Source.cs
++++ b/src/TiaMcpServer/Siemens/Portal.Source.cs
+@@ -89,7 +89,14 @@ public SourceTextResult GetBlockSource(string softwarePath, string blockPath, st
+                         blockPath,
+                         block.Name,
+                         maxChars,
++#if TIA_V20_PLUS
+                         dir => ExportAsDocuments(softwarePath, blockPath, dir),
++#else
++                        // Sin SIMATIC Source Documents, ReadSource ve NotSupported y cae a XML
++                        // marcandolo en Format. El llamante pide 'document' y recibe 'xml' con aviso.
++                        _ => throw new PortalException(PortalErrorCode.NotSupported,
++                            $"SIMATIC Source Documents require TIA Portal V20 or newer; this server targets V{Engineering.TiaMajorVersion}."),
++#endif
+                         dir => ExportBlock(softwarePath, blockPath, dir) != null);
+                 },
+                 ("softwarePath", softwarePath), ("blockPath", blockPath), ("format", format));
+@@ -116,8 +123,18 @@ public SourceTextResult GetTypeSource(string softwarePath, string typePath, stri
+                         typePath,
+                         type.Name,
+                         maxChars,
++#if TIA_V20_PLUS
+                         dir => ExportTypeAsDocuments(softwarePath, typePath, dir).Files.Count > 0,
+-                        dir => ExportType(softwarePath, dir, typePath) != null);
++#else
++                        _ => throw new PortalException(PortalErrorCode.NotSupported,
++                            $"SIMATIC Source Documents require TIA Portal V20 or newer; this server targets V{Engineering.TiaMajorVersion}."),
++#endif
++                        // Bug de upstream: llamaba ExportType(softwarePath, dir, typePath), pero la
++                        // firma es (softwarePath, typePath, exportPath). Pasaba el directorio como
++                        // typePath y fallaba con 'Type not found'. En V20 no se nota porque el
++                        // camino normal usa ExportTypeAsDocuments y nunca llega a este fallback; en
++                        // V18, sin SIMATIC Source Documents, este es el unico camino.
++                        dir => ExportType(softwarePath, typePath, dir) != null);
+                 },
+                 ("softwarePath", softwarePath), ("typePath", typePath), ("format", format));
+         }
+@@ -267,6 +284,7 @@ public SourceTreeResult ExportPlcAsSourceTree(string softwarePath, string export
+ 
+                     // Blocks: documents when the Portal is new enough, XML otherwise, since a
+                     // snapshot missing every block would be worse than a less readable one.
++#if TIA_V20_PLUS
+                     if (Engineering.TiaMajorVersion >= 20)
+                     {
+                         var blocks = ExportBlocksAsDocuments(softwarePath, exportPath, string.Empty, preservePath: true);
+@@ -274,12 +292,14 @@ public SourceTreeResult ExportPlcAsSourceTree(string softwarePath, string export
+                         Record(result, "blocks", "document", blocks?.Count() ?? 0);
+                     }
+                     else
++#endif
+                     {
+                         var blocks = ExportBlocks(softwarePath, exportPath, string.Empty, preservePath: true);
+ 
+                         Record(result, "blocks", "xml", blocks?.Count() ?? 0);
+                     }
+ 
++#if TIA_V20_PLUS
+                     if (Engineering.TiaMajorVersion >= MinVersionForTypeDocuments)
+                     {
+                         var types = ExportTypesAsDocuments(softwarePath, exportPath, string.Empty, preservePath: true);
+@@ -289,6 +309,7 @@ public SourceTreeResult ExportPlcAsSourceTree(string softwarePath, string export
+                         result.Failures.AddRange(types.Failures.Select(f => $"type {f}"));
+                     }
+                     else
++#endif
+                     {
+                         var types = ExportTypes(softwarePath, exportPath, string.Empty, preservePath: true);
+ 
 diff --git a/src/TiaMcpServer/Siemens/Portal.Transactions.cs b/src/TiaMcpServer/Siemens/Portal.Transactions.cs
-index 39b2cdfa10db3f7b7c4aeab3b8e375c01243384a..a987e58ad308c739eb75545300773ba8dbaf74f4 100644
+index 39b2cdf..a987e58 100644
 --- a/src/TiaMcpServer/Siemens/Portal.Transactions.cs
 +++ b/src/TiaMcpServer/Siemens/Portal.Transactions.cs
 @@ -11,22 +11,15 @@ namespace TiaMcpServer.Siemens
@@ -1285,7 +1543,7 @@ index 39b2cdfa10db3f7b7c4aeab3b8e375c01243384a..a987e58ad308c739eb75545300773ba8
                  }
              }
 diff --git a/src/TiaMcpServer/Siemens/Portal.Write.cs b/src/TiaMcpServer/Siemens/Portal.Write.cs
-index 4293b94e1d24fa6d3bc57c7919af1ddf16d24368..0e7c17d16cba58589c217f69f04bb895d8b0c8b8 100644
+index 4293b94..b37732e 100644
 --- a/src/TiaMcpServer/Siemens/Portal.Write.cs
 +++ b/src/TiaMcpServer/Siemens/Portal.Write.cs
 @@ -1,4 +1,4 @@
@@ -1294,7 +1552,39 @@ index 4293b94e1d24fa6d3bc57c7919af1ddf16d24368..0e7c17d16cba58589c217f69f04bb895
  using Siemens.Engineering.SW.Blocks;
  using Siemens.Engineering.SW.ExternalSources;
  using Siemens.Engineering.SW.Tags;
-@@ -287,8 +287,17 @@ public bool RenameWatchTable(string softwarePath, string watchTablePath, string
+@@ -69,8 +69,17 @@ public bool RenameTagTable(string softwarePath, string tagTablePath, string newN
+                 () =>
+                 {
+                     EnsureValidName(newName);
++#if TIA_V20_PLUS
+                     RequireTagTable(softwarePath, tagTablePath).Name = newName;
+                     return true;
++#else
++                    _ = RequireTagTable(softwarePath, tagTablePath);
++                    throw new PortalException(PortalErrorCode.NotSupported,
++                        "Renaming a tag table requires TIA Portal V20 or newer: PlcTagTable.Name is read-only in this Openness version.");
++#pragma warning disable CS0162
++                    return true;
++#pragma warning restore CS0162
++#endif
+                 },
+                 ("softwarePath", softwarePath), ("tagTablePath", tagTablePath), ("newName", newName));
+         }
+@@ -183,7 +192,13 @@ public bool UpdateTag(
+                     if (newName != null)
+                     {
+                         EnsureValidName(newName);
++#if TIA_V20_PLUS
+                         tag.Name = newName;
++#else
++                        // Las demas propiedades ya se aplicaron arriba; solo el renombrado falla.
++                        throw new PortalException(PortalErrorCode.NotSupported,
++                            "Renaming a tag requires TIA Portal V20 or newer: PlcTag.Name is read-only in this Openness version.");
++#endif
+                     }
+ 
+                     return true;
+@@ -287,8 +302,17 @@ public bool RenameWatchTable(string softwarePath, string watchTablePath, string
                  () =>
                  {
                      EnsureValidName(newName);
@@ -1313,7 +1603,7 @@ index 4293b94e1d24fa6d3bc57c7919af1ddf16d24368..0e7c17d16cba58589c217f69f04bb895
                  ("softwarePath", softwarePath), ("watchTablePath", watchTablePath), ("newName", newName));
          }
 diff --git a/src/TiaMcpServer/Siemens/Portal.cs b/src/TiaMcpServer/Siemens/Portal.cs
-index c0997368a335c623930aa057789bc5bd32800a50..05cc29a67f371c90976cbacc8c5d84cc133927a3 100644
+index c099736..661ede9 100644
 --- a/src/TiaMcpServer/Siemens/Portal.cs
 +++ b/src/TiaMcpServer/Siemens/Portal.cs
 @@ -136,8 +136,10 @@ public bool ConnectPortal()
@@ -1340,9 +1630,37 @@ index c0997368a335c623930aa057789bc5bd32800a50..05cc29a67f371c90976cbacc8c5d84cc
  
                  return true;
              }
+@@ -1348,6 +1352,7 @@ public bool ImportType(string softwarePath, string groupPath, string importPath)
+         }
+         
+ 
++#if TIA_V20_PLUS
+         public bool ExportAsDocuments(string softwarePath, string blockPath, string exportPath, bool preservePath = false)
+         {
+             _logger?.LogInformation($"Exporting block as documents by path: {blockPath}");
+@@ -1447,6 +1452,11 @@ public bool ExportAsDocuments(string softwarePath, string blockPath, string expo
+             return success;
+         }
+ 
++        // SIMATIC Source Documents (.s7dcl/.s7res). ImportDocumentOptions, DocumentExportResult y
++        // PlcBlock.ExportAsDocuments no existen antes de Openness V20: verificado por reflexion
++        // sobre las DLL de V15.1/V16/V17/V18. Ver 00-meta/07-viabilidad-openness-v15-v18.md.
++        // El bloque #if TIA_V20_PLUS abre en ExportAsDocuments y cierra tras ImportBlocksFromDocuments.
++
+         // TIA portal crashes when exporting blocks as documents, :-(
+         public IEnumerable<PlcBlock>? ExportBlocksAsDocuments(string softwarePath, string exportPath, string regexName = "", bool preservePath = false)
+         {
+@@ -1730,6 +1740,7 @@ public bool ImportFromDocuments(string softwarePath, string groupPath, string im
+ 
+             return imported;
+         }
++#endif // TIA_V20_PLUS
+ 
+         #endregion
+ 
 diff --git a/src/TiaMcpServer/Siemens/SafetyClassification.cs b/src/TiaMcpServer/Siemens/SafetyClassification.cs
 new file mode 100644
-index 0000000000000000000000000000000000000000..d6d61c8924d7e34c05b8c17b7b4792ca7ab776d5
+index 0000000..d6d61c8
 --- /dev/null
 +++ b/src/TiaMcpServer/Siemens/SafetyClassification.cs
 @@ -0,0 +1,31 @@
@@ -1378,19 +1696,25 @@ index 0000000000000000000000000000000000000000..d6d61c8924d7e34c05b8c17b7b4792ca
 +    }
 +}
 diff --git a/src/TiaMcpServer/TiaMcpServer.csproj b/src/TiaMcpServer/TiaMcpServer.csproj
-index 644c01ad20a2095441e973d7071cccb602d51026..ddc9e6ba0eb05073e4e998d57f4defce41e8f2e5 100644
+index 644c01a..6e825d9 100644
 --- a/src/TiaMcpServer/TiaMcpServer.csproj
 +++ b/src/TiaMcpServer/TiaMcpServer.csproj
-@@ -5,6 +5,8 @@
+@@ -5,6 +5,14 @@
      <LangVersion>Latest</LangVersion>
      <OutputType>Exe</OutputType>
      <PlatformTarget>x64</PlatformTarget>
 +    <OpennessPackageVersion Condition=" '$(OpennessPackageVersion)' == '' ">20.0.1744190253</OpennessPackageVersion>
++    <!-- Un build sin -p:TiaMajor se comporta como V20, igual que OpennessPackageVersion. -->
++    <TiaMajor Condition=" '$(TiaMajor)' == '' ">20</TiaMajor>
 +    <DefineConstants Condition=" '$(TiaMajor)' == '21' ">$(DefineConstants);TIA_V21_PLUS</DefineConstants>
++    <!-- SIMATIC Source Documents (.s7dcl/.s7res): ImportDocumentOptions y DocumentExportResult
++         no existen en el ensamblado antes de Openness V20. Verificado por reflexion sobre las
++         DLL de V15.1/V16/V17/V18 instaladas. Ver 00-meta/07-viabilidad-openness-v15-v18.md. -->
++    <DefineConstants Condition=" $([MSBuild]::VersionGreaterThanOrEquals('$(TiaMajor)', '20')) ">$(DefineConstants);TIA_V20_PLUS</DefineConstants>
      <Prefer32Bit>false</Prefer32Bit>
      <AssemblyVersion>0.1.0</AssemblyVersion>
      <BaseOutputPath>.\bin</BaseOutputPath>
-@@ -14,12 +16,10 @@
+@@ -14,12 +22,10 @@
      <PackageReference Include="ModelContextProtocol" Version="2.2.0" />
      <PackageReference Include="Siemens.Collaboration.Net.OperatingSystem.Windows" Version="3.0.1725521661" />
      <PackageReference Include="Siemens.Collaboration.Net.TiaPortal.Openness.Resolver" Version="2.0.1765367256" />

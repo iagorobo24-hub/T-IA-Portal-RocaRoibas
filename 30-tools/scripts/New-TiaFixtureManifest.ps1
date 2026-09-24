@@ -21,7 +21,17 @@ $backupFull = [IO.Path]::GetFullPath($BackupProjectPath)
 $sourceFull = [IO.Path]::GetFullPath($SourceProjectPath)
 if (-not (Test-Path -LiteralPath $rootFull -PathType Container)) { throw "Fixture root does not exist: $rootFull" }
 if (-not (Test-Path -LiteralPath $projectFull -PathType Leaf)) { throw "Fixture project file does not exist: $projectFull" }
-if ([IO.Path]::GetExtension($projectFull) -ine '.ap20') { throw 'Only a V20 .ap20 fixture is accepted by this manifest generator.' }
+# .ap18 admitido para EQUIPOTECNICO, que no tiene ninguna TIA >= V19 y usa el servidor
+# tia-inspect compilado contra Openness V18. La lista es explicita a proposito: cada version
+# aceptada aqui debe tener un binario verificado. Ver 00-meta/07-viabilidad-openness-v15-v18.md.
+$allowedFixtureExtensions = @('.ap18', '.ap20')
+$projectExtension = [IO.Path]::GetExtension($projectFull).ToLowerInvariant()
+if ($projectExtension -notin $allowedFixtureExtensions) {
+    throw "Only $($allowedFixtureExtensions -join ' or ') fixtures are accepted by this manifest generator; got '$projectExtension'."
+}
+if ([IO.Path]::GetExtension($backupFull).ToLowerInvariant() -ne $projectExtension) {
+    throw 'The fixture and its backup must be the same TIA Portal version.'
+}
 if (-not (Test-Path -LiteralPath $backupFull -PathType Leaf)) { throw "Backup project file does not exist: $backupFull" }
 if (-not (Test-Path -LiteralPath $sourceFull -PathType Leaf)) { throw "Source project file does not exist: $sourceFull" }
 
