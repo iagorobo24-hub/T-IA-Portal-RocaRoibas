@@ -17,7 +17,7 @@
 | `InvalidState` | No hay conexión o no hay proyecto abierto | `Connect` / `OpenProject` |
 | `ExportFailed` / `ImportFailed` | Falló la operación de fichero | El mensaje trae la causa concreta del error subyacente |
 | `NotSupported` | La API no lo permite, punto | Ver [`10-openness/limites.md`](../10-openness/limites.md). **No reintentes** |
-| `WriteDisabled` | El servidor arrancó sin `--allow-write` | Las 40 herramientas de escritura ni se registran. Hay que relanzarlo con la bandera |
+| `WriteDisabled` | El servidor no recibió el conjunto completo de escritura aislada | Las herramientas mutantes requieren `--isolated --fixture-root <run-dir> --allow-write` y un `.tia-agent-fixture.json` válido en la raíz. Usa el runner de fixture; `--allow-write` solo no basta. |
 | `CreateFailed` / `DeleteFailed` / `RenameFailed` | Falló la mutación | Mira si el objeto está protegido, es de safety, o es de sistema |
 
 📄 Desde el SDK 2.x, un `McpException` lanzado desde una herramienta llega al cliente como un

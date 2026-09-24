@@ -56,8 +56,10 @@ por separado y solo cuando se necesitan.
 
 Para una modificación SCL, el flujo recomendado es generar primero el dossier y la propuesta,
 revisar el diff y ejecutar el preview local. La aplicación posterior debe pasar por
-`Invoke-TiaWorkflow.ps1 -Workflow apply` con `-Profile write -Apply -AcknowledgeWriteProfile`;
-el runner crea backup, comprueba que la fuente no haya cambiado, compila y solo entonces guarda.
+`Invoke-TiaWorkflow.ps1 -Workflow apply` con `-Profile write -Apply -AcknowledgeWriteProfile
+-FixtureRoot <run-dir>` y un fixture desechable con manifiesto válido. El runner bloquea antes de
+mutar cuando falta el importador acotado del roster V20 actual; no eludas ese bloqueo con una
+importación genérica.
 
 ## Comprobación
 

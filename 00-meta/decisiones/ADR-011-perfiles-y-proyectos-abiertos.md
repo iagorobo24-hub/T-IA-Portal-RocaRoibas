@@ -11,9 +11,9 @@ El workspace publica cuatro perfiles explícitos para los harnesses:
 | Perfil | Servidor | Uso | Confirmación |
 |---|---|---|---|
 | `read` | `tia-inspect` | descubrir, leer, buscar y exportar | no |
-| `write` | `tia-inspect --allow-write` | editar bloques existentes | sí, por la tarea |
-| `create` | `tia-create --profile lite` | crear proyecto, hardware, red o HMI | sí |
-| `full` | ambos | flujo combinado de análisis y creación | sí |
+| `write` | `tia-inspect --isolated --fixture-root <run-dir> --allow-write` | Solo fixture desechable con manifiesto, preflight y herramienta aceptada | sí, por la tarea |
+| `create` | `tia-create --profile lite` | crear proyecto, hardware, red o HMI según herramientas vigentes | sí |
+| `full` | `tia-inspect` aislado + `tia-create --profile lite` | lectura/escritura limitada al fixture más herramientas de creación | sí |
 
 El perfil `read` es el predeterminado. `create` y `full` no se sincronizan ni se activan sin
 reconocimiento explícito. Las operaciones de creación deben ejecutar primero `ScaffoldProject`

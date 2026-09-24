@@ -36,15 +36,21 @@ Herramientas de consola para operar TIA Portal por Openness sin depender de un c
 # Diagnóstico
 .\Invoke-TiaMcp.ps1 -Calls @(@{ name='Doctor' })
 
-# Cadena sobre la misma conexión
-.\Invoke-TiaMcp.ps1 -TimeoutSeconds 900 -Calls @(
+# Cadena de lectura de un fixture desechable con manifiesto exacto
+$fixtureRoot = '90-tmp\runs\<fixture>'
+$fixture = Get-Content (Join-Path $fixtureRoot '.tia-agent-fixture.json') -Raw | ConvertFrom-Json
+.\Invoke-TiaMcp.ps1 -Isolated -FixtureRoot $fixtureRoot -TimeoutSeconds 900 -Calls @(
     @{ name='Connect' },
-    @{ name='OpenProject';   args=@{ path='...\Proyecto.ap20' } },
+    @{ name='OpenProject';   args=@{ path=$fixture.projectPath } },
     @{ name='GetPlcSummary'; args=@{ softwarePath='PLC_1' } },
     @{ name='CloseProject' },
     @{ name='Disconnect' }
 )
 ```
+
+Para habilitar mutaciones añade `-Isolated -FixtureRoot $fixtureRoot -AllowWrite` solo tras
+backup, manifiesto, lectura completa y preflight F/Safety. La bandera `-AllowWrite` sola no
+registra herramientas mutantes.
 
 🔒 **Todas las llamadas van sobre la misma conexión**, en orden. Eso importa: `Connect` y
 `OpenProject` dejan estado en el servidor, así que lo que venga después tiene que ir en la misma
@@ -54,7 +60,7 @@ invocación.
 |---|---|
 | `-TimeoutSeconds` | 300 por defecto. **`OpenProject` con migración tarda 30-130 s**; sube a 900 para proyectos grandes |
 | `-ContinueOnError` | Por defecto la cadena para al primer fallo. Con esto sigue — para lotes de items independientes |
-| `-AllowWrite` | ⚠️ Registra las 40 herramientas destructivas. Ver [ADR-006](../../00-meta/decisiones/ADR-006-limites-seguridad.md) |
+| `-AllowWrite` | Requiere además `-Isolated -FixtureRoot`; el servidor solo registra mutaciones si la raíz tiene manifiesto válido |
 | `-TiaMajor` | 20 por defecto |
 
 Devuelve objetos con `Tool`, `IsError`, `Seconds`, `Text` (el JSON de respuesta) y `Raw`.

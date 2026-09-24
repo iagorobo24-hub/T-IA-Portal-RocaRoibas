@@ -22,7 +22,9 @@ Al comenzar una sesión:
 3. Usa la configuración `read` para entender el proyecto. No habilites escritura por iniciativa
    propia.
 4. Si el usuario pide una mutación, explica antes el proyecto, los objetos y el efecto; solicita
-   reconocimiento explícito para el perfil write/create/full en ese momento.
+   reconocimiento explícito para el perfil write/create/full en ese momento. `write/full` requieren
+   además una copia desechable con `.tia-agent-fixture.json` válido y argumentos
+   `--isolated --fixture-root <run-dir> --allow-write`.
 
 Cumple este ciclo siempre:
 
@@ -57,9 +59,11 @@ Para cambios SCL usa primero `Invoke-TiaProjectAnalysis.ps1` y `New-TiaSclPropos
 `proposal.json`, `proposal.diff` y sus hashes. El preview se ejecuta con
 `Invoke-TiaWorkflow.ps1 -Workflow apply -Profile read`; no conecta con TIA. La aplicación real
 solo se autoriza con `Invoke-TiaWorkflow.ps1 -Workflow apply -Profile write -Apply
--AcknowledgeWriteProfile`, usando el `.ap20` exacto de la propuesta. Nunca saltes el runner ni
-edites directamente el fichero binario del proyecto. Si la fuente original cambió desde la
-propuesta, regenera la propuesta.
+-AcknowledgeWriteProfile -FixtureRoot <run-dir>`, usando el `.ap20` exacto de la propuesta y el
+fixture validado. El roster V20 actual no publica los importadores SCL requeridos, así que el runner
+debe detenerse en `BLOCKED` antes de mutar; no uses importadores genéricos como atajo. Nunca saltes
+el runner ni edites directamente el fichero binario del proyecto. Si la fuente original cambió
+desde la propuesta, regenera la propuesta.
 
 Para un proyecto nuevo, ejecuta primero `ScaffoldProject` con `dryRun=true`. Usa `tia-create` solo
 con el perfil create/full reconocido y verificado para V20. No trates un runtime V21 como compatible

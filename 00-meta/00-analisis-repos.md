@@ -2,6 +2,11 @@
 
 > Estado: **verificado** contra los repos clonados en `_ref/` el 2026-09-14.
 > Todo lo que aquí se afirma sale de leer el código/README real, no de suposiciones.
+>
+> **Límite temporal:** los conteos y las banderas de escritura de abajo describen el repositorio
+> upstream inspeccionado entonces; no son el roster del binario local actual. En V20, la captura
+> local del 2026-09-24 fue de 53 herramientas `read` y el perfil aislado `write` observado fue de
+> 84; la escritura local requiere fixture manifiesto, aislamiento y `--allow-write`.
 
 ## Resumen ejecutivo
 

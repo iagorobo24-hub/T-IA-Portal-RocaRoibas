@@ -20,8 +20,8 @@
     Version de TIA. 20 por defecto.
 
 .PARAMETER AllowWrite
-    Arranca el servidor con --allow-write. Las herramientas mutantes sólo se
-    registran si también se usa -Isolated y se da una raíz de fixture marcada.
+    Arranca el servidor con --allow-write. Requiere -Isolated, -FixtureRoot y
+    un manifiesto de fixture desechable.
 
 .PARAMETER Isolated
     Arranca una instancia privada de TIA Portal sin interfaz y no se conecta a
@@ -38,6 +38,12 @@
 
 .EXAMPLE
     .\Invoke-TiaMcp.ps1 -Calls @(@{name='Doctor'})
+
+.EXAMPLE
+    .\Invoke-TiaMcp.ps1 -Isolated -FixtureRoot '90-tmp\runs\fixture' -AllowWrite -Calls @(
+        @{ name='Connect' }, @{ name='OpenProject'; args=@{ path='ruta-leida-del-manifiesto' } },
+        @{ name='GetProjectTree' }, @{ name='Disconnect' }
+    )
 
 .EXAMPLE
     .\Invoke-TiaMcp.ps1 -Calls @(
@@ -80,8 +86,10 @@ if (-not (Test-Path $exe)) {
 if ($Isolated -and [string]::IsNullOrWhiteSpace($FixtureRoot)) {
     throw '-Isolated requires -FixtureRoot pointing to a disposable fixture run directory.'
 }
-if ($Isolated -and -not (Test-Path -LiteralPath (Join-Path ([IO.Path]::GetFullPath($FixtureRoot)) '.tia-agent-fixture.json') -PathType Leaf)) {
-    throw '-Isolated requires a valid .tia-agent-fixture.json manifest in -FixtureRoot.'
+if ($Isolated) {
+    $manifestValidator = Join-Path $PSScriptRoot 'Assert-TiaFixtureManifest.ps1'
+    if (-not (Test-Path -LiteralPath $manifestValidator -PathType Leaf)) { throw "Fixture manifest validator is missing: $manifestValidator" }
+    $null = & $manifestValidator -FixtureRoot $FixtureRoot
 }
 if ($AllowWrite -and -not $Isolated) {
     throw '-AllowWrite is restricted to an isolated disposable fixture session.'

@@ -135,13 +135,13 @@ textual (`.s7dcl` + `.s7res`) que produce heilingbrunner en V20+ **sí** diffea.
 │  (heilingbrunner)│         │  (bulaofen, lite)     │
 │                  │         │                       │
 │  LEER + entender │         │  CREAR proyectos      │
-│  59 read tools   │         │  hardware / red / HMI │
-│  git-friendly    │         │  ~43 tools (lite)     │
+│  53 read tools   │         │  hardware / red / HMI │
+│  git-friendly    │         │  55 tools (lite)      │
 │  export .s7dcl   │         │  ScaffoldProject      │
 │                  │         │                       │
-│  ⚠ --allow-write │         │  ⚠ dryRun primero     │
-│    solo bajo     │         │                       │
-│    demanda       │         │                       │
+│  ⚠ --isolated    │         │  ⚠ dryRun primero     │
+│    + fixture     │         │  + preflight/fixture  │
+│    + allow-write │         │                       │
 └───┬──────────────┘         └────────┬──────────────┘
     │                                 │
     └──────────┬──────────────────────┘

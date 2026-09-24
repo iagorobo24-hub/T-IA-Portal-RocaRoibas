@@ -39,7 +39,27 @@ try {
 
     $writePath = Join-Path $tempRoot 'write.json'
     & pwsh -NoProfile -NonInteractive -File $scriptPath -WorkspaceRoot $WorkspaceRoot -Harness claude-code -Profile write -OutputPath $writePath 2>$null
-    if ($LASTEXITCODE -eq 0) { throw 'Write adapter was generated without acknowledgement.' }
+    if ($LASTEXITCODE -eq 0) { throw 'Write adapter was generated without acknowledgement and a fixture root.' }
+    & pwsh -NoProfile -NonInteractive -File $scriptPath -WorkspaceRoot $WorkspaceRoot -Harness claude-code -Profile write -OutputPath $writePath -AcknowledgeWriteProfile 2>$null
+    if ($LASTEXITCODE -eq 0) { throw 'Write adapter was generated without a fixture root.' }
+    $fixtureRoot = Join-Path $tempRoot 'fixture'
+    $fixtureProjectDirectory = Join-Path $fixtureRoot 'project'
+    $fixtureBackupDirectory = Join-Path $fixtureRoot 'backup'
+    $sourceDirectory = Join-Path $tempRoot 'source'
+    foreach ($directory in @($fixtureProjectDirectory, $fixtureBackupDirectory, $sourceDirectory)) { New-Item -ItemType Directory -Path $directory -Force | Out-Null }
+    $fixtureProject = Join-Path $fixtureProjectDirectory 'Demo.ap20'
+    $fixtureBackup = Join-Path $fixtureBackupDirectory 'Demo.ap20'
+    $sourceProject = Join-Path $sourceDirectory 'Demo.ap20'
+    [IO.File]::WriteAllText($fixtureProject, 'demo snapshot')
+    [IO.File]::WriteAllText($fixtureBackup, 'demo snapshot')
+    [IO.File]::WriteAllText($sourceProject, 'source project')
+    & (Join-Path $WorkspaceRoot '30-tools\scripts\New-TiaFixtureManifest.ps1') -FixtureRoot $fixtureRoot -ProjectPath $fixtureProject -BackupProjectPath $fixtureBackup -SourceProjectPath $sourceProject -ConfirmedDisposable | Out-Null
+    & $scriptPath -WorkspaceRoot $WorkspaceRoot -Harness claude-code -Profile write -OutputPath $writePath -AcknowledgeWriteProfile -FixtureRoot $fixtureRoot
+    $writeConfig = Get-Content -Raw -LiteralPath $writePath | ConvertFrom-Json
+    $writeArgs = @($writeConfig.mcpServers.'tia-inspect'.args)
+    foreach ($required in @('--isolated', '--fixture-root', [IO.Path]::GetFullPath($fixtureRoot), '--allow-write')) {
+        if ($writeArgs -notcontains $required) { throw "Write adapter omitted required argument: $required" }
+    }
 
     Write-Output 'PASS: Claude Code, Codex, OpenCode and generic MCP adapter formats are deterministic'
 }

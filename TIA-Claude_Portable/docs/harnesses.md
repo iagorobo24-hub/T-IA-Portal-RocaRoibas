@@ -27,6 +27,9 @@ Ejemplos desde la raíz del workspace:
 .\30-tools\scripts\Export-HarnessAdapter.ps1 -Harness generic -Profile read -OutputPath .\70-runs\harness\generic-read.json
 ```
 
-Para perfiles `write`, `create` o `full` hay que añadir `-AcknowledgeWriteProfile`. El resultado
+Para perfiles `write` o `full` hay que añadir `-AcknowledgeWriteProfile` y `-FixtureRoot` de una
+copia desechable con manifiesto válido. El exportador vuelve a comprobar proyecto, backup y hashes,
+y genera `tia-inspect` con `--isolated --fixture-root ... --allow-write`; regenera el adapter para
+cada fixture. El perfil `create` requiere reconocimiento, pero no usa `FixtureRoot`. El resultado
 es un fragmento generado para inspección/importación manual; la activación sigue siendo una
 decisión del usuario y queda sujeta a `AGENTS.md`.

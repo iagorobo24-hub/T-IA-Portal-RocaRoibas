@@ -33,6 +33,16 @@ try {
         throw 'Manifest does not identify the expected disposable project.'
     }
     if ([string]::IsNullOrWhiteSpace([string]$manifest.projectSnapshotSha256)) { throw 'Manifest lacks the pre-write snapshot hash.' }
+    $validator = Join-Path $workspace '30-tools\scripts\Assert-TiaFixtureManifest.ps1'
+    $validated = & $validator -FixtureRoot $testRoot
+    if ([IO.Path]::GetFullPath([string]$validated.projectPath) -ne [IO.Path]::GetFullPath($fixtureProject)) {
+        throw 'Fixture validator returned the wrong authorized project path.'
+    }
+    [IO.File]::WriteAllText($fixtureProject, 'modified after manifest')
+    $mismatchRejected = $false
+    try { & $validator -FixtureRoot $testRoot | Out-Null } catch { $mismatchRejected = $_.Exception.Message -match 'snapshot' }
+    if (-not $mismatchRejected) { throw 'Fixture validator accepted a project changed after manifest creation.' }
+    [IO.File]::WriteAllText($fixtureProject, 'fixture-project')
 
     $mismatchRoot = Join-Path $testRoot 'mismatch'
     $mismatchFixture = Join-Path $mismatchRoot 'fixture'
@@ -40,6 +50,26 @@ try {
     foreach ($directory in @($mismatchFixture, $mismatchBackup)) { New-Item -ItemType Directory -Path $directory -Force | Out-Null }
     [IO.File]::WriteAllText((Join-Path $mismatchFixture 'Demo.ap20'), 'changed-project')
     [IO.File]::WriteAllText((Join-Path $mismatchBackup 'Demo.ap20'), 'original-project')
+    $invalidManifestPath = Join-Path $mismatchRoot '.tia-agent-fixture.json'
+    [IO.File]::WriteAllText($invalidManifestPath, '{"schemaVersion":1,"disposable":true}')
+    $sequenceScript = Join-Path $workspace '30-tools\scripts\Invoke-McpToolSequence.ps1'
+    $pwshPath = Join-Path $PSHOME 'pwsh.exe'
+    if (-not (Test-Path -LiteralPath $pwshPath -PathType Leaf)) { throw "PowerShell executable is missing: $pwshPath" }
+    $sequenceBlocked = $false
+    try {
+        & $sequenceScript -ExecutablePath $pwshPath -Arguments "--isolated --fixture-root `"$mismatchRoot`"" -Calls @(@{ name='Doctor'; args=@{} }) -TimeoutSeconds 1 | Out-Null
+    }
+    catch { $sequenceBlocked = $_.Exception.Message -match 'Fixture manifest field|projectSnapshotSha256|Manifest file does not exist' }
+    if (-not $sequenceBlocked) { throw 'Invoke-McpToolSequence did not reject a malformed isolated fixture before launching its executable.' }
+
+    $tiaMcpScript = Join-Path $workspace '30-tools\scripts\Invoke-TiaMcp.ps1'
+    $tiaMcpBlocked = $false
+    try {
+        & $tiaMcpScript -Isolated -FixtureRoot $mismatchRoot -Calls @(@{ name='Doctor'; args=@{} })
+    }
+    catch { $tiaMcpBlocked = $_.Exception.Message -match 'Fixture manifest field|projectSnapshotSha256|Manifest file does not exist' }
+    if (-not $tiaMcpBlocked) { throw 'Invoke-TiaMcp did not reject a malformed isolated fixture before launching its executable.' }
+
     $rejected = $false
     try {
         & $script -FixtureRoot $mismatchRoot -ProjectPath (Join-Path $mismatchFixture 'Demo.ap20') -BackupProjectPath (Join-Path $mismatchBackup 'Demo.ap20') -SourceProjectPath $sourceProject -ConfirmedDisposable | Out-Null

@@ -161,7 +161,8 @@ Recipes · Historical data · Scripts · Scheduled tasks · Cycles
 Reports · Text and graphic lists · User administration
 ```
 
-⚠️ **`tia-inspect` no cubre casi nada de la rama HMI.** Sus 59 herramientas son de PLC. Para HMI:
+⚠️ **`tia-inspect` no cubre casi nada de la rama HMI.** Su perfil read V20 registró 53 herramientas
+en la captura del 2026-09-24 y estas son principalmente de PLC. Para HMI:
 o la GUI, o `tia-create` (bulaofen), que sí tiene herramientas de WinCC Unified — pero **no de
 Comfort/Advanced**.
 

@@ -28,7 +28,7 @@ El registro accionable del perfil MCP está en el apéndice del [plan maestro](.
 | `read` | `tia-inspect` sin `--allow-write` | Perfil por defecto | Inspeccionar y exportar; no registra mutaciones |
 | `write` | Invocación puntual: `tia-inspect --isolated --fixture-root <run-dir> --allow-write` | Reconocimiento explícito y manifiesto de copia desechable | Cambiar elementos estándar autorizados dentro de un fixture |
 | `create` | `tia-create --profile lite` | Reconocimiento explícito y `dryRun` | Crear proyecto, hardware, red y HMI Unified según tools expuestos |
-| `full` | Perfil ampliado `tia-create --profile full`; no se asume configurado | Schema guardado no equivale a disponibilidad o autorización | Superficie ampliada; acciones online/físicas siguen bloqueadas por política |
+| `full` | `tia-inspect` aislado con fixture + `tia-create --profile lite` | Reconocimiento explícito y raíz manifiesta requerida para `tia-inspect` | Escritura limitada al fixture; acciones online/físicas siguen sujetas a gates y política |
 
 Fuente: `30-tools/mcp/servers.json` y [ADR-011](../../00-meta/decisiones/ADR-011-perfiles-y-proyectos-abiertos.md).
 
@@ -52,9 +52,9 @@ Fuente: `30-tools/mcp/servers.json` y [ADR-011](../../00-meta/decisiones/ADR-011
   sustituyen un proyecto de una ventana visible.
 
 **Qué NO puede hacer (por diseño, no por límite técnico):**
-- Ninguna herramienta de escritura se registra si el servidor arranca sin `--allow-write` y sin
-  `--isolated --fixture-root`. El schema histórico guardado tenía 53 tools de lectura; recapturarlo
-  tras la última compilación antes de tomar ese número como actual.
+- Ninguna herramienta de escritura se registra si falta cualquiera de `--allow-write`,
+  `--isolated`, `--fixture-root` o el manifiesto válido. Los generadores de perfil `write/full`
+  exigen ahora la raíz de fixture y la insertan en los argumentos del servidor.
 - `Invoke-TiaSclProposalApply.ps1` acepta reemplazos de bloques existentes, no crea bloques nuevos.
   No autorizar imports de destinos nuevos mientras falte el flujo de creación/clasificación previo
   descrito en [`AGENTS.md`](../../AGENTS.md#33-bloques-protegidos-y-seguridad).

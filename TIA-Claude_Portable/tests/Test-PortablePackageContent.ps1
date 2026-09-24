@@ -37,7 +37,7 @@ try {
             throw "Core package is missing V21-enablement item: $v21Item"
         }
     }
-    foreach ($tool in @('Invoke-TiaProjectAnalysis.ps1', 'New-TiaSclProposal.ps1', 'Invoke-TiaWorkflow.ps1', 'Invoke-TiaSclProposalApply.ps1', 'New-TiaIoList.ps1', 'New-TiaFunctionalDescription.ps1', 'Convert-TiaTagTableExportToInventory.ps1', 'Merge-TiaTagEvidenceIntoInventory.ps1', 'Inspect-McpToolSchemas.ps1', 'Invoke-TiaSimulationAcceptance.ps1', 'New-TiaFixtureManifest.ps1', 'TiaBlockMetadata.ps1', 'TiaExampleSecrets.ps1', 'TiaSclSafety.ps1')) {
+    foreach ($tool in @('Invoke-TiaProjectAnalysis.ps1', 'New-TiaSclProposal.ps1', 'Invoke-TiaWorkflow.ps1', 'Invoke-TiaSclProposalApply.ps1', 'New-TiaIoList.ps1', 'New-TiaFunctionalDescription.ps1', 'Convert-TiaTagTableExportToInventory.ps1', 'Merge-TiaTagEvidenceIntoInventory.ps1', 'Inspect-McpToolSchemas.ps1', 'Invoke-TiaSimulationAcceptance.ps1', 'New-TiaFixtureManifest.ps1', 'Assert-TiaFixtureManifest.ps1', 'TiaBlockMetadata.ps1', 'TiaExampleSecrets.ps1', 'TiaSclSafety.ps1')) {
         if (-not (Test-Path -LiteralPath (Join-Path $core "30-tools\scripts\$tool") -PathType Leaf)) { throw "Core package is missing semantic tool: $tool" }
     }
     foreach ($test in @('Test-TiaProjectAnalysis.ps1', 'Test-TiaBlockMetadata.ps1', 'Test-TiaFixtureManifest.ps1', 'Test-AgentDemoScaffold.ps1', 'Test-TiaSclProposal.ps1', 'Test-TiaSclProposalApply.ps1', 'Test-TiaSclSafetyGate.ps1', 'Test-TiaExampleSecrets.ps1', 'Test-TiaIoList.ps1', 'Test-TiaFunctionalDescription.ps1', 'Test-TiaWorkflow.ps1', 'Test-ConvertTiaTagTableExport.ps1', 'Test-MergeTiaTagEvidence.ps1', 'Test-TiaCreationRecipes.ps1', 'Test-InspectMcpToolSchemas.ps1', 'Test-InvokeTiaSimulationAcceptance.ps1', 'Test-TiaSimulationAcceptanceSafety.ps1', 'Test-PlcSimCommandProtocol.ps1')) {
@@ -48,7 +48,7 @@ try {
     }
     $prompt = Get-Content -Raw -LiteralPath (Join-Path $core 'docs\prompt-claude-code.md')
     if ($prompt -match 'Pega este prompt en `workspace/`') { throw 'Portable Claude prompt still targets the legacy monolithic workspace.' }
-    foreach ($requiredPromptText in @('AGENTS.md', 'Doctor', 'GetProjectTree', 'Profile read', 'AcknowledgeWriteProfile')) {
+    foreach ($requiredPromptText in @('AGENTS.md', 'Doctor', 'GetProjectTree', 'Profile read', 'AcknowledgeWriteProfile', '--isolated', '--fixture-root', 'BLOCKED')) {
         if ($prompt -notmatch [regex]::Escape($requiredPromptText)) { throw "Portable Claude prompt is missing: $requiredPromptText" }
     }
     $manifest = Get-Content -Raw -LiteralPath $coreManifest | ConvertFrom-Json
