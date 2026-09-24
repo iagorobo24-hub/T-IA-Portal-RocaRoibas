@@ -13,6 +13,10 @@ _ref/
 90-tmp/
 70-runs/
 
+# Carpeta de salida que crea la app de Claude en la raiz. Lo que valga la pena se
+# guarda en 00-meta/ con la numeracion del workspace, no aqui.
+Claude outputs/
+
 # Herramientas: binarios y fuentes upstream. El build es reproducible
 # desde build.ps1 + patches/, asi que no se versionan.
 30-tools/bin/
