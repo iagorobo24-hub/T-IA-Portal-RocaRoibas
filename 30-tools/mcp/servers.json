@@ -1,18 +1,66 @@
 {
   "schemaVersion": 1,
-  "servers": {
-    "tia-inspect": {
-      "commandRelative": "30-tools/mcp/tia-inspect/bin/v20/TiaMcpServer.exe",
-      "baseArgs": ["--tia-major-version", "20"],
-      "purpose": "Inspect and, only in the write profile, modify TIA Portal V20 projects",
-      "versions": {
+  "hostCompatibility": {
+    "_comment": "Estado POR MAQUINA. El campo 'verified' dentro de servers.*.versions.* es una afirmacion global heredada del equipo donde se compilo el binario; este bloque la cualifica por hostname sin invalidarla. Campo aditivo: ningun consumidor actual lo lee, ni Sync-HarnessConfigs.ps1 ni Test-ServerManifest.ps1. Ver ADR-015.",
+    "EQUIPOTECNICO": {
+      "evaluatedLocal": "2026-09-22T13:38:00+02:00",
+      "evidence": "70-runs/doctor/equipotecnico.json (estado del host) + 35-runtime/v18/runs/RESUMEN.md (port)",
+      "installedTiaMajors": ["15.1", "16", "17", "18"],
+      "opennessComponentInstalled": ["15.1", "16", "17", "18"],
+      "windowsGroupResolved": true,
+      "versionStatus": {
+        "18": {
+          "binaryLaunches": true,
+          "usableAgainstTia": true,
+          "status": "BUILT-AND-DOCTOR-OK",
+          "reason": "Compilado aqui contra Openness 18.0.1685432622 con 0 errores. Doctor: Active Version V18, grupo True, V16/V17/V18 detectadas con Engineering OK. Connect contra un proyecto real es SEPARADO y se registra en 35-runtime/v18/runs/.",
+          "appliesTo": ["tia-inspect"]
+        },
         "20": {
-          "commandRelative": "30-tools/mcp/tia-inspect/bin/v20/TiaMcpServer.exe",
-          "baseArgs": ["--tia-major-version", "20"],
-          "verified": true
+          "binaryLaunches": true,
+          "usableAgainstTia": false,
+          "status": "NOT-RUNNABLE",
+          "reason": "El ejecutable arranca (exit 0, sin stderr, resolver de Openness cargado), pero no hay TIA Portal >= V19 instalado. Doctor reporta 'Installed TIA Portal versions: none found (>= V19)'. Un Connect fallaria al resolver Siemens.Engineering 20.0.0.0: no existe HKLM Openness\\20.0. La entrada sigue siendo valida para el equipo donde SI hay V20.",
+          "appliesTo": ["tia-inspect", "tia-create"]
         },
         "21": {
-          "commandRelative": "30-tools/mcp/tia-inspect/bin/v21/TiaMcpServer.exe",
+          "binaryLaunches": false,
+          "usableAgainstTia": false,
+          "status": "NOT-BUILT",
+          "reason": "El binario v21 no existe y no se puede construir aqui: no hay .NET SDK ni .NET Framework 4.8 Developer Pack. Tampoco hay TIA V21.",
+          "appliesTo": ["tia-inspect", "tia-create"]
+        }
+      },
+      "rebuildPossible": false,
+      "rebuildBlockers": [
+        "No hay .NET SDK instalado (dotnet --info: 'No SDKs were found'). build.ps1 exige uno.",
+        "No hay .NET Framework 4.8 Developer Pack; las Reference Assemblies llegan solo a v4.5 y el csproj targetea net48."
+      ]
+    }
+  },
+  "servers": {
+    "tia-inspect": {
+      "commandRelative": "35-runtime/v20/bin/tia-inspect/TiaMcpServer.exe",
+      "baseArgs": ["--tia-major-version", "20"],
+      "purpose": "Inspect and, only in the write profile, modify TIA Portal projects",
+      "versions": {
+        "18": {
+          "commandRelative": "35-runtime/v18/bin/tia-inspect/TiaMcpServer.exe",
+          "baseArgs": ["--tia-major-version", "18"],
+          "verified": true,
+          "verifiedOn": "EQUIPOTECNICO, TIA V18 SP1 Upd5",
+          "buildEvidence": "build.ps1 -TiaMajor 18: 0 errores, 1 aviso (CS8602 preexistente en McpPrompts.cs). Doctor reporta Active Version V18 y detecta V16/V17/V18 con Engineering OK.",
+          "note": "Sin SIMATIC Source Documents (.s7dcl/.s7res): esa API no existe antes de Openness V20 y esta compilada fuera tras #if TIA_V20_PLUS. GetBlockSource cae a XML automaticamente. Renombrar tag tables y tags devuelve NotSupported: PlcTagTable.Name y PlcTag.Name son de solo lectura en V18. GetCrossReferences SI funciona. Ver 00-meta/07-viabilidad-openness-v15-v18.md."
+        },
+        "20": {
+          "commandRelative": "35-runtime/v20/bin/tia-inspect/TiaMcpServer.exe",
+          "baseArgs": ["--tia-major-version", "20"],
+          "verified": true,
+          "verifiedOn": "maquina con TIA Portal V20; NO en EQUIPOTECNICO",
+          "hostCompatibilityRef": "hostCompatibility.EQUIPOTECNICO.versionStatus.20"
+        },
+        "21": {
+          "commandRelative": "35-runtime/v21/bin/tia-inspect/TiaMcpServer.exe",
           "baseArgs": ["--tia-major-version", "21"],
           "verified": false,
           "note": "Build with 30-tools/mcp/tia-inspect/build.ps1 -TiaMajor 21 on a machine with TIA Portal V21. Not verified here — see ADR-014."
@@ -21,7 +69,7 @@
     },
     "tia-create": {
       "status": "installed",
-      "commandRelative": "30-tools/mcp/tia-create/bin/v20/TiaMcpServer.exe",
+      "commandRelative": "35-runtime/v20/bin/tia-create/TiaMcpServer.exe",
       "baseArgs": ["--tia-major-version", "20", "--profile", "lite"],
       "purpose": "Create V20 PLC, network and HMI scaffolds when a verified runtime is available",
       "version": "2.7.2",
@@ -29,12 +77,14 @@
       "buildEvidence": "dotnet build Release: 0 errors, 2 warnings; Doctor initialized Openness V20 and confirmed Siemens TIA Openness membership.",
       "versions": {
         "20": {
-          "commandRelative": "30-tools/mcp/tia-create/bin/v20/TiaMcpServer.exe",
+          "commandRelative": "35-runtime/v20/bin/tia-create/TiaMcpServer.exe",
           "baseArgs": ["--tia-major-version", "20", "--profile", "lite"],
-          "verified": true
+          "verified": true,
+          "verifiedOn": "maquina con TIA Portal V20; NO en EQUIPOTECNICO",
+          "hostCompatibilityRef": "hostCompatibility.EQUIPOTECNICO.versionStatus.20"
         },
         "21": {
-          "commandRelative": "30-tools/mcp/tia-create/bin/v21/TiaMcpServer.exe",
+          "commandRelative": "35-runtime/v21/bin/tia-create/TiaMcpServer.exe",
           "baseArgs": ["--tia-major-version", "21", "--profile", "lite"],
           "verified": false,
           "note": "Build with 30-tools/mcp/tia-create/build.ps1 -TiaMajor 21 on a machine with TIA Portal V21. Not verified here — see ADR-014."

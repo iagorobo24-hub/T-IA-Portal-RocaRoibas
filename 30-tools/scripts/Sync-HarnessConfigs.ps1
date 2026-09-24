@@ -6,7 +6,9 @@ param(
     [string]$OutputPath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path '.mcp.json'),
     [string]$LocalManifestPath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path '30-tools\mcp\servers.local.json'),
     [switch]$AcknowledgeWriteProfile,
-    [ValidateSet(20, 21)]
+    # 18 anadido para EQUIPOTECNICO, que tiene TIA V15.1-V18 y ninguna >= V19.
+    # Ver 00-meta/07-viabilidad-openness-v15-v18.md y 70-runs/doctor/equipotecnico.json.
+    [ValidateSet(18, 20, 21)]
     [int]$TiaMajorVersion = 20
 )
 
