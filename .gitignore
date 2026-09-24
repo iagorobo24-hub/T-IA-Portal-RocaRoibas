@@ -20,6 +20,15 @@ _ref/
 30-tools/mcp/*/bin/
 30-tools/mcp/*/runtime/
 
+# 35-runtime/: un subarbol por version de TIA Portal. Se versiona el PERFIL.md de
+# cada version y el codigo fuente de sus herramientas; NO los binarios compilados,
+# los fixtures (proyectos TIA binarios) ni la evidencia de ejecucion.
+35-runtime/*/bin/
+35-runtime/*/fixtures/
+35-runtime/*/runs/
+35-runtime/*/tools/**/bin/
+35-runtime/*/tools/**/obj/
+
 # Ejemplos de terceros: se versionan FICHA.md y el codigo legible.
 # Los proyectos TIA son binarios (~110 MB) y se recrean desde _ref/.
 50-examples/**/IM/

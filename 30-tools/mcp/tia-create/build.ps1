@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Clona y compila el servidor MCP tia-create (bulaofen0036-coder/TIA_Portal_Openness_MCP)
     contra la version de Openness instalada en esta maquina.
@@ -9,7 +9,7 @@
       - TiaMcpServer.csproj      -> TIA V21 (paquete Openness 21.0.x), salida en bin\Release\net48
       - TiaMcpServer.V20.csproj  -> TIA V20 (paquete Openness 20.0.x), salida en bin-v20\Release\net48
 
-    El binario V20 instalado en este workspace (30-tools/mcp/tia-create/bin/v20) se genero a mano
+    El binario V20 instalado en este workspace (35-runtime/v20/bin/tia-create) se genero a mano
     desde el ZIP de release 2.7.2, no con este script. Este script reproduce el mismo resultado
     desde fuente y añade la rama V21 sin haberla podido verificar en esta maquina: aqui solo hay
     V19/V20 instalados. Un companero con TIA V21 debe ejecutar `-TiaMajor 21` y contrastar contra
