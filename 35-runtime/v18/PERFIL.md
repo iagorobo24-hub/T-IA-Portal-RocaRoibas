@@ -9,6 +9,22 @@
 | Evidencia | `35-runtime/v18/runs/RESUMEN.md` |
 | Construir | `30-tools/mcp/tia-inspect/build.ps1 -TiaMajor 18` |
 | Configurar | `30-tools/scripts/Sync-HarnessConfigs.ps1 -Profile read -TiaMajorVersion 18` |
+| **En Claude Code** | cargado como **MCP nativo**: herramientas `mcp__tia-inspect__*` ✅ |
+
+## Cómo se usa desde Claude Code
+
+`.mcp.json` apunta a este perfil, así que al arrancar la sesión las 49 herramientas del perfil de
+lectura quedan disponibles como `mcp__tia-inspect__Doctor`, `mcp__tia-inspect__GetProjectTree`, etc.
+Verificado el 2026-09-24: `Doctor` por esa vía devuelve `activeTiaMajorVersion: 18`,
+`isUserInGroup: true` y las tres instalaciones con `engineeringExists: true`.
+
+> **Una lectura suelta** se hace con la herramienta directa.
+> **Una secuencia** va por `30-tools/scripts/Invoke-McpToolSequence.ps1`, que mantiene una sola
+> sesión MCP y adquiere el lease `Local\TIA-Claude-McpSession` para que no haya dos sesiones
+> concurrentes contra TIA (AGENTS.md §5). Eso no es opcional.
+>
+> Tras cambiar `.mcp.json` o recompilar el binario hay que **reiniciar la sesión** para que Claude
+> Code recargue el servidor.
 
 ## Estado: ejecutado y observado, no inferido
 
