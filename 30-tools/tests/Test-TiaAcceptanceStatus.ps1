@@ -89,6 +89,17 @@ try {
         $report.evidence.tagTableImportLifecycle.path -notmatch '(?i)mcp-import-tagtable-acceptance-.*\.json$') {
         throw 'Acceptance status must reference the mcp-import-tagtable-acceptance evidence file.'
     }
+    $tagTableMemberImportFinding = 'MCP PLC tag table import with two standard tags: compile/save/readback/restore'
+    if ($report.verified -notcontains $tagTableMemberImportFinding) {
+        throw 'Acceptance status must include the verified non-empty PLC tag-table import finding.'
+    }
+    if ($null -eq $report.evidence.tagTableMemberImportLifecycle -or $report.evidence.tagTableMemberImportLifecycle.status -ne 'verified') {
+        throw 'Acceptance status must expose verified non-empty PLC tag-table import evidence.'
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$report.evidence.tagTableMemberImportLifecycle.path) -or
+        $report.evidence.tagTableMemberImportLifecycle.path -notmatch '(?i)mcp-import-tagtable-member-acceptance-.*\.json$') {
+        throw 'Acceptance status must reference the mcp-import-tagtable-member-acceptance evidence file.'
+    }
     $blockGroupLifecycleFinding = 'MCP block-group lifecycle: create/delete/compile/save + independent readback'
     if ($report.verified -notcontains $blockGroupLifecycleFinding) {
         throw 'Acceptance status must include the verified MCP block-group lifecycle finding.'

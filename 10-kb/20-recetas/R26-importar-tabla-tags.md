@@ -1,15 +1,16 @@
-# R26 — Importar una tabla de tags PLC vacía (offline)
+# R26 — Importar una tabla de tags PLC (offline)
 
 ## Objetivo
 
-Importar una tabla de tags PLC vacía desde XML V20 en un fixture desechable, comprobar
-que TIA la crea, compilar y guardar el proyecto, leerla desde una sesión independiente
-de solo lectura y restaurar la carpeta completa del proyecto. La receta prueba la
-capacidad `ImportPlcTagTable` del perfil `tia-create/full`; no importa tags ni
-constantes y no conecta con una CPU.
+Importar una tabla PLC desde XML V20 en un fixture desechable, comprobar su metadata,
+compilar y guardar el proyecto, leerla desde una sesión independiente de solo lectura y
+restaurar la carpeta completa del proyecto. La receta prueba `ImportPlcTagTable` del
+perfil `tia-create/full` con dos casos acotados: tabla vacía y tabla con dos tags Bool
+estándar no Safety. No conecta con una CPU.
 
-**Resultado:** **verificado** en TIA Portal V20 con `ImportPlcTagTable` y una tabla de
-usuario vacía (`tagCount=0`, `userConstantCount=0`).
+**Resultado:** **verificado** en TIA Portal V20 para (1) una tabla vacía y (2) una
+tabla de usuario con dos tags Bool estándar (`tagCount=2`, `userConstantCount=0`, ambos
+`isSafety=false`). Son pruebas independientes en fixtures restaurados.
 
 **Riesgo:** R2 (mutación reversible en fixture).  
 **Servidor mutante:** `tia-create` V20, perfil `full`, con `ConnectIsolated`.  
@@ -20,10 +21,11 @@ usuario vacía (`tagCount=0`, `userConstantCount=0`).
 
 ## Alcance y exclusiones
 
-La prueba importa solo el objeto `SW.Tags.PlcTagTable` que contiene un nombre. No
-demuestra la importación de tags, constantes, direcciones, tipos, tablas HMI o tablas
-con referencias Safety. No modifica hardware, F-blocks, tags Safety, force tables,
-CPU, runtime, conexión online ni descarga.
+La prueba importa un objeto `SW.Tags.PlcTagTable` por caso. El caso no vacío cubre
+únicamente dos tags `Bool` con direcciones de marcador `%M100.0` y `%M100.1`; no demuestra
+constantes de usuario, otros tipos/direcciones, tablas HMI ni tablas con referencias
+Safety. No modifica hardware, F-blocks, tags Safety, force tables, CPU, runtime,
+conexión online ni descarga.
 
 El resultado de importación es una operación de ingeniería offline. `CompileSoftware`
 con 0 errores y 0 avisos confirma la compilación del software, pero no demuestra el
@@ -185,9 +187,9 @@ Conserva en `70-runs/e2e/`:
 - XML de entrada y su codificación;
 - llamadas exactas de `ImportPlcTagTable`, `GetPlcTagTables`, `CompileSoftware` y
   `SaveProject`;
-- lectura independiente read-only con la tabla visible y metadata vacía;
+- lectura independiente read-only con la tabla visible y metadata esperada;
 - inventario completo, restauración y lectura read-only posterior sin la tabla;
-- límites: tabla vacía, sin tags/constantes, sin hardware, Safety, online o runtime.
+- límites del caso 1: tabla vacía, sin tags/constantes, sin hardware, Safety, online o runtime.
 
 La evidencia V20 aceptada es:
 
@@ -204,9 +206,67 @@ La evidencia V20 aceptada es:
 
 El veredicto registrado es
 `VERIFIED_PLC_TAG_TABLE_IMPORT_COMPILE_SAVE_INDEPENDENT_READBACK_AND_DIRECTORY_RESTORE`.
-La aceptación demuestra la importación de una tabla vacía en V20. No eleva a aceptadas
-las importaciones de tablas con tags Safety, tablas HMI, importación masiva de
-directorios ni las operaciones online.
+La aceptación de este caso demuestra la importación de una tabla vacía en V20. El caso
+2 amplía por separado la cobertura a dos tags Bool estándar no Safety. Ninguno de los
+casos acepta tablas con tags Safety, tablas HMI, importación masiva de directorios ni
+operaciones online.
+
+## Caso 2 — Importación de dos tags estándar no Safety
+
+**Resultado:** **verificado** en TIA Portal V20 con dos tags Bool importados en una
+tabla de usuario. Evidencia consolidada:
+[`mcp-import-tagtable-member-acceptance-20260923.json`](../../70-runs/e2e/mcp-import-tagtable-member-acceptance-20260923.json).
+
+La fixture `AgentDemo_V20` se copió a una carpeta nueva `project/` y `backup/`; el
+manifiesto se creó después de comparar ambos proyectos. El XML se derivó de una
+exportación real `ExportPlcTagTable` del fixture V20 ya aceptado, conservando la forma
+SimaticML exportada por TIA. Solo se cambiaron el nombre de tabla y los dos nombres y
+direcciones de tags para evitar colisiones:
+
+| Nombre | Tipo | Dirección de marcador | Readback `isSafety` |
+|---|---|---|---|
+| `Agent_ImportProbe_Enable` | `Bool` | `%M100.0` | `false` |
+| `Agent_ImportProbe_Status` | `Bool` | `%M100.1` | `false` |
+
+La preflight independiente de `tia-inspect` leyó dos bloques estándar, consistentes,
+sin protección y con `isFailsafe=false`; leyó los dos tags existentes con
+`isSafety=false`, confirmó que el destino no existía y que no había colisión de nombres
+ni direcciones. La llamada mutante no ofrece `dryRun`; el backup idéntico y la lectura
+independiente son obligatorios. `tia-create/full` no expuso `GetTags` y su DTO de
+`GetBlocks` devolvió `isFailsafe=null`; esos campos no se usaron para autorizar ningún
+cambio de bloques. La clasificación de seguridad de esta importación procede de la
+preflight live explícita de `tia-inspect` y del readback posterior de los tags.
+
+Secuencia V20 ejecutada:
+
+1. `Bootstrap` → `Doctor(fix=false)` → `ConnectIsolated` → `OpenProject` con la ruta
+   exacta del manifiesto → `GetProjectTree` y `GetSoftwareTree(softwarePath="PLC_1")`.
+2. `GetPlcTagTables` confirmó las dos tablas originales. Se llamó una vez a
+   `ImportPlcTagTable(softwarePath="PLC_1", folderPath="", importPath=<XML V20>)`.
+3. `GetPlcTagTables` mostró la nueva tabla; `ExportPlcTagTable` después de importar y
+   después de guardar confirmó sus dos miembros. `CompileSoftware` terminó con 0
+   errores y 0 advertencias; `SaveProject` pasó.
+4. Una sesión independiente `tia-inspect` read-only confirmó la tabla como no-default,
+   2 tags, 0 constantes, y ambos tags `Bool`/`isSafety=false` en las direcciones
+   esperadas.
+5. Antes de restaurar, el `.ap20`, `System/PEData.idx`, `System/PEData.plf` y
+   `XRef/XRef.db` diferían del backup. Se sobrescribieron los 9 archivos de proyecto
+   desde el backup coincidente; la comparación posterior por ruta/tamaño/SHA-256 dio
+   cero diferencias. Una segunda sesión read-only confirmó que la tabla y los dos tags
+   de prueba ya no existían. El proyecto fuente conservó su hash original.
+
+Los informes detallados están en:
+
+- [preflight independiente](../../70-runs/e2e/mcp-import-tagtable-nonempty-preflight-20260923.json);
+- [secuencia mutante y captura de stderr](../../70-runs/e2e/mcp-import-tagtable-nonempty-mutation-20260923.json);
+- [readback read-only](../../70-runs/e2e/mcp-import-tagtable-nonempty-readback-20260923.json);
+- [restored readback](../../70-runs/e2e/mcp-import-tagtable-nonempty-restored-read-20260923.json);
+- [backup y restauración](../../90-tmp/mcp-import-tagtable-nonempty-20260923-1645/evidence/restore-report.json).
+
+Esta aceptación amplía la importación únicamente a dos tags Bool estándar no Safety.
+No valida constantes de usuario, tipos/direcciones adicionales, nombres o espacios de
+otros proyectos, direcciones de E/S físicas, tablas Safety, UDT/DB, importación masiva,
+runtime, CPU online ni comportamiento funcional.
 
 ## Recuperación y parada
 
