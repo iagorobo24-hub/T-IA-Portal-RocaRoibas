@@ -90,7 +90,10 @@ evidencia de apertura gráfica más abajo. Volver a ejecutar Doctor antes de cad
   no acreditan PLCSIM ni Runtime.
 - **Aislamiento headless:** [isolated-20260922-connect-disconnect.json](../../../70-runs/environment/isolated-20260922-connect-disconnect.json)
   ejecutó `Connect → GetState → Disconnect` con `tia-inspect --isolated`, sin proyecto y con
-  `allowWrite=false`. Esta excepción no identifica ni modifica la ventana gráfica visible.
+  `allowWrite=false`. Esa captura histórica no llevaba `--fixture-root` y no se considera aceptación
+  conforme al contrato actual. La prueba corregida del 24/09/2026 usó una raíz con manifiesto exacto,
+  confirmó `project="-"` y preservó el hash de copia y backup antes/después ([informe](../../../70-runs/environment/20260924-isolated-read-acceptance.json),
+  [secuencia MCP](../../../70-runs/environment/20260924-isolated-read-sequence.json)).
 - **Identidad y cierre de la ventana visible:** [computer-use-20260922-tia-window.json](../../../70-runs/environment/computer-use-20260922-tia-window.json)
   conserva el título exacto del proyecto desechable, la acción `Close project` y el título posterior
   sin proyecto. No se cerró ni sustituyó ninguna instancia de cliente.
@@ -313,6 +316,14 @@ hasta confirmar la revocación.
 - [x] Corregir R01 para que Attach solo se use cuando el servidor/perfil real lo expone; completar
   checks locales de safety/nombres con `Test-TiaSclSafetyGate.ps1`; el [informe de checks](../../../70-runs/checks/ci-safe-20260922-final6.json)
   conserva el resultado de la barrera SCL y estándares.
+- [x] Cerrar contradicciones heredadas de escritura: README, scripts, conexión MCP, catálogo de
+  errores, ADR-010/011 y R08 ahora exigen instancia aislada + fixture manifiesto + `--allow-write`;
+  la receta SCL de motor ya no ofrece comandos de importación no disponibles. Los generadores
+  `Sync-HarnessConfigs.ps1` y `Export-HarnessAdapter.ps1` validan que `write/full` reciba una raíz
+  manifiesta y añaden los argumentos obligatorios. Comprobaciones: `Test-ServerManifest.ps1`,
+  `Test-ExportHarnessAdapter.ps1`, `Test-SyncHarnessConfigs.ps1`, `Test-DocumentationState.ps1` y
+  `Test-TiaIsolatedMode.ps1 -RunLive` con `Connect → GetState → Disconnect` y hashes preservados
+  pasaron el 2026-09-24; `git diff --check` limpio. [Evidencia](../../../70-runs/checks/20260924-write-profile-isolation.json).
 
 Aceptación: recetas consistentes con AGENTS; ningún ejemplo lee una salida como memoria ni sugiere
 que un interlock estándar sea safety certificada.
@@ -322,11 +333,11 @@ que un interlock estándar sea safety certificada.
 **Archivos:** TIA-Claude_Portable/manifests/package-info.json, scripts de build/manifest,
 TIA-Claude_Portable/tests/Test-PortablePackage.ps1, 50-examples/README.md y agent-demo.
 
-- [x] Generar en una carpeta aislada el candidato final de esta sesión: 314 archivos core y 658 de
-  ejemplos. La validación completa (build, paquete, contenido, relocalización y secreto) está en
-  [validation.json](../../../70-runs/portable-package/final-20260922-093500-000/validation.json).
-  Ese candidato incorpora el `AGENTS.md` y los runners actualizados y es el artefacto distribuible
-  de referencia de esta sesión.
+- [x] Generar en una carpeta aislada el candidato actualizado: 321 archivos core y 658 de ejemplos,
+  incluida la nueva validación de manifiesto y la regla de escritura aislada. El contenido, los
+  hashes y la instalación relocalizada pasaron; evidencia en
+  [20260924-fixture-write-guard-validation.json](../../../70-runs/portable-package/20260924-fixture-write-guard-validation.json).
+  La ruta es `90-tmp/portable-candidate-20260924-fixture-write-guard`; no se promovió a `dist`.
 - [x] Mantener identificada la distribución `TIA-Claude_Portable/dist` como salida antigua no
   distribuible: declara 307/658 y contiene un `AGENTS.md` anterior. No se sobrescribe automáticamente;
   si se publica, hay que promover explícitamente el candidato final y repetir la validación.
@@ -346,7 +357,7 @@ TIA-Claude_Portable/tests/Test-PortablePackage.ps1, 50-examples/README.md y agen
   compilación V20 `0` errores/`0` avisos, lectura del árbol y del bloque, exportación PLC y del bloque,
   comentario con codificación limpia, estándares sin findings y fixture aislado con backup.
 
-Aceptación parcial: el paquete final 314/658 está validado, la comprobación CI segura está verde y el
+Aceptación parcial: el candidato portable más reciente 321/658 está validado, la comprobación CI segura está verde y el
 roundtrip live de `FB_AgentDemo` ya está verificado. Siguen abiertas las familias no ejecutadas, la
 aplicación del runner de propuestas SCL (importador ausente), PLCSIM/Runtime y la revocación histórica.
 
@@ -389,6 +400,9 @@ estado Documentado y no en Fixture/Simulado.
    con el inventario histórico; reemplazar o etiquetar cada fila para que el apéndice no sugiera que
    las herramientas del baseline `01` siguen disponibles. Estas cuatro capturas son tools/list sin
    conexión de proyecto ni ejecución de las acciones, incluso las de `DownloadToPlc` y Safety.
+9. Mantener la configuración generada `write/full` acotada a un único `.tia-agent-fixture.json`;
+   no generar adapters mutables genéricos sin `FixtureRoot`. Esta barrera se probó para Claude Code
+   y el sincronizador común el 2026-09-24.
 
 Se hizo además una encuesta `FindTools` sin conectar proyecto para HMI/pantallas, hardware/módulos,
 watch/force, OPC UA, diagnóstico y analógicas. La respuesta confirma el roster dinámico completo
@@ -618,11 +632,15 @@ partir del compile offline.
   [creación/borrado](../../../70-runs/environment/computer-use-20260922-tia-gui-create-delete.json).
   La preferencia operativa es dejar TIA maximizado al finalizar.
 - [ ] Verificar el perfil read y una sesión MCP nueva: adaptadores Claude/Codex/OpenCode/genérico,
-  manifest, sincronización y `tia-inspect --isolated` pasan; la sesión fresca ejecutó
-  `Connect → GetState → Disconnect` con el mutex. El reinicio de un harness externo concreto queda
-  pendiente de ejecutarse en ese host, pero el contrato local de arranque y el binario V20 están
-  verificados en [doctor-20260922-final.json](../../../70-runs/environment/doctor-20260922-final.json)
-  y [Test-TiaIsolatedMode](../../../30-tools/tests/Test-TiaIsolatedMode.ps1).
+  manifest, sincronización y `tia-inspect --isolated --fixture-root` pasan. El 24/09/2026
+  `Test-TiaIsolatedMode.ps1 -RunLive -FixtureRoot <fixture>` ejecutó
+  `Connect → GetState → Disconnect` con el mutex, confirmó que no quedó proyecto abierto y preservó
+  los hashes de copia/backup. El test ahora exige y valida el manifiesto y el snapshot antes de
+  arrancar Openness. El reinicio de cada harness externo concreto queda pendiente de ejecutarse en
+  ese host; el contrato local y el binario V20 están verificados en
+  [doctor-20260922-final.json](../../../70-runs/environment/doctor-20260922-final.json),
+  [Test-TiaIsolatedMode](../../../30-tools/tests/Test-TiaIsolatedMode.ps1) y la
+  [evidencia live actual](../../../70-runs/environment/20260924-isolated-read-acceptance.json).
 - [x] Ejecutar la suite final de guards, el runner de propuesta SCL en modo negativo, el ciclo MCP
   de tags y `Write-TiaAcceptanceStatus.ps1`; el informe fechado [status-20260922-final14.json](../../../70-runs/acceptance/status-20260922-final14.json)
   y `status-latest.json` mantienen correctamente `accepted=false`, incorporan el inventario
@@ -687,12 +705,16 @@ procesos sin Attach/OpenProject. Tampoco incluye Computer Use; la identidad de u
 la disponibilidad nativa se verifican en la fase gráfica final.
 
 El 24/09/2026, `Doctor` confirmó TIA/Openness V20 instalados, grupo Openness presente y estado
-desconectado; la repetición del roster `tia-create/full` tuvo los mismos 222 schemas ([secuencia](../../../70-runs/tia-capabilities/20260924-doctor-create-full-readonly.json)). Las búsquedas
+desconectado; la repetición del roster `tia-create/full` tuvo los mismos 222 schemas ([secuencia](../../../70-runs/tia-capabilities/20260924-doctor-create-full-readonly.json)). Una captura posterior volvió a verificar
+`tia-inspect/read`: 53 schemas y hash `30396a1d60f9b7584f91f47a6bb57bc26a886d2921f2ea612f91d9a3482ed1f7`
+(SHA-256 de `response.tools` serializado en JSON compacto); Doctor informó `isConnected=false` y
+`allowWrite=false` ([secuencia](../../../70-runs/tia-capabilities/20260924-live-read-profile-refresh.json)). Las búsquedas
 dinámicas `FindTools` confirmaron firmas de importación PLC, creación de DB/UDT y borrado por tipo
 ([secuencia](../../../70-runs/tia-capabilities/20260924-find-db-udt-import-tools-expanded.json)),
 pero no se conectó un proyecto ni se ejecutó ninguna mutación. Computer Use mostró el selector de
-proyectos de TIA ya abierto y maximizado; esa ventana visible impide iniciar otra sesión de proyecto
-hasta identificar/resolver el estado gráfico de forma segura.
+Windows identificó TIA V20 en su ventana principal maximizada (1920×1040), sin proyecto abierto
+([observación](../../../70-runs/environment/20260924-computer-use-tia-window.json)). La sesión aislada
+posterior usó únicamente el fixture manifiesto; no abrió el proyecto.
 
 Los rosters live más recientes están en `20260921-04` a `-07`; son capturas schema-only sin proyecto
 conectado ni ejecución de las acciones, y no están reconciliados fila por fila con las tablas
@@ -712,6 +734,7 @@ históricas. No usar las tablas `01-baseline` como allowlist actual.
 
 | Perfil | Captura +02:00 | Tools | SHA-256 | Args capturados | Snapshot / alcance |
 |---|---|---:|---|---|---|
+| tia-inspect / read | 09:03:41 | 53 | 30396A1D60F9B7584F91F47A6BB57BC26A886D2921F2EA612F91D9A3482ED1F7 | --tia-major-version 20 | [Secuencia Doctor + tools/list](../../../70-runs/tia-capabilities/20260924-live-read-profile-refresh.json); sin proyecto |
 | tia-inspect / write aislado | 16:44:12 | 84 | A291937DF7582F27FBCA6825D8A939B1DFCD48BB9BD170FA2550ED51CAFEEF63 | --tia-major-version 20 --isolated --fixture-root `<run>` --allow-write | [JSON](../../../70-runs/tia-capabilities/20260921-04-write-tools-live.json) |
 | tia-inspect / read | 16:52:26 | 53 | 5844D0CBA7A95E6A69885AB767909D48C95BDB0BE3158ACD72DB3D9B02B05EFE | --tia-major-version 20 | [JSON](../../../70-runs/tia-capabilities/20260921-05-read-tools-live.json) |
 | tia-create / lite | 16:52:35 | 55 | 63EF0ECED5F86E70C37CB78A0024A15A21A60A9E4DB05EAEA18174E7C81F3D55 | --tia-major-version 20 --profile lite | [JSON](../../../70-runs/tia-capabilities/20260921-06-create-lite-tools-live.json) |

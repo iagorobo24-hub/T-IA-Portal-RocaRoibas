@@ -6,6 +6,7 @@ param(
     [string]$OutputPath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path '.mcp.json'),
     [string]$LocalManifestPath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path '30-tools\mcp\servers.local.json'),
     [switch]$AcknowledgeWriteProfile,
+    [string]$FixtureRoot,
     [ValidateSet(20, 21)]
     [int]$TiaMajorVersion = 20
 )
@@ -27,6 +28,13 @@ if ($null -eq $profileObject) {
 }
 if ($profileObject.requiresAcknowledgement -eq $true -and -not $AcknowledgeWriteProfile) {
     throw "Generating profile '$Profile' requires -AcknowledgeWriteProfile. It exposes project-mutating MCP tools."
+}
+if ($Profile -in @('write', 'full')) {
+    if ([string]::IsNullOrWhiteSpace($FixtureRoot)) { throw "Profile '$Profile' requires -FixtureRoot pointing to one disposable manifested fixture." }
+    $FixtureRoot = [IO.Path]::GetFullPath($FixtureRoot)
+    $manifestValidator = Join-Path $WorkspaceRoot '30-tools\scripts\Assert-TiaFixtureManifest.ps1'
+    if (-not (Test-Path -LiteralPath $manifestValidator -PathType Leaf)) { throw "Fixture manifest validator is missing: $manifestValidator" }
+    $null = & $manifestValidator -FixtureRoot $FixtureRoot
 }
 
 $mcpServers = [ordered]@{}
@@ -56,6 +64,9 @@ foreach ($serverProperty in $profileObject.servers.PSObject.Properties) {
     }
 
     $args = @($baseArgs) + @($serverProperty.Value.extraArgs)
+    if ($name -eq 'tia-inspect' -and $Profile -in @('write', 'full')) {
+        $args = @($baseArgs) + @('--isolated', '--fixture-root', $FixtureRoot, '--allow-write')
+    }
     $mcpServers[$name] = [ordered]@{
         command = $command
         args = $args

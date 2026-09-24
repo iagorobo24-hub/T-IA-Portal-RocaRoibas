@@ -7,7 +7,8 @@ param(
     [string]$Profile = 'read',
     [Parameter(Mandatory)]
     [string]$OutputPath,
-    [switch]$AcknowledgeWriteProfile
+    [switch]$AcknowledgeWriteProfile,
+    [string]$FixtureRoot
 )
 
 $ErrorActionPreference = 'Stop'
@@ -22,6 +23,13 @@ if ($null -eq $profileObject) { throw "Unknown MCP profile '$Profile'." }
 if ($profileObject.requiresAcknowledgement -eq $true -and -not $AcknowledgeWriteProfile) {
     throw "Generating profile '$Profile' requires -AcknowledgeWriteProfile."
 }
+if ($Profile -in @('write', 'full')) {
+    if ([string]::IsNullOrWhiteSpace($FixtureRoot)) { throw "Profile '$Profile' requires -FixtureRoot pointing to one disposable manifested fixture." }
+    $FixtureRoot = [IO.Path]::GetFullPath($FixtureRoot)
+    $manifestValidator = Join-Path $WorkspaceRoot '30-tools\scripts\Assert-TiaFixtureManifest.ps1'
+    if (-not (Test-Path -LiteralPath $manifestValidator -PathType Leaf)) { throw "Fixture manifest validator is missing: $manifestValidator" }
+    $null = & $manifestValidator -FixtureRoot $FixtureRoot
+}
 
 $entries = [System.Collections.Generic.List[object]]::new()
 foreach ($serverProperty in $profileObject.servers.PSObject.Properties) {
@@ -32,6 +40,9 @@ foreach ($serverProperty in $profileObject.servers.PSObject.Properties) {
     $command = Join-Path $WorkspaceRoot ($serverDefinition.commandRelative -replace '/', '\')
     if (-not (Test-Path -LiteralPath $command -PathType Leaf)) { throw "Server executable does not exist: $command" }
     $args = @($serverDefinition.baseArgs) + @($serverProperty.Value.extraArgs)
+    if ($name -eq 'tia-inspect' -and $Profile -in @('write', 'full')) {
+        $args = @($serverDefinition.baseArgs) + @('--isolated', '--fixture-root', $FixtureRoot, '--allow-write')
+    }
     $entries.Add([pscustomobject]@{ name = $name; command = $command; args = @($args) })
 }
 

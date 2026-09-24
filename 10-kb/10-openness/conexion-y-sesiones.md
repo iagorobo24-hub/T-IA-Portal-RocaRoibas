@@ -113,7 +113,7 @@ probablemente te sobra.
 | `isConnected` | Si es `false`, cualquier otra llamada dará `InvalidState` |
 | `project` | `-` significa que no hay proyecto abierto |
 | `session` | Distinto de `-` → hay **sesión local de Multiuser** → guardar con `SaveSession`, no `SaveProject` 🔒 |
-| `allowWrite` | Si es `false`, las 40 herramientas de escritura **ni existen** |
+| `allowWrite` | `false` significa que las mutaciones no están registradas; comprueba también `isolated` y raíz de fixture |
 
 ---
 
@@ -133,12 +133,14 @@ Cada respuesta de escritura de `tia-inspect` dice explícitamente cuál toca. L�
 
 ## Modo escritura
 
-✅ **Verificado:** arrancado sin `--allow-write`, `tools/list` devuelve exactamente **59
-herramientas**, todas de lectura. Las 40 de escritura **no se registran**: no aparecen en la
-lista y el modelo no puede llamar a lo que no ve.
+✅ **Captura actual del 2026-09-24:** perfil read devuelve **53 herramientas**. La captura histórica
+del 2026-09-14 tenía 59. El perfil write aislado observado el 2026-09-21 expuso 84 herramientas;
+los conteos son por captura, no una promesa para futuras compilaciones.
 
-Para escribir hay que relanzar el servidor con la bandera. Con ella, las herramientas destructivas
-vienen anotadas `destructiveHint: true` para que el cliente pueda pedir confirmación.
+La bandera sola no habilita herramientas de escritura. La sesión `write` debe usar una instancia
+aislada, una raíz de fixture desechable y su `.tia-agent-fixture.json`, además de `--allow-write`.
+Sin esas tres condiciones el servidor no registra las herramientas mutantes. Las anotaciones
+`destructiveHint` del cliente no sustituyen las barreras del servidor.
 
 🔒 El `.mcp.json` de este workspace registra `tia-inspect` **en solo lectura**. Es deliberado:
 ver [ADR-006](../../00-meta/decisiones/ADR-006-limites-seguridad.md).
@@ -146,8 +148,13 @@ ver [ADR-006](../../00-meta/decisiones/ADR-006-limites-seguridad.md).
 Para una sesión de escritura puntual desde la consola:
 
 ```powershell
-30-tools\scripts\Invoke-TiaMcp.ps1 -AllowWrite -Calls @( ... )
+30-tools\scripts\Invoke-TiaMcp.ps1 -Isolated -FixtureRoot '90-tmp\runs\<fixture>' -AllowWrite -Calls @( ... )
 ```
+
+Para generar una configuración persistente de harness, pasa también `-FixtureRoot` al
+`Sync-HarnessConfigs.ps1` o `Export-HarnessAdapter.ps1`; esa configuración queda acotada a ese
+fixture y debe regenerarse para otra copia. El perfil `full` aplica el mismo aislamiento a
+`tia-inspect`; `tia-create` conserva sus guardas de creación separadas.
 
 ---
 

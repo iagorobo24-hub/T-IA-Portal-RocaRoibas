@@ -13,7 +13,7 @@ ingeniería.
 | Plan con hitos verificables | ✅ |
 | TDD — decisiones | ✅ **7 cerradas** (ADR-001…007) |
 | **M0 — entorno** | ✅ **COMPLETO** — grupo Openness OK, SDK instalado, servidor compilado |
-| **M1 — `tia-inspect` operativo** | ✅ **conecta con TIA Portal V20**, 59 herramientas |
+| **M1 — `tia-inspect` operativo** | ✅ **Doctor y perfil read V20 verificados**, 53 herramientas en la captura del 2026-09-24 |
 | **Fase 0 — estado reproducible** | ✅ informe de entorno y perfiles generados |
 | M4 — estándares | ✅ checker aplicado en solo lectura a los **7 ejemplos**; 3 hallazgos bloqueantes documentados |
 | **M5 — ejemplos** | ✅ **los 7 migrados a V20, inventariados y exportados a texto** |
@@ -26,13 +26,14 @@ ingeniería.
 
 ## ✅ Funciona
 
-Cadena completa verificada el 2026-09-14: **Claude → MCP → Openness → TIA Portal V20**.
+Cadena completa MCP/Openness verificada históricamente el 2026-09-14; revalidaciones recientes
+acreditan Doctor, roster y sesión aislada de lectura por separado.
 
 ```
 User in 'Siemens TIA Openness' user group: True
 V19 / V20: Engineering OK · Portal OK
-Connect: 27,7 s en frío · 0,3 s en caliente
-59 herramientas de lectura registradas
+Connect: 27,7 s en frío · 0,3 s en caliente (medición histórica 2026-09-14)
+53 herramientas de lectura (captura 2026-09-24)
 ```
 
 ### Uso desde consola, sin cliente MCP
@@ -41,21 +42,28 @@ Connect: 27,7 s en frío · 0,3 s en caliente
 # Diagnóstico
 30-tools\scripts\Invoke-TiaMcp.ps1 -Calls @(@{name='Doctor'})
 
-# Abrir un proyecto e inventariarlo
-30-tools\scripts\Invoke-TiaMcp.ps1 -Calls @(
+# Inventariar únicamente el proyecto exacto de un fixture desechable manifiesto
+$fixtureRoot = '90-tmp\runs\<fixture>'
+$fixture = Get-Content (Join-Path $fixtureRoot '.tia-agent-fixture.json') -Raw | ConvertFrom-Json
+30-tools\scripts\Invoke-TiaMcp.ps1 -Isolated -FixtureRoot $fixtureRoot -Calls @(
     @{ name='Connect' },
-    @{ name='OpenProject'; args=@{ path='...\Proyecto.ap20' } },
-    @{ name='GetProjectTree' }
+    @{ name='OpenProject'; args=@{ path=$fixture.projectPath } },
+    @{ name='GetProjectTree' },
+    @{ name='Disconnect' }
 )
-
-# Cerrar las instancias de TIA al terminar (Disconnect NO las cierra)
-30-tools\scripts\Stop-TiaPortal.ps1
 ```
+
+No uses este ejemplo para abrir proyectos originales ni proyectos de cliente. Si trabajas sobre
+una ventana visible, identifica el proyecto en Computer Use antes de cualquier conexión y sigue
+`AGENTS.md`; nunca cierres procesos TIA de forma genérica.
 
 ### Desde Claude Code
 
 `.mcp.json` registra `tia-inspect` **en solo lectura**. Reinicia la sesión para que cargue.
-Para escritura hay que relanzar el servidor con `--allow-write` ([ADR-006](00-meta/decisiones/ADR-006-limites-seguridad.md)).
+El perfil `read` es el predeterminado. Una configuración `write/full` solo se genera para un
+fixture desechable concreto y exige reconocimiento explícito, `--isolated`, `--fixture-root` y
+`--allow-write`; crea primero el fixture y su manifiesto según [AGENTS.md](AGENTS.md). Para una
+sesión puntual usa `Invoke-TiaMcp.ps1 -Isolated -FixtureRoot <run-dir> -AllowWrite` ([ADR-006](00-meta/decisiones/ADR-006-limites-seguridad.md)).
 
 ### Comprobación diaria
 
@@ -63,7 +71,8 @@ Para escritura hay que relanzar el servidor con `--allow-write` ([ADR-006](00-me
 30-tools\scripts\Run-WorkspaceChecks.ps1
 ```
 
-El último informe verificó **37 PASS, 0 WARN y 0 BLOCKED**. La prueba E2E de escritura completa
+El informe citado a continuación es una captura histórica. Para el estado actual usa
+`70-runs/acceptance/status-latest.json` y los checks fechados. La prueba E2E de escritura completa
 está en [`70-runs/e2e/20260915-082218/report.json`](70-runs/e2e/20260915-082218/report.json) y el
 estado de entorno en [`70-runs/environment/latest.json`](70-runs/environment/latest.json).
 El barrido de estándares de los siete ejemplos está en

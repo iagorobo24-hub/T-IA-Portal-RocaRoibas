@@ -1,6 +1,6 @@
 # ADR-010 — Estado real actualizado del workspace a 2026-09-15
 
-- **Estado:** aceptada; sustituye como fotografía operativa a ADR-009.
+- **Estado:** fotografía histórica del 2026-09-15; sus instrucciones de escritura fueron sustituidas por `AGENTS.md` y ADR-011.
 - **Evidencia primaria:** `70-runs/environment/latest.json`,
   `70-runs/environment/tia-create-smoke.json`,
   `70-runs/standards/sweep-20260915-all/sweep-report.json`.
@@ -8,7 +8,7 @@
 ## Decisiones y hechos verificados
 
 1. TIA Portal V20 y Openness V20 son la plataforma canónica. V19 queda fuera del flujo textual.
-2. `tia-inspect` V20 está operativo: lectura por defecto y escritura solo con `--allow-write`.
+2. En esa fecha se observó lectura por defecto y se creía que `--allow-write` bastaba; desde la adopción de fixture aislado, la escritura requiere `--isolated --fixture-root <run-dir> --allow-write`.
 3. `tia-create` V20 `2.7.2` está compilado desde `TiaMcpServer.V20.csproj`, publicado en el
    workspace y verificado por MCP: el perfil `lite` publica 55 herramientas, incluyendo
    `CreateProject` y `ScaffoldProject`.

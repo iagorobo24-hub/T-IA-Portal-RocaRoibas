@@ -4,7 +4,7 @@
     "tia-inspect": {
       "commandRelative": "30-tools/mcp/tia-inspect/bin/v20/TiaMcpServer.exe",
       "baseArgs": ["--tia-major-version", "20"],
-      "purpose": "Inspect and, only in the write profile, modify TIA Portal V20 projects",
+      "purpose": "Inspect by default; modify only in an isolated manifested disposable fixture",
       "versions": {
         "20": {
           "commandRelative": "30-tools/mcp/tia-inspect/bin/v20/TiaMcpServer.exe",
@@ -50,8 +50,9 @@
       }
     },
     "write": {
-      "description": "Explicit write session; requires backup, preview, compile and save gates",
+      "description": "Explicit isolated write session; requires a manifested disposable fixture root",
       "requiresAcknowledgement": true,
+      "requiresFixtureRoot": true,
       "servers": {
         "tia-inspect": { "extraArgs": ["--allow-write"] }
       }
@@ -64,8 +65,9 @@
       }
     },
     "full": {
-      "description": "All verified servers; explicit acknowledgement required",
+      "description": "All configured servers; tia-inspect is confined to a manifested disposable fixture",
       "requiresAcknowledgement": true,
+      "requiresFixtureRoot": true,
       "servers": {
         "tia-inspect": { "extraArgs": ["--allow-write"] },
         "tia-create": { "extraArgs": [] }

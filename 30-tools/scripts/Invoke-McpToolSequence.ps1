@@ -29,6 +29,15 @@ param(
 $ErrorActionPreference = 'Stop'
 $ExecutablePath = [IO.Path]::GetFullPath($ExecutablePath)
 if (-not (Test-Path -LiteralPath $ExecutablePath -PathType Leaf)) { throw "Executable does not exist: $ExecutablePath" }
+if ($Arguments -match '(?i)(?:^|\s)--isolated(?:\s|$)') {
+    if ($Arguments -notmatch '(?i)(?:^|\s)--fixture-root\s+(?:"([^"]+)"|(\S+))') {
+        throw 'An isolated MCP sequence requires --fixture-root with a valid disposable fixture manifest.'
+    }
+    $fixtureRoot = if ($Matches[1]) { $Matches[1] } else { $Matches[2] }
+    $manifestValidator = Join-Path $PSScriptRoot 'Assert-TiaFixtureManifest.ps1'
+    if (-not (Test-Path -LiteralPath $manifestValidator -PathType Leaf)) { throw "Fixture manifest validator is missing: $manifestValidator" }
+    $null = & $manifestValidator -FixtureRoot $fixtureRoot
+}
 if ($CallsJson) { $Calls = @($CallsJson | ConvertFrom-Json) }
 if (-not $Calls -or $Calls.Count -eq 0) { throw 'At least one MCP call is required.' }
 

@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$WorkspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path,
+    [string]$FixtureRoot,
     [switch]$RunLive
 )
 
@@ -36,17 +37,37 @@ if ($LASTEXITCODE -ne 0 -or $doctorOutput -notmatch 'Active Version: V20') {
 }
 
 if ($RunLive) {
+    if ([string]::IsNullOrWhiteSpace($FixtureRoot)) {
+        throw '-RunLive requires -FixtureRoot for a manifested disposable V20 project.'
+    }
+    $fixtureRootFull = [IO.Path]::GetFullPath($FixtureRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    $manifestValidator = Join-Path $WorkspaceRoot '30-tools\scripts\Assert-TiaFixtureManifest.ps1'
+    $fixture = & $manifestValidator -FixtureRoot $fixtureRootFull
+
     $sequence = Join-Path $WorkspaceRoot '30-tools\scripts\Invoke-McpToolSequence.ps1'
     $output = Join-Path ([IO.Path]::GetTempPath()) ('tia-claude-isolated-live-' + [guid]::NewGuid().ToString('N') + '.json')
     $calls = '[{"name":"Connect","args":{}},{"name":"GetState","args":{}},{"name":"Disconnect","args":{}}]'
+    $escapedFixtureRoot = $fixtureRootFull.Replace('"', '\"')
+    $serverArguments = "--tia-major-version 20 --isolated --fixture-root `"$escapedFixtureRoot`""
     try {
-        & $sequence -ExecutablePath $binary -Arguments '--tia-major-version 20 --isolated' -CallsJson $calls -OutputPath $output -TimeoutSeconds 180 | Out-Null
+        & $sequence -ExecutablePath $binary -Arguments $serverArguments -CallsJson $calls -OutputPath $output -TimeoutSeconds 180 | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "Isolated live sequence failed with exit code $LASTEXITCODE." }
         $report = Get-Content -Raw -LiteralPath $output | ConvertFrom-Json
         if (-not $report.success) { throw 'Isolated live sequence did not report success.' }
         $connect = @($report.calls | Where-Object name -eq 'Connect' | Select-Object -Last 1)
         if (-not $connect.success) { throw 'Isolated Connect did not succeed.' }
-        Write-Output 'PASS: isolated headless TIA session connected and disconnected without opening a project'
+        $stateCall = @($report.calls | Where-Object name -eq 'GetState' | Select-Object -Last 1)
+        if (-not $stateCall.success) { throw 'Isolated GetState did not succeed.' }
+        $state = [string]$stateCall.text | ConvertFrom-Json
+        if ([string]$state.project -ne '-') { throw 'The live isolated smoke test unexpectedly opened a project.' }
+        $disconnect = @($report.calls | Where-Object name -eq 'Disconnect' | Select-Object -Last 1)
+        if (-not $disconnect.success) { throw 'Isolated Disconnect did not succeed.' }
+        $fixtureAfter = & $manifestValidator -FixtureRoot $fixtureRootFull
+        if ($fixtureAfter.projectSnapshotSha256 -ne $fixture.projectSnapshotSha256 -or
+            $fixtureAfter.backupSnapshotSha256 -ne $fixture.backupSnapshotSha256) {
+            throw 'The read-only isolated smoke test changed the fixture or backup snapshot.'
+        }
+        Write-Output 'PASS: isolated headless TIA session used the exact manifested fixture root, reported no project open, disconnected, and preserved fixture/backup hashes'
     }
     finally {
         if (Test-Path -LiteralPath $output) { Remove-Item -LiteralPath $output -Force }

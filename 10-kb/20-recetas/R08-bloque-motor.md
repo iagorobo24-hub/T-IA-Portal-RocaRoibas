@@ -3,9 +3,12 @@
 **Objetivo.** Poner en marcha un motor con confirmación, enclavamiento y diagnóstico, siguiendo
 los estándares, sin escribirlo desde cero cada vez.
 
-**Servidor.** `tia-inspect` con `--allow-write`.
+**Estado de aplicación en TIA V20 actual.** El bloque de librería existe y su contenido técnico
+se puede revisar. La ruta MCP de importar fuentes SCL no está disponible en el roster write
+verificado; no ejecutes esta receta como una importación directa. La sesión write requiere fixture
+aislado y manifiesto incluso cuando esa herramienta se registre en el futuro.
 
-> ✅ **Verificado el 2026-09-14.** El bloque se importó en un proyecto real y compiló con
+> **Evidencia histórica, no autorización vigente:** el 2026-09-14 el bloque se importó en un proyecto y compiló con
 > **0 errores y 0 advertencias**. El código de [`60-library/blocks/FB_Motor.scl`](../../60-library/blocks/FB_Motor.scl)
 > es el que pasó esa prueba, no una versión "parecida".
 
@@ -77,37 +80,27 @@ Ahí se ve de un vistazo que falta la seta, o el guardamotor, o que hay atasco.
 
 ---
 
-## 3. Meterlo en el proyecto
+## 3. Estado de la importación automatizada
 
-```powershell
-30-tools\scripts\Invoke-TiaMcp.ps1 -AllowWrite -TimeoutSeconds 900 -Calls @(
-    @{ name='Connect' },
-    @{ name='OpenProject'; args=@{ path='...\Proyecto.ap20' } },
-    @{ name='CreateExternalSourceFromFile'; args=@{
-         softwarePath='PLC_1'; groupPath=''; name='FB_Motor'
-         filePath='...\60-library\blocks\FB_Motor.scl' } },
-    @{ name='GenerateBlocksFromSource'; args=@{ softwarePath='PLC_1'; sourcePath='FB_Motor' } },
-    @{ name='CompileSoftware'; args=@{ softwarePath='PLC_1' } },
-    @{ name='SaveProject' }
-)
-```
+No uses el ejemplo histórico de importación directa como procedimiento ejecutable. En el perfil
+V20 actual, `tools/list` no publica `ImportSources` ni `ImportFromDocuments`, y la política del
+workspace prohíbe eludir esa ausencia con importadores genéricos. Una propuesta local SCL tampoco
+significa que el bloque se haya aplicado. El trabajo queda **Bloqueado** hasta que exista una
+herramienta acotada registrada y un ciclo de fixture aceptado con clasificación no Safety,
+compilación, guardado, exportación y readback.
 
-⚠️ **Son dos pasos, no uno.** `CreateExternalSourceFromFile` mete el fichero en el proyecto;
-`GenerateBlocksFromSource` lo convierte en bloque. Si haces solo el primero, tienes una fuente
-externa y ningún bloque.
+Mientras tanto, revisa el bloque versionado de la librería y usa los casos de verificación de esta
+receta para validar requisitos o una implementación manual autorizada por el responsable del
+proyecto en TIA. No conectes ni modifiques un proyecto real mediante los comandos antiguos.
 
-⚠️ **Todo esto es en memoria.** Cada respuesta lo dice: *"The change is in memory; call
-'SaveProject' to persist it"*. Sin `SaveProject`, al cerrar no queda nada.
+<!-- El procedimiento MCP anterior se conserva únicamente en el historial Git. -->
 
-### Reimportar una versión nueva
+### Ruta que ya no se debe ejecutar
 
-```powershell
-@{ name='DeleteBlock';          args=@{ softwarePath='PLC_1'; blockPath='FB_Motor' } },
-@{ name='DeleteExternalSource'; args=@{ softwarePath='PLC_1'; sourcePath='FB_Motor' } },
-# ...y vuelta a importar
-```
-
-Borra los dos. Si dejas la fuente vieja, acabas con dos fuentes del mismo nombre.
+**No ejecutar:** `Invoke-TiaMcp.ps1 -AllowWrite` contra un proyecto abierto o ruta inventada,
+`CreateExternalSourceFromFile`, `GenerateBlocksFromSource`, `DeleteBlock` ni
+`DeleteExternalSource`. Los nombres de ruta históricos no proceden de un árbol live de la sesión y
+estas mutaciones no tienen preflight vigente acreditado.
 
 ---
 

@@ -25,6 +25,9 @@ if ($readArgs -contains '--allow-write') {
 if ($writeArgs -notcontains '--allow-write') {
     throw 'Write profile must contain --allow-write.'
 }
+if ($manifest.profiles.write.requiresFixtureRoot -ne $true -or $manifest.profiles.full.requiresFixtureRoot -ne $true) {
+    throw 'Write and full profiles must declare their required manifested fixture root.'
+}
 
 $relativeCommand = [string]$manifest.servers.'tia-inspect'.commandRelative
 $absoluteCommand = Join-Path $WorkspaceRoot ($relativeCommand -replace '/', '\')
