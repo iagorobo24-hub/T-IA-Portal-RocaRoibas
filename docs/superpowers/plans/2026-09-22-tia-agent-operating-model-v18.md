@@ -244,15 +244,18 @@ ninguna decisión tuya.
 2. [ ] `Write-TiaSimulationReadiness.ps1:29` → `PLCSIM_V19` (ver V18-C).
 3. [ ] `00-meta/01-arquitectura.md` sigue titulado con la ruta `C:\Users\jose.mellid\TIA-Claude`.
 
-### V18-E — Cerrar el círculo con Claude Code
+### V18-E — Cerrar el círculo con Claude Code — ✅ **CERRADO 2026-09-24**
 
-1. [ ] Reiniciar la sesión para que `.mcp.json` cargue el servidor V18 **como MCP nativo**, en vez de
-   invocarlo por script. Hoy `tia-inspect` aparece como `CONNECTION_CLOSED` porque la sesión arrancó
-   con la configuración vieja.
-2. [ ] Verificar que las herramientas aparecen como `mcp__tia-inspect__*` y repetir un `Doctor` por esa vía.
-3. [ ] Documentar el arranque en `35-runtime/v18/PERFIL.md`.
+1. [x] La sesión reinició y `.mcp.json` cargó el servidor V18 **como MCP nativo**.
+2. [x] Las 49 herramientas aparecen como `mcp__tia-inspect__*`. `Doctor` llamado por esa vía
+   devuelve `activeTiaMajorVersion: 18`, `isUserInGroup: true`, `allowWrite: false` y las tres
+   instalaciones (V16/V17/V18) con `engineeringExists: true`.
+3. [x] Documentado en [35-runtime/v18/PERFIL.md](../../../35-runtime/v18/PERFIL.md).
 
-> Es el paso que convierte todo lo anterior en **trabajo diario** en lugar de en una demo.
+> **Claude Code habla con TIA Portal V18 directamente**, sin scripts intermedios. Los runners de
+> `30-tools/scripts/` siguen siendo el camino obligatorio para **secuencias** —mantienen una sola
+> sesión MCP y el lease `Local\TIA-Claude-McpSession`, que impide dos sesiones concurrentes contra
+> TIA (AGENTS.md §5)—, pero una lectura suelta ya se hace con la herramienta directa.
 
 ---
 
