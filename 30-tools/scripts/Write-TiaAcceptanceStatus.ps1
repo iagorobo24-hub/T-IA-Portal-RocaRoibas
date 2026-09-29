@@ -246,6 +246,11 @@ if ($readiness -and $readiness.readOnly -eq $true -and $readiness.gates) {
 if ($readiness -and $readiness.gates -and $readiness.gates.plcsimVirtualAdapterReady -ne $true) {
     $blocked.Add('El adaptador virtual Siemens PLCSIM no está operativo')
 }
+if (-not $readiness -or -not $readiness.gates -or $readiness.gates.plcsimCompatibleWithTia -ne $true) {
+    $tiaVersion = if ($readiness -and $readiness.versions) { $readiness.versions.tiaMajor } else { $null }
+    $plcsimVersion = if ($readiness -and $readiness.versions) { $readiness.versions.plcsimAdvanced } else { $null }
+    $blocked.Add("PLCSIM Advanced $plcsimVersion no está en la matriz admitida para TIA Portal $tiaVersion")
+}
 if ($readiness -and $readiness.gates -and $readiness.gates.hmiRuntimeAdvancedV20Ready -ne $true) {
     $blocked.Add('WinCC Runtime Advanced V20 compatible no está verificado')
 }
@@ -1377,6 +1382,13 @@ $result = [ordered]@{
     notVerified = @($notVerified)
     blocked = @($blocked)
     assumptions = @($assumptions)
+    simulation = [ordered]@{
+        tiaMajor = if ($readiness -and $readiness.versions) { $readiness.versions.tiaMajor } else { $null }
+        plcsimAdvanced = if ($readiness -and $readiness.versions) { $readiness.versions.plcsimAdvanced } else { $null }
+        plcsimCompatibleWithTia = if ($readiness -and $readiness.gates) { $readiness.gates.plcsimCompatibleWithTia } else { $false }
+        virtualAdapterReady = if ($readiness -and $readiness.gates) { $readiness.gates.plcsimVirtualAdapterReady } else { $false }
+        plcBehaviorVerified = if ($readiness -and $readiness.gates) { $readiness.gates.plcBehaviorVerified } else { $false }
+    }
     computerUse = $computerUse
     checks = if ($checks) {
         [ordered]@{

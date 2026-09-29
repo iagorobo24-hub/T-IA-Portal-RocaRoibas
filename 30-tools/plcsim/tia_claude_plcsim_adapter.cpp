@@ -23,6 +23,15 @@ void PrintJsonString(const std::wstring& value)
     std::wcout << L"\"";
 }
 
+void PrintIpv4(const UIP& address)
+{
+    std::wcout << L"\""
+               << static_cast<unsigned int>(address.IPs[3]) << L"."
+               << static_cast<unsigned int>(address.IPs[2]) << L"."
+               << static_cast<unsigned int>(address.IPs[1]) << L"."
+               << static_cast<unsigned int>(address.IPs[0]) << L"\"";
+}
+
 void PrintCode(const wchar_t* name, ERuntimeErrorCode code)
 {
     std::wcout << L"\"" << name << L"\":\"0x" << std::hex << static_cast<int>(code) << std::dec << L"\"";
@@ -525,6 +534,305 @@ int RunDisposableProbe(ISimulationRuntimeManager* manager, int argc, wchar_t* ar
     return success ? 0 : 1;
 }
 
+// Read-only inspection of an already registered instance. Does not register,
+// power on/off, download, or unregister the PLC.
+int RunInspectRegisteredInstance(ISimulationRuntimeManager* manager, int argc, wchar_t* argv[])
+{
+    const std::wstring requestedName = ArgumentValue(argc, argv, L"--name", L"");
+    if (requestedName.empty())
+    {
+        std::wcout << L"{\"status\":\"failed\",\"stage\":\"validate\",\"message\":\"--name is required for --inspect-registered-instance.\"}\n";
+        return 2;
+    }
+
+    const UINT32 registeredCount = manager->GetRegisteredInstancesCount();
+    SInstanceInfo matchedInfo{};
+    bool found = false;
+    ERuntimeErrorCode listCode = SREC_OK;
+    for (UINT32 index = 0; index < registeredCount; ++index)
+    {
+        SInstanceInfo info{};
+        listCode = manager->GetRegisteredInstanceInfoAt(index, &info);
+        if (listCode != SREC_OK)
+        {
+            std::wcout << L"{\"status\":\"failed\",\"stage\":\"list-instances\",\"registeredCount\":"
+                       << registeredCount << L",";
+            PrintCode(L"listCode", listCode);
+            std::wcout << L"}\n";
+            return 1;
+        }
+        if (requestedName == info.Name)
+        {
+            matchedInfo = info;
+            found = true;
+            break;
+        }
+    }
+
+    if (!found)
+    {
+        std::wcout << L"{\"status\":\"not-found\",\"requestedName\":";
+        PrintJsonString(requestedName);
+        std::wcout << L",\"registeredCount\":" << registeredCount << L"}\n";
+        return 3;
+    }
+
+    IInstance* instance = nullptr;
+    std::wstring mutableName = requestedName;
+    const ERuntimeErrorCode createCode = manager->CreateInterface(mutableName.data(), &instance);
+    if (createCode != SREC_OK || instance == nullptr)
+    {
+        std::wcout << L"{\"status\":\"failed\",\"stage\":\"create-read-interface\",\"requestedName\":";
+        PrintJsonString(requestedName);
+        std::wcout << L",";
+        PrintCode(L"createCode", createCode);
+        std::wcout << L"}\n";
+        return 1;
+    }
+
+    WCHAR reportedName[DINSTANCE_NAME_MAX_LENGTH] = {};
+    const ERuntimeErrorCode nameCode = instance->GetName(reportedName, DINSTANCE_NAME_MAX_LENGTH);
+    const ECPUType cpuType = instance->GetCPUType();
+    const ECommunicationInterface communicationInterface = instance->GetCommunicationInterface();
+    const EOperatingState operatingState = instance->GetOperatingState();
+    const UINT32 ipCount = instance->GetControllerIPCount();
+    std::vector<UIP> addresses(ipCount);
+    for (UINT32 index = 0; index < ipCount; ++index)
+    {
+        addresses[index] = instance->GetControllerIP(index);
+    }
+
+    const ERuntimeErrorCode destroyCode = DestroyInterface(instance);
+    instance = nullptr;
+    const bool success = nameCode == SREC_OK && destroyCode == SREC_OK;
+
+    std::wcout << L"{\"status\":\"" << (success ? L"ok" : L"failed") << L"\",";
+    std::wcout << L"\"instanceId\":" << matchedInfo.ID << L",\"requestedName\":";
+    PrintJsonString(requestedName);
+    std::wcout << L",\"name\":";
+    PrintJsonString(reportedName);
+    std::wcout << L",";
+    PrintCode(L"nameCode", nameCode);
+    std::wcout << L",\"cpuType\":";
+    PrintJsonString(GetNameOfCPUType(cpuType));
+    std::wcout << L",\"cpuTypeValue\":" << static_cast<int>(cpuType) << L",\"communicationInterface\":";
+    PrintJsonString(GetNameOfCommunicationInterface(communicationInterface));
+    std::wcout << L",\"communicationInterfaceValue\":" << static_cast<int>(communicationInterface)
+               << L",\"operatingState\":";
+    PrintJsonString(GetNameOfOperatingState(operatingState));
+    std::wcout << L",\"operatingStateValue\":" << static_cast<int>(operatingState)
+               << L",\"ipAddresses\":[";
+    for (UINT32 index = 0; index < ipCount; ++index)
+    {
+        if (index > 0) std::wcout << L",";
+        PrintIpv4(addresses[index]);
+    }
+    std::wcout << L"],\"registeredCount\":" << registeredCount << L",";
+    PrintCode(L"destroyCode", destroyCode);
+    std::wcout << L",\"mutatedRuntime\":false}\n";
+    return success ? 0 : 1;
+}
+
+// Runs a tightly scoped logic check against one already registered, standard
+// 1513 Softbus instance. Only Cmd_Enable is written; its original value is
+// restored before the interface is released. The instance is never powered
+// off, unregistered, or downloaded by this mode.
+int RunBehavioralSmokeOnRegisteredInstance(ISimulationRuntimeManager* manager, int argc, wchar_t* argv[])
+{
+    const std::wstring requestedName = ArgumentValue(argc, argv, L"--name", L"");
+    if (requestedName.empty())
+    {
+        std::wcout << L"{\"status\":\"failed\",\"stage\":\"validate\",\"message\":\"--name is required.\"}\n";
+        return 2;
+    }
+    const UINT32 registeredCount = manager->GetRegisteredInstancesCount();
+    if (registeredCount != 1)
+    {
+        std::wcout << L"{\"status\":\"blocked\",\"stage\":\"identity\",\"registeredCount\":" << registeredCount << L"}\n";
+        return 3;
+    }
+    SInstanceInfo info{};
+    const ERuntimeErrorCode infoCode = manager->GetRegisteredInstanceInfoAt(0, &info);
+    if (infoCode != SREC_OK || requestedName != info.Name)
+    {
+        std::wcout << L"{\"status\":\"blocked\",\"stage\":\"identity\",\"requestedName\":";
+        PrintJsonString(requestedName);
+        std::wcout << L",\"registeredName\":";
+        PrintJsonString(info.Name);
+        std::wcout << L",";
+        PrintCode(L"infoCode", infoCode);
+        std::wcout << L"}\n";
+        return 3;
+    }
+
+    IInstance* instance = nullptr;
+    std::wstring mutableName = requestedName;
+    const ERuntimeErrorCode createCode = manager->CreateInterface(mutableName.data(), &instance);
+    if (createCode != SREC_OK || instance == nullptr)
+    {
+        std::wcout << L"{\"status\":\"failed\",\"stage\":\"attach\",";
+        PrintCode(L"createCode", createCode);
+        std::wcout << L"}\n";
+        return 1;
+    }
+
+    const std::wstring cpuName = GetNameOfCPUType(instance->GetCPUType());
+    const std::wstring interfaceName = GetNameOfCommunicationInterface(instance->GetCommunicationInterface());
+    const std::wstring operatingState = GetNameOfOperatingState(instance->GetOperatingState());
+    if (cpuName != L"1513" || interfaceName != L"Softbus" || operatingState != L"Run")
+    {
+        const ERuntimeErrorCode destroyCode = DestroyInterface(instance);
+        std::wcout << L"{\"status\":\"blocked\",\"stage\":\"runtime-preflight\",\"cpuType\":";
+        PrintJsonString(cpuName);
+        std::wcout << L",\"communicationInterface\":";
+        PrintJsonString(interfaceName);
+        std::wcout << L",\"operatingState\":";
+        PrintJsonString(operatingState);
+        std::wcout << L",";
+        PrintCode(L"destroyCode", destroyCode);
+        std::wcout << L"}\n";
+        return 3;
+    }
+
+    const std::wstring commandTagName = L"Cmd_Enable";
+    std::vector<wchar_t> commandTag(commandTagName.begin(), commandTagName.end());
+    commandTag.push_back(L'\0');
+    const std::wstring statusTagName = L"Status_Active";
+    std::vector<wchar_t> statusTag(statusTagName.begin(), statusTagName.end());
+    statusTag.push_back(L'\0');
+    bool initialCommand = false;
+    bool initialStatus = false;
+    const ERuntimeErrorCode readCommandCode = instance->ReadBool(commandTag.data(), &initialCommand);
+    const ERuntimeErrorCode readStatusCode = instance->ReadBool(statusTag.data(), &initialStatus);
+    if (readCommandCode != SREC_OK || readStatusCode != SREC_OK)
+    {
+        const ERuntimeErrorCode destroyCode = DestroyInterface(instance);
+        std::wcout << L"{\"status\":\"failed\",\"stage\":\"initial-read\",";
+        PrintCode(L"readCommandCode", readCommandCode);
+        std::wcout << L",";
+        PrintCode(L"readStatusCode", readStatusCode);
+        std::wcout << L",";
+        PrintCode(L"destroyCode", destroyCode);
+        std::wcout << L"}\n";
+        return 1;
+    }
+    const bool originalStatus = initialStatus;
+
+    auto waitForStatus = [&](bool expected, bool* observed) -> bool
+    {
+        const ULONGLONG deadline = GetTickCount64() + 5000;
+        do
+        {
+            const ERuntimeErrorCode code = instance->ReadBool(statusTag.data(), observed);
+            if (code != SREC_OK) return false;
+            if (*observed == expected) return true;
+            Sleep(100);
+        } while (GetTickCount64() < deadline);
+        return false;
+    };
+
+    bool disabledStatus = initialStatus;
+    bool enabledStatus = initialStatus;
+    bool restoredStatus = initialStatus;
+    const ERuntimeErrorCode disableCode = instance->WriteBool(commandTag.data(), false);
+    const bool disabledObserved = disableCode == SREC_OK && waitForStatus(false, &disabledStatus);
+    const ERuntimeErrorCode enableCode = instance->WriteBool(commandTag.data(), true);
+    const bool enabledObserved = enableCode == SREC_OK && waitForStatus(true, &enabledStatus);
+    const ERuntimeErrorCode restoreCode = instance->WriteBool(commandTag.data(), initialCommand);
+    const bool restoredObserved = restoreCode == SREC_OK && waitForStatus(initialCommand, &restoredStatus);
+    bool finalCommand = false;
+    const ERuntimeErrorCode finalCommandReadCode = instance->ReadBool(commandTag.data(), &finalCommand);
+    const ERuntimeErrorCode destroyCode = DestroyInterface(instance);
+    instance = nullptr;
+    const bool success = disabledObserved && enabledObserved && restoreCode == SREC_OK && restoredObserved &&
+                         finalCommandReadCode == SREC_OK && finalCommand == initialCommand && destroyCode == SREC_OK;
+
+    std::wcout << L"{\"status\":\"" << (success ? L"passed" : L"failed") << L"\",\"stage\":\"behavior\",\"instanceName\":";
+    PrintJsonString(requestedName);
+    std::wcout << L",\"transport\":\"Softbus\",\"cpuType\":\"1513\",\"initialCommand\":" << (initialCommand ? L"true" : L"false")
+               << L",\"initialStatus\":" << (originalStatus ? L"true" : L"false")
+               << L",\"disabledStatus\":" << (disabledStatus ? L"true" : L"false")
+               << L",\"disabledObserved\":" << (disabledObserved ? L"true" : L"false")
+               << L",\"enabledStatus\":" << (enabledStatus ? L"true" : L"false")
+               << L",\"enabledObserved\":" << (enabledObserved ? L"true" : L"false")
+               << L",\"restoredStatus\":" << (restoredStatus ? L"true" : L"false")
+               << L",\"restoredObserved\":" << (restoredObserved ? L"true" : L"false")
+               << L",\"finalCommand\":" << (finalCommand ? L"true" : L"false")
+               << L",\"runtimeMutation\":true,";
+    PrintCode(L"disableCode", disableCode);
+    std::wcout << L",";
+    PrintCode(L"enableCode", enableCode);
+    std::wcout << L",";
+    PrintCode(L"restoreCode", restoreCode);
+    std::wcout << L",";
+    PrintCode(L"finalCommandReadCode", finalCommandReadCode);
+    std::wcout << L",";
+    PrintCode(L"destroyCode", destroyCode);
+    std::wcout << L"}\n";
+    return success ? 0 : 1;
+}
+
+// Exercises the TCP/IP path on a standard, temporary 1513-1 CPU.  This is
+// deliberately separate from project acceptance: no project is downloaded.
+int RunTcpIpDisposableProbe(ISimulationRuntimeManager* manager, int argc, wchar_t* argv[])
+{
+    const UINT32 timeoutMs = static_cast<UINT32>(std::stoul(ArgumentValue(argc, argv, L"--timeout-ms", L"60000")));
+    const std::wstring ipText = ArgumentValue(argc, argv, L"--ip", L"192.168.200.1");
+    const UINT32 registeredBefore = manager->GetRegisteredInstancesCount();
+    ENetworkMode modeBefore = ENetworkMode::UNKNOWN_STATE;
+    const ERuntimeErrorCode modeReadCode = manager->GetNetworkMode(&modeBefore);
+    const ERuntimeErrorCode modeSetCode = manager->SetNetworkMode(ENetworkMode::TCPIP_SINGLE_ADAPTER);
+    ENetworkMode modeAfter = ENetworkMode::UNKNOWN_STATE;
+    const ERuntimeErrorCode modeVerifyCode = manager->GetNetworkMode(&modeAfter);
+    // Runtime bindings require an administrator parent session. The Control
+    // Panel already selects Ethernet 3 in single-adapter mode; do not mutate
+    // that global setting for a local disposable probe.
+
+    UIP ip{}; UIP mask{}; UIP gateway{};
+    const bool parsed = ParseIp(ipText, &ip) && ParseIp(L"255.255.255.0", &mask) && ParseIp(L"0.0.0.0", &gateway);
+    std::wstring instanceName = L"TIAClaudeTcpProbe_" + std::to_wstring(GetCurrentProcessId());
+    IInstance* instance = nullptr;
+    ERuntimeErrorCode registerCode = SREC_OK, powerOnCode = SREC_OK, ipCode = SREC_OK;
+    ERuntimeErrorCode powerOffCode = SREC_OK, unregisterCode = SREC_OK, destroyCode = SREC_OK;
+    bool poweredOn = false, unregistered = false;
+    if (modeSetCode == SREC_OK && modeVerifyCode == SREC_OK &&
+        modeAfter == ENetworkMode::TCPIP_SINGLE_ADAPTER && parsed)
+    {
+        registerCode = manager->RegisterInstance(SRCT_1513, instanceName.data(), &instance);
+        if (registerCode == SREC_OK && instance != nullptr)
+        {
+            powerOnCode = instance->PowerOn(timeoutMs);
+            poweredOn = powerOnCode == SREC_OK;
+            if (poweredOn)
+            {
+                SIPSuite4 suite{}; suite.IPAddress = ip; suite.SubnetMask = mask; suite.DefaultGateway = gateway;
+                ipCode = instance->SetIPSuite(0, suite, true);
+                powerOffCode = instance->PowerOff(timeoutMs);
+            }
+            unregisterCode = instance->UnregisterInstance();
+            unregistered = unregisterCode == SREC_OK;
+            destroyCode = DestroyInterface(instance);
+        }
+    }
+    const UINT32 registeredAfter = manager->GetRegisteredInstancesCount();
+    const bool success = modeReadCode == SREC_OK && modeSetCode == SREC_OK && modeVerifyCode == SREC_OK &&
+        modeAfter == ENetworkMode::TCPIP_SINGLE_ADAPTER && parsed &&
+        registerCode == SREC_OK && poweredOn && ipCode == SREC_OK && powerOffCode == SREC_OK &&
+        unregistered && destroyCode == SREC_OK && registeredAfter == registeredBefore;
+    std::wcout << L"{\"status\":\"" << (success ? L"ready" : L"failed") << L"\",\"modeBefore\":"
+        << static_cast<int>(modeBefore) << L",\"modeAfter\":" << static_cast<int>(modeAfter)
+        << L",\"cpuType\":" << static_cast<int>(SRCT_1513) << L",\"ip\":";
+    PrintJsonString(ipText); std::wcout << L",\"registeredBefore\":" << registeredBefore
+        << L",\"registeredAfter\":" << registeredAfter << L",";
+    PrintCode(L"modeReadCode", modeReadCode); std::wcout << L","; PrintCode(L"modeSetCode", modeSetCode);
+    std::wcout << L","; PrintCode(L"modeVerifyCode", modeVerifyCode); std::wcout << L",\"bindingMutation\":\"skipped-local-only\",";
+    PrintCode(L"registerCode", registerCode); std::wcout << L","; PrintCode(L"powerOnCode", powerOnCode);
+    std::wcout << L","; PrintCode(L"ipCode", ipCode); std::wcout << L","; PrintCode(L"powerOffCode", powerOffCode);
+    std::wcout << L","; PrintCode(L"unregisterCode", unregisterCode); std::wcout << L","; PrintCode(L"destroyCode", destroyCode);
+    std::wcout << L"}\n";
+    return success ? 0 : 1;
+}
+
 int RunAcceptanceInstance(ISimulationRuntimeManager* manager, int argc, wchar_t* argv[])
 {
     const std::wstring instanceName = ArgumentValue(argc, argv, L"--name", L"TIAClaudeAcceptance_1516F");
@@ -665,11 +973,95 @@ int RunAcceptanceInstance(ISimulationRuntimeManager* manager, int argc, wchar_t*
     std::wcout << L"}\n";
     return stopped ? 0 : 1;
 }
+
+int RunLocalAcceptanceInstance(ISimulationRuntimeManager* manager, int argc, wchar_t* argv[])
+{
+    const std::wstring instanceName = ArgumentValue(argc, argv, L"--name", L"TIAClaudeAcceptance_1513");
+    const std::wstring cpuText = ArgumentValue(argc, argv, L"--cpu", L"1513");
+    const std::wstring transport = ArgumentValue(argc, argv, L"--transport", L"softbus");
+    const std::wstring ipText = ArgumentValue(argc, argv, L"--ip", L"192.168.0.1");
+    const std::wstring maskText = ArgumentValue(argc, argv, L"--mask", L"255.255.255.0");
+    const std::wstring gatewayText = ArgumentValue(argc, argv, L"--gateway", L"0.0.0.0");
+    const UINT32 timeoutMs = static_cast<UINT32>(std::stoul(ArgumentValue(argc, argv, L"--timeout-ms", L"60000")));
+    if (HasArgument(argc, argv, L"--interface"))
+    {
+        std::wcout << L"{\"status\":\"failed\",\"stage\":\"unsupported-interface-argument\",\"message\":\"Softbus does not select a network adapter; TCP/IP adapter selection is not supported by this local acceptance path.\"}\n";
+        return 1;
+    }
+    ECPUType cpuType = SRCT_1500_Unspecified;
+    if (cpuText == L"1511") cpuType = SRCT_1511;
+    else if (cpuText == L"1513") cpuType = SRCT_1513;
+    else if (cpuText == L"1515") cpuType = SRCT_1515;
+    else if (cpuText == L"1517") cpuType = SRCT_1517;
+    else { PrintProtocolFailure(L"validate-cpu", L"Only standard non-F CPU types 1511, 1513, 1515 and 1517 are permitted."); return 1; }
+
+    UIP ip{}, mask{}, gateway{};
+    if (!ParseIp(ipText, &ip) || !ParseIp(maskText, &mask) || !ParseIp(gatewayText, &gateway))
+    { PrintProtocolFailure(L"parse-ip", L"Invalid IPv4 address, mask or gateway"); return 1; }
+
+    const bool useSoftbus = transport == L"softbus";
+    if (!useSoftbus && transport != L"tcpip-local")
+    { PrintProtocolFailure(L"validate-transport", L"Transport must be softbus or tcpip-local."); return 1; }
+    const ENetworkMode requestedMode = useSoftbus ? ENetworkMode::SOFTBUS : ENetworkMode::TCPIP_SINGLE_ADAPTER;
+    ENetworkMode modeBefore = ENetworkMode::UNKNOWN_STATE;
+    const ERuntimeErrorCode modeReadCode = manager->GetNetworkMode(&modeBefore);
+    const ERuntimeErrorCode modeSetCode = manager->SetNetworkMode(requestedMode);
+    ENetworkMode modeAfter = ENetworkMode::UNKNOWN_STATE;
+    const ERuntimeErrorCode modeVerifyCode = manager->GetNetworkMode(&modeAfter);
+    if (modeSetCode != SREC_OK || modeVerifyCode != SREC_OK || modeAfter != requestedMode)
+    {
+        std::wcout << L"{\"status\":\"failed\",\"stage\":\"set-network-mode\",";
+        PrintCode(L"modeReadCode", modeReadCode); std::wcout << L","; PrintCode(L"modeSetCode", modeSetCode);
+        std::wcout << L","; PrintCode(L"modeVerifyCode", modeVerifyCode); std::wcout << L"}\n"; return 1;
+    }
+
+    IInstance* instance = nullptr;
+    const ERuntimeErrorCode registerCode = manager->RegisterInstance(cpuType, const_cast<wchar_t*>(instanceName.c_str()), &instance);
+    if (registerCode != SREC_OK || instance == nullptr)
+    { std::wcout << L"{\"status\":\"failed\",\"stage\":\"register-instance\","; PrintCode(L"registerCode", registerCode); std::wcout << L"}\n"; return 1; }
+
+    const ERuntimeErrorCode powerOnCode = instance->PowerOn(timeoutMs);
+    ERuntimeErrorCode ipCode = SREC_OK;
+    if (powerOnCode == SREC_OK && !useSoftbus)
+    {
+        SIPSuite4 suite{}; suite.IPAddress = ip; suite.SubnetMask = mask; suite.DefaultGateway = gateway;
+        ipCode = instance->SetIPSuite(0, suite, true);
+    }
+    const bool ready = powerOnCode == SREC_OK && (useSoftbus || ipCode == SREC_OK);
+    std::wcout << L"{\"status\":\"" << (ready ? L"ready" : L"failed") << L"\",\"stage\":\"" << (ready ? L"running" : L"configure") << L"\",\"instanceName\":";
+    PrintJsonString(instanceName);
+    std::wcout << L",\"cpuType\":" << static_cast<int>(cpuType) << L",\"interfaceName\":\"" << (useSoftbus ? L"PLCSIM" : L"Siemens PLCSIM Virtual Ethernet Adapter") << L"\",\"interfaceDescription\":\"" << (useSoftbus ? L"Local Softbus; no network adapter" : L"Local TCP/IP via PLCSIM Control Panel <Local>") << L"\",\"interfaceIndex\":0,\"ip\":";
+    if (useSoftbus) std::wcout << L"null"; else PrintJsonString(ipText);
+    std::wcout << L",\"networkMode\":\"" << (useSoftbus ? L"SOFTBUS" : L"TCPIP_SINGLE_ADAPTER") << L"\",\"binding\":\"local-only\",";
+    PrintCode(L"modeReadCode", modeReadCode); std::wcout << L","; PrintCode(L"modeSetCode", modeSetCode);
+    std::wcout << L","; PrintCode(L"modeVerifyCode", modeVerifyCode); std::wcout << L","; PrintCode(L"registerCode", registerCode);
+    std::wcout << L","; PrintCode(L"powerOnCode", powerOnCode); std::wcout << L","; PrintCode(L"ipCode", ipCode); std::wcout << L"}\n";
+    std::wcout.flush();
+    if (!ready) { instance->PowerOff(timeoutMs); instance->UnregisterInstance(); DestroyInterface(instance); return 1; }
+
+    std::wstring command;
+    while (std::getline(std::wcin, command))
+    {
+        if (command == L"stop" || command == L"quit") break;
+        HandleAcceptanceCommand(instance, command);
+    }
+    const ERuntimeErrorCode powerOffCode = instance->PowerOff(timeoutMs);
+    const ERuntimeErrorCode unregisterCode = instance->UnregisterInstance();
+    const ERuntimeErrorCode destroyCode = DestroyInterface(instance);
+    const bool stopped = powerOffCode == SREC_OK && unregisterCode == SREC_OK && destroyCode == SREC_OK;
+    std::wcout << L"{\"status\":\"" << (stopped ? L"stopped" : L"cleanup-failed") << L"\",";
+    PrintCode(L"powerOffCode", powerOffCode); std::wcout << L","; PrintCode(L"unregisterCode", unregisterCode);
+    std::wcout << L","; PrintCode(L"destroyCode", destroyCode); std::wcout << L"}\n";
+    return stopped ? 0 : 1;
+}
 }
 
 int wmain(int argc, wchar_t* argv[])
 {
+    const bool behavioralSmoke = HasArgument(argc, argv, L"--behavioral-smoke-existing");
+    const bool inspectRegisteredInstance = HasArgument(argc, argv, L"--inspect-registered-instance");
     const bool acceptance = HasArgument(argc, argv, L"--register-acceptance");
+    const bool tcpIpProbe = HasArgument(argc, argv, L"--tcpip-disposable");
     ISimulationRuntimeManager* manager = nullptr;
     const ERuntimeErrorCode initializeCode = InitializeApi(&manager);
     if (initializeCode != SREC_OK || manager == nullptr)
@@ -680,9 +1072,13 @@ int wmain(int argc, wchar_t* argv[])
         return 1;
     }
 
-    const int exitCode = acceptance
-        ? RunAcceptanceInstance(manager, argc, argv)
-        : RunDisposableProbe(manager, argc, argv);
+    const int exitCode = behavioralSmoke
+        ? RunBehavioralSmokeOnRegisteredInstance(manager, argc, argv)
+        : (inspectRegisteredInstance
+        ? RunInspectRegisteredInstance(manager, argc, argv)
+        : (acceptance
+            ? RunLocalAcceptanceInstance(manager, argc, argv)
+            : (tcpIpProbe ? RunTcpIpDisposableProbe(manager, argc, argv) : RunDisposableProbe(manager, argc, argv))));
     const ERuntimeErrorCode shutdownCode = ShutdownAndFreeApi(manager);
     if (exitCode != 0 || shutdownCode != SREC_OK)
     {

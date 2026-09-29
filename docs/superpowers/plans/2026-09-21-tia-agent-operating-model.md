@@ -37,6 +37,112 @@ Todo lo planeado y sus resultados vivirán aquí, con enlaces a los logs y artef
 Safety y no tocar originales de ejemplos o proyectos de cliente. Estas reglas se aplican incluso
 cuando una herramienta las publique en su schema.
 
+## Estado de continuación — 2026-09-28
+
+Handoff resumido y orden de continuación: [2026-09-28](../handoffs/2026-09-28-tia-agent-operating-model-handoff.md).
+
+El trabajo local previo de remediación/paquete y el runner de simulación están disponibles en el
+árbol actual. La comprobación guardada del workspace terminó con 47 PASS, 2 WARN y 0 BLOCKED
+([evidencia](../../../70-runs/checks/20260928-objective-resume.json)); eso cubre checks locales, no
+aceptación conductual live.
+
+En la fixture nueva
+`70-runs/e2e/20260928-objective-resume-acceptance-supported/isolated-fixture/`, el manifiesto y el
+backup coinciden. Una preflight live completó `OpenProject → GetProjectTree → GetSoftwareTree →
+GetDeviceIpAddress → CompileSoftware → GetBlocks → GetTags → CheckDownloadReadiness → Disconnect`.
+Leyó compilación `Success` con 0 errores/0 avisos; `Main` y `FB_AgentDemo` estándar, no protegidos,
+consistentes y con `PLCSimAdvancedSupport=true`; dos tags completos y no Safety; IP
+`192.168.0.1`; y una ruta exacta `PLCSIM`. La CPU virtual Advanced V7 arrancó en Softbus durante el
+runner.
+
+La secuencia se interrumpió antes de producir un informe final. No hay respuesta guardada de
+`DownloadToPlc`, lectura `Online`, plan conductual ni limpieza confirmada para ese intento. No
+presentar la preflight como aceptación. Antes de repetir, recuperar el estado del runner/instancia y
+obtener confirmación visual de TIA para el target simulado según R17. El runner ahora exige el JSON
+de `-SimulationTargetEvidencePath` ligado al mismo proyecto/dispositivo/IP/ruta y reciente; su
+esquema y bloqueo cruzado ya tienen cobertura mock, pero todavía no hay un artefacto generado desde
+una observación live ni una descarga. El estado global sigue `accepted=false`.
+
+La inspección gráfica previa de `Load preview` encontró un fallo que el `CompileSoftware` MCP 0/0
+no cubría: compilación de hardware con 3 errores/1 aviso. El error visible pide una contraseña para
+configurar el certificado de comunicación PLC. El usuario confirma que las fixtures no deben tener
+contraseñas. Ese mensaje no demuestra que haya una clave guardada: Siemens distingue el estado
+`WithoutPassword` (protección marcada, sin Master Secret configurado). No pedir ni generar una clave.
+En esa primera revisión todavía no existía un wrapper MCP acotado; la actualización de abajo registra
+su implementación y lo que falta para probarlo live. `Load` permaneció deshabilitado y no hubo
+descarga. Véase el handoff del 2026-09-28.
+
+La API Openness V20 expone `PlcMasterSecretConfigurator`: cuando
+`MasterSecretConfiguration=WithoutPassword`, `Unprotect()` sin argumento desactiva la opción y el
+readback esperado es `None`. Siemens advierte que `Reset` elimina configuración y certificados;
+no se usa. La implementación local no invoca reflection genérica y está restringida al perfil
+aislado con manifiesto de fixture.
+
+Para no depender del documento abierto, se regeneró una fixture limpia desde su backup verificado en
+`70-runs/e2e/20260928-objective-resume-hardware-compile/isolated-fixture/`; el clon y el backup
+coinciden y `Assert-TiaFixtureManifest.ps1` pasó con hash
+`00d108f3ef9b10de26788fb348b5020268828457bda7922b68262fb6f176c814`. Sigue sin abrir ni modificar
+en TIA. Esta preparación deja lista la fase gráfica; no cuenta como compilación ni como descarga.
+La reobservación nativa posterior devolvió TIA V20 minimizado y título genérico; activar la ventana
+fue interrumpido por detección de actividad del usuario. No se confirmó el proyecto/diálogo ni se
+envió otra acción; volver a identificar la ventana antes de continuar.
+
+La elección para acelerar Computer Use queda documentada en
+[`tia-interfaz-y-computer-use.md`](../../../10-kb/00-fundamentos/tia-interfaz-y-computer-use.md):
+Playwright es para una UI web, no TIA Portal Desktop; Windows UI Automation es candidato para flujos
+repetibles si TIA V20 publica controles semánticos adecuados. Se añadió
+`30-tools/scripts/Get-TiaUiAutomationInventory.ps1` para capturar selectores de una ventana en solo
+lectura; su sintaxis se comprobó, pero no se ha ejecutado sobre una ventana ni acepta acciones UIA.
+La guía y la matriz reflejan explícitamente esa limitación.
+
+### Actualización de continuación — 2026-09-28
+
+- Se implementó `DisableUnconfiguredPlcConfigurationProtection` en el `tia-inspect` local V20 y en
+  el parche canónico del upstream. Solo admite `WithoutPassword`, llama `Unprotect()` sin clave,
+  exige readback `None`, y rechaza `WithPassword` o estados desconocidos. La barrera `Guarded`
+  mantiene el requisito de fixture/manifiesto, transacción exclusiva y barrido global F/Safety.
+- El build limpio V20 completó con 0 errores y 2 warnings nullable en `McpPrompts.cs` y
+  `Portal.Documents.cs`; `Doctor` devolvió V20 activo, Openness=true, desconectado y sin proyecto.
+  Evidencia: [build log](../../../70-runs/e2e/20260928-objective-resume-hardware-compile/tia-inspect-v20-clean-build.log).
+- `tools/list` del perfil `--isolated --fixture-root ... --allow-write` devolvió 85 herramientas e
+  incluyó el esquema nuevo. El perfil aislado de lectura enumeró 53 y excluyó la mutación. [Resumen
+  de ambos perfiles](../../../70-runs/e2e/20260928-objective-resume-hardware-compile/isolated-fixture/write-tool-registration-evidence.json)
+  y [roster completo](../../../70-runs/e2e/20260928-objective-resume-hardware-compile/isolated-fixture/write-tools-list-after-clean-build.json).
+- La fixture `20260928-objective-resume-hardware-compile` volvió a pasar el validador; hash clon y
+  backup `00d108f3ef9b10de26788fb348b5020268828457bda7922b68262fb6f176c814`. La evidencia de
+  manifiesto está en
+  [manifest-validation.json](../../../70-runs/e2e/20260928-objective-resume-hardware-compile/isolated-fixture/manifest-validation.json).
+- La fixture se abrió en `tia-inspect --isolated`. `GetProjectTree` confirmó el CPU path
+  `PLC_1/PLC_1`; `GetBlocks` leyó 2 bloques coherentes, no F y sin know-how; `GetTags` leyó 2 tags,
+  ambos no Safety. La herramienta nueva devolvió `WithoutPassword → None`; una segunda llamada
+  leyó `None → None` sin cambio. `CompileSoftware` dio 0 errores y 0 warnings. Cerré el proyecto sin
+  `SaveProject`, porque la compilación hardware aún no está verificada; clon y backup siguen
+  idénticos al hash del manifiesto. [Lecturas y preflight](../../../70-runs/e2e/20260928-objective-resume-hardware-compile/read-preflight-metadata.json)
+  y [ejecución live de la herramienta](../../../70-runs/e2e/20260928-objective-resume-hardware-compile/plc-configuration-protection-live-evidence.json).
+  `GetDeviceItemInfo` devolvió un error genérico en esa fixture; no se usó para inferir ni para
+  autorizar la operación.
+- La fixture anterior `20260928-objective-resume` falló el validador de manifiesto y quedó descartada;
+  no se usó para escribir.
+- Computer Use identificó TIA Portal V20, mostró `Project closed` y se dejó maximizado. La captura
+  siguiente se interrumpió por Escape al leer los controles; no se abrió un proyecto por GUI ni se
+  intentó compilar hardware, simular o descargar. `accepted=false` sigue siendo el estado correcto.
+- La distribución portable se reconstruyó después de preservar íntegra la anterior en
+  `90-tmp/portable-dist-pre-20260928-objective-resume`. El hash del servidor en `dist` coincide con
+  el build local (`EB3D5F3B...1678E41A`); pasaron `Test-PortablePackage.ps1`,
+  `Test-PortablePackageContent.ps1` y `Test-PortableInstallRelocation.ps1`. Evidencias: [build](../../../70-runs/e2e/20260928-objective-resume-hardware-compile/portable-build-20260928.log),
+  [manifiestos de dist](../../../70-runs/e2e/20260928-objective-resume-hardware-compile/portable-dist-manifest-test-20260928.log),
+  [contenido](../../../70-runs/e2e/20260928-objective-resume-hardware-compile/portable-content-test-20260928.log)
+  e [instalación/relocación](../../../70-runs/e2e/20260928-objective-resume-hardware-compile/portable-install-relocation-20260928.log).
+- `Test-DocumentationState.ps1` pasó tras actualizar el plan y el handoff; `git diff --check` no
+  encontró errores (solo avisos de normalización LF/CRLF). [Evidencia](../../../70-runs/e2e/20260928-objective-resume-hardware-compile/documentation-state-test-20260928.log).
+
+**Siguiente acción:** al reanudarse Computer Use, verificar que TIA sigue maximizado y sin proyecto;
+revalidar el manifiesto `objective-resume-hardware-compile` y abrir solo esa fixture. Repetir la
+operación aislada, compilar software, guardar el cambio en el clon y compilar la configuración
+hardware desde TIA. Si hardware compila sin errores/avisos, capturar el resultado y restaurar el
+clon desde el backup; si falla, guardar los diagnósticos y restaurar. No descargar ni iniciar
+PLCSIM hasta resolver la aceptación R17.
+
 ## Escala de evidencia
 
 | Estado | Evidencia que requiere |
@@ -71,7 +177,7 @@ evidencia de apertura gráfica más abajo. Volver a ejecutar Doctor antes de cad
 | Doctor read-only más reciente | [doctor-20260922-final.json](../../../70-runs/environment/doctor-20260922-final.json): V20 activo, grupo Openness=true, V19/V20 Engineering y Portal instalados, `isConnected=false`, sin proyecto MCP, `allowWrite=false`. | No identifica ni modifica la ventana visible de TIA; no hubo Connect/OpenProject ni conexión a un proyecto. |
 | tia-inspect read | `70-runs/tia-capabilities/20260921-01-baseline/tia-inspect-read.json`: 59 tools, SHA-256 `140E979837B6ADFDF7DC1CDC05A783E0952797C733704E5649540E4D9003EB25`. | No se conectó proyecto ni se probó cada método. |
 | tia-inspect write | `.../tia-inspect-write.json`: 99 tools, `--allow-write`, SHA-256 `D52747D6D74FE8C1F9B073A6DAB62D9E0A0280E2E5DB51A338E91204141C9D79`. | Enumerar schemas no ejecuta las acciones. |
-| tia-inspect read/write actuales | Capturas live sin proyecto: read **53** y write aislado **84**, hashes y links en el apéndice. `ImportSources` y `ImportFromDocuments` no aparecen en estos perfiles. | Son solo tools/list y schemas; no se ejecutó ninguna acción de esos perfiles en esta captura. Write sigue limitado a fixture/manifiesto. |
+| tia-inspect read/write actuales | La captura live histórica registró read **53** y write aislado **84**; el roster V20 reconstruido el 2026-09-28 registra **85** herramientas tras añadir `DisableUnconfiguredPlcConfigurationProtection`. [Roster y esquema actuales](../../../70-runs/e2e/20260928-objective-resume-hardware-compile/isolated-fixture/write-tool-registration-evidence.json). `ImportSources` y `ImportFromDocuments` siguen ausentes del perfil write probado. | Los conteos son enumeraciones `tools/list`; la nueva protección también tiene evidencia de ejecución en fixture. Write sigue limitado a fixture/manifiesto. |
 | tia-create lite actual | Captura live **55** tools; incluye `FindTools` y `CallTool`. [JSON](../../../70-runs/tia-capabilities/20260921-06-create-lite-tools-live.json). | Roster/schema sin proyecto; enumera herramientas, no acredita que cada acción se haya ejecutado ni que sea segura en cualquier target. |
 | tia-create full actual | Captura live **222** tools; incluye `DownloadToPlc` y los self-tests `RunHmiActionScriptRecipeSafetySelfTest` y `RunOnlineMonitoringSafetySelfTest`. [JSON](../../../70-runs/tia-capabilities/20260921-07-create-full-tools-live.json). El 24/09/2026 se repitieron Doctor + `tools/list`: V20/Openness listos, no conectado, roster idéntico (222 schemas; huella del array `98ac0aaf09b0d18eb1a20af9ac123601164ea84d435eaa15b5d8254e757ef3a4`) en [secuencia](../../../70-runs/tia-capabilities/20260924-doctor-create-full-readonly.json). | Roster/schema solamente para `DownloadToPlc`; los dos self-tests sí se ejecutaron después en el lote offline, sin proyecto conectado ni mutación ([evidencia](../../../70-runs/tia-capabilities/20260922-offline-safe-tools-batch.md)). La presencia del resto no autoriza su uso. Computer Use observó TIA V20 maximizado en el selector «Abrir proyecto», sin proyecto abierto identificable; no se conectó ni se lanzó otra instancia. |
 | Openness Siemens V20 | Base de automatización que usan TIA y las herramientas locales; el probe independiente [direct-openness-20260922-final.json](../../../70-runs/environment/direct-openness-20260922-final.json) inicializó el resolver V20 desde un proyecto .NET Framework separado, comprobó el grupo y ejecutó `TiaPortal.GetProcesses()` en solo lectura. | El probe no adjuntó ni abrió proyecto y no valida todavía cada acción del API ni las operaciones de proyecto. |
@@ -136,7 +242,7 @@ para la capacidad de Siemens, MCP para la herramienta de cada servidor y UI para
 | Sesión y proyecto | Doctor, Connect, GetState, GetOpenProjects, OpenProject, AttachToOpenProject, CloseProject, SaveProject/SaveSession, SaveAs | Openness abre/cierra/guarda, conecta instancias con/sin UI y puede acceder a procesos activos. Attach depende del servidor; UI identifica ventana si el objetivo es ambiguo. | Doctor verificado; Attach documentado en esquema full guardado, no en tia-inspect read. |
 | Árbol y lectura | GetProjectTree, GetSoftwareTree, GetBlocks, GetTypes, GetBlockSource, FindInCode, WhereUsed, ResolvePath | Lectura/navegación del modelo de objetos. UI ayuda a ver editores, no sustituye paths exactos. | El roster live de inspect está catalogado; no se ha ejecutado cada método del roster ni se debe elevar su presencia a capacidad probada. |
 | PLC blocks y tipos | ImportBlock/ImportFromDocuments, CreateFB/CreateInstanceDB, DeletePlcBlock/DeletePlcType, export, compile, readback | Siemens V20 documenta import/export y creación/borrado de objetos de proyecto. Revisar diferencias por tipo/versión. | La ruta experimental de fuente externa sigue acotada al clon IOT2050. En el fixture `AgentDemo_V20`, `CreateFB` aparece en el roster write (84 herramientas) pero falla con `CreateFB failed` para SCL y LAD, tanto en raíz como en grupos; el `.ap20` conserva el hash de backup. Computer Use sí creó FC1 y FB2, los guardó, leyó de nuevo y borró en otro clon; además compiló `CU_Compile_Probe [FB2]` en LAD con 0/0. El lenguaje del FB inicial no quedó probado como SCL. Se verificó la ruta profesional de `CreateInstanceDB` para un FB SCL estándar con número explícito libre: creación, consistencia tras compile 0/0, exportación, guardado, referencias, borrado, segundo compile/save, lectura independiente y restauración de hash en [mcp-instancedb-acceptance-20260923.json](../../../70-runs/e2e/mcp-instancedb-acceptance-20260923.json). `autoNumber=true` con `number=0` produjo DB0 inválida y queda bloqueado hasta corregir/probar el wrapper. |
-| Tags, UDT, DB, tablas y watch | GetPlcTagTables/GetTags, import/export de tags/UDT/DB, watch/force discovery y SetWatchTableModifyValue | Tags PLC, constantes y objetos HMI import/export según modelo. Force/write online implica riesgo físico. UI para tabla/force sólo lectura en este plan. | El scaffold `AgentDemo_V20` creó `Agent_Signals` con dos tags y la inspección posterior exportó la tabla. Se verificó el ciclo estándar de tags (`CreateTag` → `GetTagInfo/GetTags` → `UpdateTag` → `ExportTagTable` → compile 0/0 → `SaveProject` → `DeleteTag` → readback independiente). También se verificó en otro clon el ciclo offline de tabla Watch vacía (`CreateWatchTable` → `GetWatchTables/GetWatchTableInfo` → `ExportWatchTable` → compile 0/0 → `SaveProject` → `DeleteWatchTable` → compile/save → segunda sesión sin residuos → restauración de hash), en [mcp-watch-acceptance-20260922.json](../../../70-runs/e2e/mcp-watch-acceptance-20260922.json). La Instance DB estándar y la importación V20 de tabla vacía y tabla con dos tags Bool no Safety quedan cubiertas por las evidencias anteriores; siguen sin probarse DB global, UDT, constantes de usuario, otros tipos de tags y operaciones online. El apply bloquea tags Safety o clasificación incompleta. |
+| Tags, UDT, DB, tablas y watch | GetPlcTagTables/GetTags, import/export de tags/UDT/DB, watch/force discovery y SetWatchTableModifyValue | Tags PLC, constantes y objetos HMI import/export según modelo. Force/write online implica riesgo físico. UI para tabla/force sólo lectura en este plan. | El scaffold `AgentDemo_V20` creó `Agent_Signals` con dos tags y la inspección posterior exportó la tabla. Se verificó el ciclo estándar de tags (`CreateTag` → `GetTagInfo/GetTags` → `UpdateTag` → `ExportTagTable` → compile 0/0 → `SaveProject` → `DeleteTag` → readback independiente). También se verificó en otro clon el ciclo offline de tabla Watch vacía (`CreateWatchTable` → `GetWatchTables/GetWatchTableInfo` → `ExportWatchTable` → compile 0/0 → `SaveProject` → `DeleteWatchTable` → compile/save → segunda sesión sin residuos → restauración de hash), en [mcp-watch-acceptance-20260922.json](../../../70-runs/e2e/mcp-watch-acceptance-20260922.json). La Instance DB estándar, las tablas de tags y un UDT raíz sencillo V20 quedan cubiertos por sus aceptaciones enlazadas; sigue sin probarse DB global, UDT anidados/referenciados, constantes de usuario, otros tipos de tags y operaciones online. El apply bloquea tags Safety o clasificación incompleta. |
 | Hardware e IO | SearchHardwareCatalog, AddDevice/PlugDeviceItem, direcciones IO, CPU settings, compilación | Openness documenta dispositivos, CAx, subredes e IO con requisitos por objeto/modelo. UI revisa Devices & Networks y modelo exacto. | Esquemas catalogados; mutaciones en copia pendientes; no hay descarga física. |
 | Redes y comunicaciones | PROFINET/subnet/node, OPC UA, MQTT, HMI connections, diagnostics; usar FindTools si falta nombre en lite | La presencia de un objeto connection no demuestra tráfico ni autenticación. Runtime requiere endpoint de test; certificados/detalles pueden requerir UI. | Receta R19 documentada tras auditoría; no hubo mutación de comunicación ni handshake/tráfico real. |
 | HMI | Classic/Basic/Comfort/RT Advanced/Unified: screens, templates, tags, bindings, alarms, actions, scripts, dynamizations, compile | Openness soporta conjuntos de objetos según el modelo; los exports son internos y dependientes de versión. Siemens indica que Openness con UI no puede usar el editor HMI. Computer Use/runtime prueba apariencia e interacción. | Receta R20 separa las familias/modelos; no se ejecutó ni aceptó runtime HMI. Computer Use nativo disponible; falta runtime HMI compatible. |
@@ -239,6 +345,28 @@ externa de `tia-create` compiló y releyó el probe, pero eso no demuestra integ
 propuestas SCL. Aceptación live del runner sigue bloqueada hasta registrar una importación segura y
 probar el bloqueo previo a import/save más el roundtrip exacto.
 
+**Revalidación focalizada 2026-09-25:** `Test-TiaSclSafetyGate.ps1` y
+`Test-TiaSclProposalApply.ps1` terminaron exit 0. Cubren rechazo de `isFailsafe=true`, null/ausente,
+tag Safety/incompleta y validación del helper del runner; el test de apply sigue usando servidor
+simulado y `.s7dcl` continúa bloqueado antes de mutar porque no hay importador live registrado.
+Salida: [regresión focalizada](../../../70-runs/tia-capabilities/20260925-scl-safety-write-barrier-regression.txt).
+
+**Recomprobación del runner — 2026-09-24:** `Test-TiaSclSafetyGate.ps1` rechazó explícitamente
+`isFailsafe=true`, clasificación F ausente/nula, tags Safety y metadata incompleta. La revisión del
+runner confirma que ejecuta `Assert-TiaSclBlockWritable` sobre `GetBlocks` antes de importar y vuelve
+a exigir esa clasificación y el readback exacto después de importar; registra `noBlockingFindings`
+como dato de propuesta no confiable. `Test-TiaSclProposalApply.ps1` pasó y comprobó además el
+bloqueo sin mutación ante proyecto/fixture no autorizado, perfil y manifiesto inválidos. El perfil
+live actual sigue sin publicar `ImportSources`/`ImportFromDocuments`, así que la aplicación normal
+continúa cerrada antes de importar. **Verificado estáticamente y con pruebas locales; no es una
+escritura F live ni aceptación funcional del apply.**
+
+Repetición dirigida de esta sesión: `Test-TiaSclSafetyGate.ps1` y `Test-TiaSclProposalApply.ps1`
+terminaron con código 0. Los negativos incluyen `isFailsafe=true`, ausente/nulo, lenguaje F, tags
+Safety y metadata/inventario incompletos; el test del runner confirma preview local, claims no
+confiables y bloqueos antes de conectar/escribir. No se conectó TIA ni hubo mutación en estas pruebas.
+[Resumen de resultados](../../../70-runs/tia-capabilities/20260924-tia-scl-safety-revalidation.json).
+
 **Límites restantes:** no existe una fixture F autorizada y no se intentó escribir un F-block. El veto
 de cualquier tag Safety es más conservador que revisar referencias individuales. Las llamadas MCP
 directas de importación no pasan por este runner. Además, en los rosters live de `tia-inspect` read/write,
@@ -256,7 +384,7 @@ de una sola declaración y resultado íntegro; mantener desregistrada la importa
 Después, compilar y reconciliar `tools/list`, probar negativos y hacer roundtrip en clon. No se ha probado
 en runtime `SafetySignatureProvider` con una F-CPU, y esa prueba no forma parte del alcance permitido.
 
-**Revalidación 2026-09-24:** el helper actual exige `isFailsafe=false`, `programmingLanguage=SCL`,
+**Revalidación 2026-09-25:** el helper actual exige `isFailsafe=false`, `programmingLanguage=SCL`,
 `isKnowHowProtected=false` e `isConsistent=true`, y bloquea propiedades ausentes/nulas o idioma F.
 La revisión de la ruta del runner confirma que esta barrera se repite después de `GetBlocks` antes
 de importar y después de volver a leer el bloque importado. Pasaron
@@ -266,6 +394,22 @@ La suite CI segura actual terminó con 13 PASS, 1 WARN y 0 BLOCKED; el único av
 ejecuciones de evaluación en `00-meta/eval/runs` ([informe](../../../70-runs/checks/20260924-priority-ci-safe.json)).
 Esto verifica la lógica local y sus regresiones, no una importación F ni una ejecución live del runner:
 el perfil aislado actual sigue sin registrar el importador y no se intentó mutar TIA.
+
+La repetición del 2026-09-25 terminó con PASS en `Test-TiaSclSafetyGate.ps1` y
+`Test-TiaSclProposalApply.ps1`; no se conectó a TIA ni se mutó proyecto alguno. Véase
+[revalidación P0](../../../70-runs/tia-capabilities/20260925-priority-revalidation.md).
+Repetición adicional de este turno: ambas suites volvieron a pasar y se registraron hashes de los
+scripts/helpers/tests probados en [revalidación SCL con hash](../../../70-runs/tia-capabilities/20260925-scl-safety-current-revalidation.json).
+Esto sigue siendo regresión estática; el perfil/importador live y el roundtrip de apply permanecen
+sin aceptación.
+
+Refresco live sin conectar proyecto del perfil `tia-inspect/read` en este turno: `Doctor` confirmó
+TIA V20, pertenencia al grupo Openness y `Connected=false`; `tools/list` devolvió 53 tools, entre
+ellas `PreviewImport`, pero no `ImportSources` ni `ImportFromDocuments`. Por tanto, el apply SCL
+real sigue correctamente bloqueado antes de mutar en este perfil. Evidencia MCP serializada:
+[Doctor + tools/list](../../../70-runs/tia-capabilities/20260925-tia-inspect-read-roster-refresh.json).
+Comparado con la captura de 2026-09-21, el roster conserva 53/53 nombres; la ausencia del importador
+no es un cambio de perfil accidental ([diff](../../../70-runs/tia-capabilities/20260925-tia-inspect-read-roster-diff.json)).
 
 ### Fase 2 — Credencial del Node-RED (P0)
 
@@ -292,6 +436,22 @@ coinciden en SHA-256. También pasaron `Test-TiaExampleSecrets.ps1` y
 ejemplo registra que el secreto estuvo en commits anteriores; por tanto “limpio” describe el árbol
 actual y el paquete generado, no el historial Git. Antes de publicar/compartir el historial hay que
 confirmar la revocación con el propietario y coordinar un saneamiento de historial.
+
+**Auditoría histórica redactada 2026-09-24:** a `HEAD=2f422eea38b2f1cbb76fbade92297d7325ba356c`,
+el mismo patrón JWT-like del escáner se aplicó a los 66 snapshots alcanzables de este archivo: hubo
+hallazgo en 47 commits. También se inspeccionaron 17 copias actuales del flujo (todas con el mismo
+SHA-256 y cero hallazgos) y 437 ZIP sin entradas de ese flujo. No se registraron valores ni hashes
+del secreto. Evidencia: [auditoría histórica redactada](../../../70-runs/tia-capabilities/20260924-mindsphere-history-redacted-audit.json).
+Esto no demuestra revocación del tenant ni sanea history; la aprobación para reescribir history sigue
+pendiente y la historia no se debe compartir.
+
+**Revalidación 2026-09-25:** las suites `Test-TiaExampleSecrets.ps1`,
+`Test-PortablePackage.ps1` y `Test-PortablePackageContent.ps1` volvieron a pasar. Fuente actual y
+archivo generado siguen idénticos por SHA-256 y el test de contenido reconstruyó/eliminó su scratch.
+La revocación externa permanece pendiente del propietario. [Registro](../../../70-runs/tia-capabilities/20260925-priority-revalidation.md).
+
+La búsqueda de copias actuales se repitió además sobre todos los archivos accesibles: 18 flujos JSON,
+un único hash fuente/paquete y 0 coincidencias del patrón JWT-like. [Auditoría redactada](../../../70-runs/tia-capabilities/20260925-mindsphere-current-distribution-audit.json).
 
 Aceptación: JSON parseable, secreto ausente del árbol actual y paquete distribuible, escaneo limpio,
 revocación registrada y cualquier limpieza de historial coordinada. El valor se tratará comprometido
@@ -325,6 +485,11 @@ hasta confirmar la revocación.
   `Test-TiaIsolatedMode.ps1 -RunLive` con `Connect → GetState → Disconnect` y hashes preservados
   pasaron el 2026-09-24; `git diff --check` limpio. [Evidencia](../../../70-runs/checks/20260924-write-profile-isolation.json).
 
+Reejecutadas el 2026-09-25: `Test-DocumentationState.ps1`, `Test-ServerManifest.ps1`,
+`Test-ExportHarnessAdapter.ps1` y `Test-SyncHarnessConfigs.ps1` terminaron PASS; la sincronización
+de perfiles dejó `servers.local.json` sin cambios en git. La evidencia común de revalidación está en
+[20260925-priority-revalidation](../../../70-runs/tia-capabilities/20260925-priority-revalidation.md).
+
 Aceptación: recetas consistentes con AGENTS; ningún ejemplo lee una salida como memoria ni sugiere
 que un interlock estándar sea safety certificada.
 
@@ -337,10 +502,16 @@ TIA-Claude_Portable/tests/Test-PortablePackage.ps1, 50-examples/README.md y agen
   incluida la nueva validación de manifiesto y la regla de escritura aislada. El contenido, los
   hashes y la instalación relocalizada pasaron; evidencia en
   [20260924-fixture-write-guard-validation.json](../../../70-runs/portable-package/20260924-fixture-write-guard-validation.json).
-  La ruta es `90-tmp/portable-candidate-20260924-fixture-write-guard`; no se promovió a `dist`.
-- [x] Mantener identificada la distribución `TIA-Claude_Portable/dist` como salida antigua no
-  distribuible: declara 307/658 y contiene un `AGENTS.md` anterior. No se sobrescribe automáticamente;
-  si se publica, hay que promover explícitamente el candidato final y repetir la validación.
+  La ruta validada fue `90-tmp/portable-candidate-20260924-fixture-write-guard`.
+- [x] Revalidar el 24/09 el empaquetado desde el árbol fuente después de corregir R07 y sus
+  aserciones: `Test-PortablePackageContent.ps1` creó el paquete en scratch, pasó el escaneo de
+  credenciales JWT-like, verificó manifiestos/conteos e instalador y eliminó su salida temporal.
+  El 24/09 se promovió el candidato validado a `TIA-Claude_Portable/dist`; su árbol de 983 archivos
+  coincide con el candidato y vuelve a pasar `Test-PortablePackage.ps1` y `Verify-CorePackage.ps1`
+  (321 hashes core). Evidencia: [promoción y verificación](../../../70-runs/portable-package/20260924-portable-dist-promotion.json).
+  La distribución anterior 307/658 se conservó íntegra en `90-tmp/portable-dist-stale-20260924`.
+  El flujo actual y las 17 copias halladas conservan el placeholder local y no tienen JWT-like; la
+  rotación externa y cualquier saneamiento del historial siguen pendientes.
 - [x] Actualizar `Test-PortablePackage.ps1` al layout actual y añadir regresión contra
   `legacyMonolithicWorkspace`. La evidencia histórica 304/658 se conserva como auditoría anterior y
   no se usa para afirmar el estado del candidato final.
@@ -357,8 +528,8 @@ TIA-Claude_Portable/tests/Test-PortablePackage.ps1, 50-examples/README.md y agen
   compilación V20 `0` errores/`0` avisos, lectura del árbol y del bloque, exportación PLC y del bloque,
   comentario con codificación limpia, estándares sin findings y fixture aislado con backup.
 
-Aceptación parcial: el candidato portable más reciente 321/658 está validado, la comprobación CI segura está verde y el
-roundtrip live de `FB_AgentDemo` ya está verificado. Siguen abiertas las familias no ejecutadas, la
+Aceptación parcial: `TIA-Claude_Portable/dist` ahora contiene el candidato 321/658 validado, la
+comprobación CI segura está verde y el roundtrip live de `FB_AgentDemo` ya está verificado. Siguen abiertas las familias no ejecutadas, la
 aplicación del runner de propuestas SCL (importador ausente), PLCSIM/Runtime y la revocación histórica.
 
 ### Fase 5 — Recetas profesionales (P2)
@@ -380,6 +551,12 @@ No generalizar compatibilidad de un modelo a otro. Si runtime/producto no existe
 Estado de esta fase: R18/R19/R20 fueron redactadas y endurecidas tras revisión técnica independiente.
 Son procedimientos documentales; hasta que se ejecuten contra fixtures compatibles, quedan en
 estado Documentado y no en Fixture/Simulado.
+
+**Revisión Siemens V20 de R19 — 2026-09-25:** se revalidaron la búsqueda por interfaz PG/PC,
+la posibilidad de cancelar al hallar el endpoint, el buffer diagnóstico y la limitación de
+Connection information cuando solo un extremo está online. Se añadió el gate de compatibilidad
+TIA/PLCSIM antes de iniciar cualquier prueba PLC virtual; esto no constituye un handshake ni una
+aceptación de tráfico real. Fuentes: [dispositivos accesibles](https://docs.tia.siemens.cloud/r/en-us/v20/using-online-and-diagnostics-functions/displaying-accessible-devices), [connection diagnostics](https://docs.tia.siemens.cloud/r/en-us/v20/device-and-network-diagnostics/connection-diagnostics/overview-of-connection-diagnostics), [diagnostic buffer](https://docs.tia.siemens.cloud/r/en-us/v20/device-and-network-diagnostics/hardware-diagnostics/checking-a-module-for-defects/reading-out-the-diagnostics-buffer-of-a-cpu) y [OPC UA server/client diagnostics](https://docs.tia.siemens.cloud/r/en-us/v20/configuring-automation-systems/using-opc-ua-communication-s7-1200-s7-1500-s7-1500t/using-diagnostics-options-s7-1200-s7-1500-s7-1500t/diagnostics-of-the-opc-ua-server-s7-1500-s7-1500t). R19 sigue **Documentada**; no se ejecutó descubrimiento online ni tráfico sobre red.
 
 ### Fase 6 — Inventario exhaustivo por tool (P1)
 
@@ -544,6 +721,26 @@ proyecto clonado y su backup. Hash del `.ap20` original/backup: `D5FA9E103B16E35
     corresponden a una fixture E2E temporal ausente y a que no hay ejecuciones de evaluación;
     la primera corrida tuvo un fallo transitorio al compilar el adaptador PLCSIM, pero su prueba
     aislada y la segunda suite completa pasaron.
+16. El 24/09/2026 se aceptó `ImportType` y `DeletePlcType` para un UDT raíz `PlcStruct` con un
+    miembro DInt y cero referencias en un clon `AgentDemo_V20`: clasificación independiente de
+    bloques/tags, importación con `groupPath=""`, compile 0/0, guardado, exportación, readback en
+    otro clon, preview/borrado, segundo compile/save, readback independiente de ausencia y copia
+    restaurada idéntica al backup (9/9 archivos). El hash del `.ap20` fue igual en origen/backup y
+    copia restaurada. La carpeta de trabajo de TIA tuvo sidecars de índice distintos, por lo que
+    no se afirma restauración in-place. Alcance: solo raíz, un DInt y cero referencias; DB global,
+    grupos anidados, referencias y tipos complejos continúan sin verificar. Evidencia consolidada:
+    [registro](../../../70-runs/e2e/mcp-udt-import-acceptance-20260924.json),
+    [paquete de evidencia](../../../70-runs/e2e/mcp-udt-import-acceptance-20260924/README.md).
+17. El 25/09/2026 se creó una fixture `AgentDemo_V20` desde cero con `Invoke-AgentDemoScaffold.ps1`:
+    dry-run, compilación TIA V20 `Success` 0/0, cierre, lectura de árbol, export PLC/bloque y
+    estándares con cero findings. `tia-inspect --isolated` clasificó ambos bloques como no F,
+    sin protección y consistentes; los dos tags resultaron `isSafety=false`. El manifiesto siguió
+    validando con snapshot de proyecto/backup idéntico tras la lectura. `PLCSimAdvancedSupport`
+    quedó `false` en ambos bloques. Computer Use no consiguió entregar una ventana TIA targetable;
+    no se intentó descarga ni se abrió otra instancia. Evidencia:
+    [fixture nueva y lectura](../../../70-runs/e2e/20260925-plcsim-scaffold/plcsim-fixture-readiness.md),
+    [scaffold](../../../70-runs/e2e/20260925-plcsim-scaffold/scaffold-report.json),
+    [preflight](../../../70-runs/e2e/20260925-plcsim-scaffold/safety-preflight.json).
 
 Los artefactos completos están en `90-tmp/e2e/20260921-iot2050-agent-probe-clean/`, en especial
 `artifacts/01-prewrite-preflight.json`, `06-create-compile-save.json`, `16-import-external-source-root.json`,
@@ -552,10 +749,11 @@ Los artefactos completos están en `90-tmp/e2e/20260921-iot2050-agent-probe-clea
 `24-create-export-xml-delete-preview.json`, `26-create-delete-compile-save.json`,
 `27-independent-delete-readback.json` y `28-restore-report.json`.
 
-**No probado por acción:** escritura de DB globales/UDT y multiinstancia, modificación de hardware,
+**No probado por acción:** escritura de DB globales, UDT anidados/referenciados y multiinstancia, modificación de hardware,
 módulos, redes, HMI, medición física, comunicación con una CPU, online/watch, descarga y runtime.
 La importación aceptada cubre una tabla PLC vacía y una tabla con dos tags Bool estándar no
-Safety; no acredita constantes de usuario, otros tipos, UDT/DB ni tablas Safety. Las guardas
+Safety; no acredita constantes de usuario, otros tipos, DB global ni tablas Safety. El UDT raíz
+sencillo tiene la aceptación acotada del punto 16, no aplicable a otros tipos. Las guardas
 offline de hardware/red y los planes read-only de monitorización/OPC UA sí quedaron
 verificados en la auditoría final; no elevan ninguna de esas acciones a nivel Fixture.
 No se actuó sobre originales de ejemplos, `40-projects/` ni PLC físico.
@@ -775,7 +973,7 @@ El recuento tools[].Count coincide con listedToolCount en los cuatro archivos. L
 | R3 | Conexión, inspección o lectura online/runtime, o control limitado a simulador; identificar el target antes de usarlo. |
 | R4 | Descarga a PLC, escritura online, bridge genérico con efectos no acotados, safety o efecto físico directo. Bloqueado bajo el contrato actual. |
 
-#### Conteo de clasificación por perfil
+#### Conteo de clasificación por perfil — captura histórica 2026-09-21
 
 | Perfil | R0 | R1 | R2 | R2* | R3 | R4 |
 |---|---:|---:|---:|---:|---:|---:|
@@ -798,10 +996,10 @@ Roster de lectura; se mantiene separado de tia-inspect / write. Snapshot: [tia-i
 | Disconnect | Project / session | req: —; opt: — | Solo schema | R1 | MCP conocido / Openness desconocido |
 | Doctor | Diagnostics / compilation | req: —; opt: — | [Doctor ejecutado; smoke OK](../../../70-runs/tia-capabilities/20260921-01-baseline/doctor.json) | R1 | MCP conocido / Openness desconocido |
 | ExportAsDocuments | PLC blocks / sources / import-export | req: softwarePath:string, blockPath:string, exportPath:string; opt: preservePath:boolean=false | Solo schema | R1 | MCP conocido / Openness desconocido |
-| ExportBlock | PLC blocks / sources / import-export | req: softwarePath:string, blockPath:string, exportPath:string; opt: preservePath:boolean=false | Solo schema | R1 | MCP conocido / Openness desconocido |
+| ExportBlock | PLC blocks / sources / import-export | req: softwarePath:string, blockPath:string, exportPath:string; opt: preservePath:boolean=false | Fixture ejecutado en el FB estándar `FB_AgentDemo`; TIA creó `FB_AgentDemo.xml` dentro del directorio `exportPath`; readback XML completo, SCL, 4685 chars. | R1 | Verificado en V20 aislado; el parámetro se comporta como directorio. |
 | ExportBlocks | PLC blocks / sources / import-export | req: softwarePath:string, exportPath:string; opt: regexName:string="", preservePath:boolean=false | Solo schema | R1 | MCP conocido / Openness desconocido |
 | ExportBlocksAsDocuments | PLC blocks / sources / import-export | req: softwarePath:string, exportPath:string; opt: regexName:string="", preservePath:boolean=false | Solo schema | R1 | MCP conocido / Openness desconocido |
-| ExportPlcAsSourceTree | PLC blocks / sources / import-export | req: softwarePath:string, exportPath:string; opt: — | Solo schema | R1 | MCP conocido / Openness desconocido |
+| ExportPlcAsSourceTree | PLC blocks / sources / import-export | req: softwarePath:string, exportPath:string; opt: — | Fixture ejecutado: informó 3 objetos, 0 omitidos/errores; el árbol físico incluyó tablas de tags y `Main.s7dcl`, pero no `FB_AgentDemo`. No es un export completo de este programa. | R1 | Verificado en V20 aislado, con limitación observada. |
 | ExportTagTable | PLC tags / DB / types | req: softwarePath:string, tagTablePath:string, exportPath:string; opt: preservePath:boolean=false | Solo schema | R1 | MCP conocido / Openness desconocido |
 | ExportType | PLC tags / DB / types | req: softwarePath:string, exportPath:string, typePath:string; opt: preservePath:boolean=false | Solo schema | R1 | MCP conocido / Openness desconocido |
 | ExportTypeAsDocuments | PLC tags / DB / types | req: softwarePath:string, typePath:string, exportPath:string; opt: preservePath:boolean=false | Solo schema | R1 | MCP conocido / Openness desconocido |
@@ -815,7 +1013,7 @@ Roster de lectura; se mantiene separado de tia-inspect / write. Snapshot: [tia-i
 | GetBlockInfo | PLC blocks / sources / import-export | req: softwarePath:string, blockPath:string; opt: — | Solo schema | R1 | MCP conocido / Openness desconocido |
 | GetBlockInterface | PLC blocks / sources / import-export | req: softwarePath:string, blockPath:string; opt: — | Solo schema | R1 | MCP conocido / Openness desconocido |
 | GetBlocks | PLC blocks / sources / import-export | req: softwarePath:string; opt: regexName:string="" | Solo schema | R1 | MCP conocido / Openness desconocido |
-| GetBlockSource | PLC blocks / sources / import-export | req: softwarePath:string, blockPath:string; opt: format:string="document", maxChars:integer=40000 | Solo schema | R1 | MCP conocido / Openness desconocido |
+| GetBlockSource | PLC blocks / sources / import-export | req: softwarePath:string, blockPath:string; opt: format:string="document", maxChars:integer=40000 | Fixture ejecutado sobre `FB_AgentDemo`; completo y sin truncamiento (4685 chars). Aun solicitando `format=document`, esta ejecución devolvió `format=xml`. | R1 | Verificado en V20 aislado; observar el formato real de la respuesta. |
 | GetBlocksWithHierarchy | PLC blocks / sources / import-export | req: softwarePath:string; opt: — | Solo schema | R1 | MCP conocido / Openness desconocido |
 | GetConstants | PLC tags / DB / types | req: softwarePath:string; opt: tagTablePath:string="", kind:string="all", regexName:string="" | Solo schema | R1 | MCP conocido / Openness desconocido |
 | GetCrossReferences | Other / utility | req: softwarePath:string; opt: objectPath:string="", objectKind:string="auto", filter:string="AllObjects", maxDepth:integer=1 | Solo schema | R1 | MCP conocido / Openness desconocido |
@@ -859,7 +1057,7 @@ Snapshot con --allow-write. El roster por sí solo no implica Attach. Snapshot: 
 | Tool | Familia | Inputs (req; opt) | Evidencia | Riesgo | MCP / Openness |
 |---|---|---|---|---:|---|
 | CloseProject | Project / session | req: —; opt: — | Solo schema | R2 | MCP conocido / Openness desconocido |
-| CompileSoftware | Diagnostics / compilation | req: softwarePath:string; opt: password:string="" | Solo schema | R1 | MCP conocido / Openness desconocido |
+| CompileSoftware | Diagnostics / compilation | req: softwarePath:string; opt: password:string="" | Fixture ejecutado en `PLC_1`: `Success`, 0 errores, 0 advertencias; metadata F/Safety releída. | R1 | Verificado en V20 aislado write; no equivale a comportamiento runtime. |
 | Connect | Project / session | req: —; opt: — | Solo schema | R1 | MCP conocido / Openness desconocido |
 | CopyBlock | PLC blocks / sources / import-export | req: softwarePath:string, blockPath:string, targetGroupPath:string; opt: overwrite:boolean=false | Solo schema | R2 | MCP conocido / Openness desconocido |
 | CopyType | PLC tags / DB / types | req: softwarePath:string, typePath:string, targetGroupPath:string; opt: overwrite:boolean=false | Solo schema | R2 | MCP conocido / Openness desconocido |
@@ -875,6 +1073,7 @@ Snapshot con --allow-write. El roster por sí solo no implica Attach. Snapshot: 
 | CreateUserConstant | PLC tags / DB / types | req: softwarePath:string, tagTablePath:string, name:string; opt: dataTypeName:string="", value:string="" | Solo schema | R2 | MCP conocido / Openness desconocido |
 | CreateWatchTable | PLC online / watch / monitor | req: softwarePath:string, groupPath:string, name:string; opt: — | Fixture ejecutado | R2 | Verificado en clon: raíz (`groupPath=""`), path leído, tabla estándar vacía y restauración posterior. |
 | CreateWatchTableGroup | PLC online / watch / monitor | req: softwarePath:string, parentGroupPath:string, name:string; opt: — | Solo schema | R2 | MCP conocido / Openness desconocido |
+| DisableUnconfiguredPlcConfigurationProtection | Hardware / device protection | req: deviceItemPath:string; opt: — | Fixture live: `WithoutPassword → None`; repetición idempotente; compile software 0/0; fixture cerrada sin guardar y hash original conservado. [acción](../../../70-runs/e2e/20260928-objective-resume-hardware-compile/plc-configuration-protection-live-evidence.json) · [esquema](../../../70-runs/e2e/20260928-objective-resume-hardware-compile/isolated-fixture/write-tool-registration-evidence.json) | R2 | Acción verificada; guardado y compile hardware pendientes. |
 | DeleteBlock | PLC blocks / sources / import-export | req: softwarePath:string, blockPath:string; opt: — | Fixture ejecutado | R2 | Verificado en el mismo ciclo Instance DB: path leído, borrado, compile/save 0/0 y cero coincidencias en sesión independiente. |
 | DeleteBlockGroup | PLC blocks / sources / import-export | req: softwarePath:string, groupPath:string; opt: — | Fixture ejecutado | R2 | Verificado para grupo vacío; el grupo de sistema `Program blocks` y grupos con contenido quedan fuera. |
 | DeleteExternalSource | PLC blocks / sources / import-export | req: softwarePath:string, sourcePath:string; opt: — | Solo schema | R2 | MCP conocido / Openness desconocido |
@@ -890,10 +1089,10 @@ Snapshot con --allow-write. El roster por sí solo no implica Attach. Snapshot: 
 | Disconnect | Project / session | req: —; opt: — | Solo schema | R1 | MCP conocido / Openness desconocido |
 | Doctor | Diagnostics / compilation | req: —; opt: — | Solo schema | R1 | MCP conocido / Openness desconocido |
 | ExportAsDocuments | PLC blocks / sources / import-export | req: softwarePath:string, blockPath:string, exportPath:string; opt: preservePath:boolean=false | Solo schema | R1 | MCP conocido / Openness desconocido |
-| ExportBlock | PLC blocks / sources / import-export | req: softwarePath:string, blockPath:string, exportPath:string; opt: preservePath:boolean=false | Fixture ejecutado | R1 | XML Instance DB V20 exportado después de compile 0/0; 2884 bytes y SHA-256 registrado en `mcp-instancedb-acceptance-20260923.json`. |
+| ExportBlock | PLC blocks / sources / import-export | req: softwarePath:string, blockPath:string, exportPath:string; opt: preservePath:boolean=false | Dos fixtures: XML Instance DB V20 (evidencia 2026-09-23) y FB estándar `FB_AgentDemo` (export/readback completo en `retry-fixture-01`). El parámetro `exportPath` fue un directorio que recibió `FB_AgentDemo.xml`. | R1 | Verificado en V20 aislado para ambos objetos indicados. |
 | ExportBlocks | PLC blocks / sources / import-export | req: softwarePath:string, exportPath:string; opt: regexName:string="", preservePath:boolean=false | Solo schema | R1 | MCP conocido / Openness desconocido |
 | ExportBlocksAsDocuments | PLC blocks / sources / import-export | req: softwarePath:string, exportPath:string; opt: regexName:string="", preservePath:boolean=false | Solo schema | R1 | MCP conocido / Openness desconocido |
-| ExportPlcAsSourceTree | PLC blocks / sources / import-export | req: softwarePath:string, exportPath:string; opt: — | Solo schema | R1 | MCP conocido / Openness desconocido |
+| ExportPlcAsSourceTree | PLC blocks / sources / import-export | req: softwarePath:string, exportPath:string; opt: — | Fixture ejecutado: informe 3 objetos, 0 omitidos/errores; omitió el FB SCL `FB_AgentDemo` del árbol exportado, que se exportó luego con `ExportBlock`. | R1 | Verificado en V20 aislado con alcance parcial observado. |
 | ExportTagTable | PLC tags / DB / types | req: softwarePath:string, tagTablePath:string, exportPath:string; opt: preservePath:boolean=false | Fixture ejecutado | R1 | XML de tabla vacía V20 exportado (1464 bytes) y hash recalculado en `mcp-tagtable-acceptance-20260923.json`. |
 | ExportType | PLC tags / DB / types | req: softwarePath:string, exportPath:string, typePath:string; opt: preservePath:boolean=false | Solo schema | R1 | MCP conocido / Openness desconocido |
 | ExportTypeAsDocuments | PLC tags / DB / types | req: softwarePath:string, typePath:string, exportPath:string; opt: preservePath:boolean=false | Solo schema | R1 | MCP conocido / Openness desconocido |
@@ -908,7 +1107,7 @@ Snapshot con --allow-write. El roster por sí solo no implica Attach. Snapshot: 
 | GetBlockInfo | PLC blocks / sources / import-export | req: softwarePath:string, blockPath:string; opt: — | Solo schema | R1 | MCP conocido / Openness desconocido |
 | GetBlockInterface | PLC blocks / sources / import-export | req: softwarePath:string, blockPath:string; opt: — | Solo schema | R1 | MCP conocido / Openness desconocido |
 | GetBlocks | PLC blocks / sources / import-export | req: softwarePath:string; opt: regexName:string="" | Solo schema | R1 | MCP conocido / Openness desconocido |
-| GetBlockSource | PLC blocks / sources / import-export | req: softwarePath:string, blockPath:string; opt: format:string="document", maxChars:integer=40000 | Solo schema | R1 | MCP conocido / Openness desconocido |
+| GetBlockSource | PLC blocks / sources / import-export | req: softwarePath:string, blockPath:string; opt: format:string="document", maxChars:integer=40000 | Fixture ejecutado sobre `FB_AgentDemo`: respuesta completa, 4685 chars y `truncated=false`; devolvió XML aunque se solicitó documento. | R1 | Verificado en V20 aislado; no depender del formato solicitado sin revisar `meta.format`. |
 | GetBlocksWithHierarchy | PLC blocks / sources / import-export | req: softwarePath:string; opt: — | Solo schema | R1 | MCP conocido / Openness desconocido |
 | GetConstants | PLC tags / DB / types | req: softwarePath:string; opt: tagTablePath:string="", kind:string="all", regexName:string="" | Solo schema | R1 | MCP conocido / Openness desconocido |
 | GetCrossReferences | Other / utility | req: softwarePath:string; opt: objectPath:string="", objectKind:string="auto", filter:string="AllObjects", maxDepth:integer=1 | Solo schema | R1 | MCP conocido / Openness desconocido |
@@ -953,7 +1152,7 @@ Snapshot con --allow-write. El roster por sí solo no implica Attach. Snapshot: 
 | RenameWatchTable | PLC online / watch / monitor | req: softwarePath:string, watchTablePath:string, newName:string; opt: — | Solo schema | R2 | MCP conocido / Openness desconocido |
 | ResolveObjectPath | Other / utility | req: softwarePath:string, name:string; opt: kind:string="any" | Solo schema | R1 | MCP conocido / Openness desconocido |
 | SaveAsProject | Project / session | req: newProjectPath:string; opt: — | Solo schema | R2 | MCP conocido / Openness desconocido |
-| SaveProject | Project / session | req: —; opt: — | Solo schema | R2 | MCP conocido / Openness desconocido |
+| SaveProject | Project / session | req: —; opt: — | Fixture ejecutado después de compile 0/0. El hash de proyecto tras guardar continuó idéntico al backup/manifiesto. | R2 | Verificado en V20 aislado; esta ejecución no produjo un cambio persistente de contenido. |
 | UpdateTag | PLC tags / DB / types | req: softwarePath:string, tagPath:string; opt: newName:string\|null=null, dataTypeName:string\|null=null, logicalAddress:string\|null=null, externalAccessible:boolean\|null=null, externalVisible:boolean\|null=null, externalWritable:boolean\|null=null | Solo schema | R2 | MCP conocido / Openness desconocido |
 | UpdateUserConstant | PLC tags / DB / types | req: softwarePath:string, tagTablePath:string, name:string; opt: newName:string\|null=null, dataTypeName:string\|null=null, value:string\|null=null | Solo schema | R2 | MCP conocido / Openness desconocido |
 | WhereUsed | Other / utility | req: softwarePath:string, name:string; opt: kind:string="any" | Solo schema | R1 | MCP conocido / Openness desconocido |
@@ -1305,7 +1504,7 @@ haya ejecutado localmente:
 | Objeto | API Siemens V20 documentada | Evidencia local | Estado |
 |---|---|---|---|
 | Bloque PLC, incluido GlobalDB estándar | `PlcSoftware.BlockGroup.Blocks.Import(FileInfo, ImportOptions.Override)` | `ImportBlock`/`PlcBuildAndImport` aparecen en roster; falta roundtrip GlobalDB V20. `BuildPlcGlobalDbXml` genera XML V21 y no autoriza importarlo como V20. | API documentada; wrapper MCP y fixture V20 no verificados. [Importing block](https://docs.tia.siemens.cloud/r/en-us/v20/tia-portal-openness-api-for-automation-of-engineering-workflows/export/import/importing/exporting-data-of-a-plc-device/blocks/importing-block), [UDT & DB](https://docs.tia.siemens.cloud/r/en-us/v20/tia-portal-openness-api-for-automation-of-engineering-workflows/export/import/importing/exporting-data-of-a-plc-device/blocks/export/import-of-udt-db) |
-| UDT desde SimaticML XML | `plcSoftware.TypeGroup.Types.Import(FileInfo, ImportOptions.Override)` | `ImportType` aparece en los rosters; no se ejecutó una importación V20. | API documentada; wrapper MCP y fixture V20 no verificados. [Importing user data type](https://docs.tia.siemens.cloud/r/en-us/v20/tia-portal-openness-api-for-automation-of-engineering-workflows/export/import/importing/exporting-data-of-a-plc-device/blocks/importing-user-data-type) |
+| UDT desde SimaticML XML | `plcSoftware.TypeGroup.Types.Import(FileInfo, ImportOptions.Override)` | `ImportType` y `DeletePlcType` aceptados para un UDT raíz `PlcStruct` de un miembro DInt y cero referencias; compile/save/export/readback independiente y restauración comparada. | **Fixture V20 aceptado solo para ese alcance**; no generalizar a tipos anidados, referenciados, complejos ni `.s7dcl`. [Evidencia](../../../70-runs/e2e/mcp-udt-import-acceptance-20260924/README.md), [Importing user data type](https://docs.tia.siemens.cloud/r/en-us/v20/tia-portal-openness-api-for-automation-of-engineering-workflows/export/import/importing/exporting-data-of-a-plc-device/blocks/importing-user-data-type) |
 | UDT desde documento `.s7dcl` | `plcSoftware.TypeGroup.Types.ImportFromDocuments(DirectoryInfo, fileNameWithoutExtension, ImportDocumentOptions.Override)`; devuelve estado, tipos importados y mensajes | El roster publica `ImportTypesFromDocuments`; no se han probado conteos ni readback exacto para una importación UDT. | API documentada; wrapper MCP y fixture V20 no verificados. [Importing UDT from document](https://docs.tia.siemens.cloud/r/en-us/v20/tia-portal-openness-api-for-automation-of-engineering-workflows/export/import/importing/exporting-data-of-a-plc-device/blocks/importing-udt-from-document) |
 | Tabla de tags PLC | `plcSoftware.TagTableGroup.TagTables.Import(FileInfo, ImportOptions.Override)` | Dos fixtures V20 aceptadas: tabla vacía y dos tags Bool estándar no Safety, compile/save 0/0, readback independiente y restauración. | API documentada y ruta MCP fixture verificada; cliente Openness independiente pendiente. [Importing PLC tag table](https://docs.tia.siemens.cloud/r/es-es/v20/tia-portal-openness-api-para-la-automatizacion-de-flujos-de-trabajo-de-ingenieria/exportacion/importacion/importacion/exportacion-de-datos-de-un-dispositivo-plc/tablas-de-variables/importar-tabla-de-variables-plc) |
 
@@ -1320,7 +1519,7 @@ las primeras aceptaciones deben usar un objeto por operación y leer el resultad
 |---|---|---|---|
 | Siemens Openness V20 | Siemens documenta leer, crear, modificar, borrar, compilar, importar/exportar y diagnosticar ciertos objetos; depende de versión/tipo/modelo. | Probe independiente `.NET Framework 4.8/x64`: `Api.Global.Openness().Initialize(20)`, grupo Openness, carga de `Siemens.Engineering 20.0.0.0` y `TiaPortal.GetProcesses()` en solo lectura; no Attach/OpenProject/escritura. [evidencia](../../../70-runs/environment/direct-openness-20260922-final.json) | **Fixture read-only** para inicialización/enum. El mapeo acción a acción MCP → miembro Openness sigue sin probar. |
 | `tia-inspect / read` | Inspección y lectura; el roster live actual publica 53 schemas. | Doctor, tree, tags, blocks, source, compile, readback. | **Fixture** solo para las acciones enumeradas arriba; el resto sigue en **Schema**. |
-| `tia-inspect / write` | Snapshot aislado `--allow-write` actual, 84 schemas; la política exige fixture manifest. | No se usó este perfil para escribir en esta secuencia. | **Schema**; no atribuirle el write ejecutado vía `tia-create`. |
+| `tia-inspect / write` | Snapshot histórico `--allow-write`, 84 schemas; el build V20 con el wrapper nuevo enumera 85 y exige fixture manifest. | En fixture V20: `WithoutPassword → None`, segunda lectura idempotente `None → None`, preflight F/Safety completo y compile software 0/0; no se guardó mientras falte compile hardware. [Evidencia](../../../70-runs/e2e/20260928-objective-resume-hardware-compile/plc-configuration-protection-live-evidence.json) | **Acción verificada en memoria**; persistencia y compilación hardware pendientes. |
 | `tia-create / lite` | Snapshot de 55 schemas y búsqueda dinámica con `FindTools`/`CallTool`. | Preview/importación alternativa/export/delete de probe y compile/save en la secuencia documentada. `PlcBuildAndImport` apply falló por cultura. | **Fixture** por las acciones enumeradas, no por todo el perfil. |
 | `tia-create / full` | Snapshot de 222 schemas. | `Bootstrap → RunCapabilitySelfTest(connectIfNeeded=false) → Disconnect` terminó correctamente; además, `RunOnlineMonitoringSafetySelfTest` y `RunHmiActionScriptRecipeSafetySelfTest` pasaron offline sin abrir proyecto. Se verificó `ImportPlcTagTable` con tabla vacía y con dos tags Bool no Safety en fixtures V20 aisladas: firma estricta, compile/save 0/0, readback independiente y restauración completa de carpeta. La auditoría final verificó los planificadores de hardware/red y monitorización read-only. [evidencia lite](../../../70-runs/tia-capabilities/20260922-create-lite-selftest.json), [evidencia full](../../../70-runs/tia-capabilities/20260922-create-full-selftest.json), [importación vacía](../../../70-runs/e2e/mcp-import-tagtable-acceptance-20260923.json), [importación con tags](../../../70-runs/e2e/mcp-import-tagtable-member-acceptance-20260923.json), [lote offline](../../../70-runs/tia-capabilities/20260922-offline-safe-tools-batch.md), [auditoría final](../../../70-runs/tia-capabilities/20260922-final-noncu-hardware-comms-analog-audit.json). | **Fixture** para tabla vacía y dos tags estándar; **smoke/offline safety** para las demás llamadas; el resto sigue en **Schema**. |
 | Computer Use nativo | Puede inspeccionar y navegar la ventana TIA si el plugin nativo y el permiso para esa aplicación están activos. | En esta sesión se abrieron clones, se editó/compiló/guardó/leyó de nuevo un bloque SCL, se creó/compiló/borró un FB LAD con 0/0 y se creó/guardó/leyó de nuevo un objeto de texto HMI. La compilación HMI se intentó y TIA devolvió 1 error/0 advertencias por dispositivo no soportado. `cua_repl.apps=[]` no era un dato del inventario Windows. | **UI y ediciones gráficas verificadas en clones**; creación del FB SCL, compile HMI por modelo, runtime HMI y comunicación desde GUI siguen sin probar. |
@@ -1329,7 +1528,7 @@ las primeras aceptaciones deben usar un objeto por operación y leer el resultad
 
 - El perfil `tia-create / lite` no fue usado para todos sus métodos; `full` tiene una prueba de fixture para
   `ImportPlcTagTable` y, fuera de ella, ejecutó el lote offline y el self-test.
-- No se probaron modificación de hardware, red/protocolos, tablas con constantes u otros tipos, escritura de UDT/DB,
+- No se probaron modificación de hardware, red/protocolos, tablas con constantes u otros tipos, escritura de DB global,
   binding HMI, alarmas, mediciones físicas, watch/force, descarga, comportamiento PLC en PLCSIM,
   Runtime ni escritura online. La interfaz de edición SCL y la edición visual de un objeto HMI ya
   están verificadas en clones; el compile HMI está bloqueado por dispositivo no soportado y el runtime sigue sin verificar. La auditoría final
@@ -1337,7 +1536,7 @@ las primeras aceptaciones deben usar un objeto por operación y leer el resultad
   monitorización/OPC UA; además, el ciclo de tags estándar fue exportado, compilado, guardado,
   borrado y leído de vuelta independientemente. La evidencia de importación cubre una tabla
   vacía y una tabla con dos tags Bool estándar no Safety; no cubre constantes de usuario,
-  otros tipos, UDT/DB.
+  otros tipos ni DB global. El UDT raíz sencillo está cubierto únicamente por la aceptación del punto 16.
 - La línea base y el test de fixture acreditan `GetBlocks.isFailsafe=false` antes/después del probe.
   Los tests de barrera acreditan rechazo sintético de safety o metadata incompleta; no se hizo una
   escritura real F ni se usó una F-CPU.
@@ -1381,3 +1580,291 @@ fixture con CPU coincidente, instancia virtual desechable, adaptador e IP valida
 Advanced V20 compatible. No se mezcla esa fase con una descarga o conexión física.
 
 **Lectura segura:** usar las filas para decidir qué buscar y en qué perfil. Antes de llamar a una acción mutante, aplicar el contrato de [AGENTS.md](../../../AGENTS.md), obtener rutas de la instancia objetivo, preflight safety/protection, backup, preview, compilación y readback en fixture; la tabla no es autorización de llamada.
+
+### Registro de Computer Use — 2026-09-24
+
+En la ventana TIA V20 identificada se hizo una prueba diagnóstica de UI sobre el clon desechable global DB. Se creó `DB_AgentGlobalAcceptance` como Global DB con `Counter : DInt`, se guardó y `Software (rebuild all)` terminó con 0 errores y 0 advertencias. La ventana quedó maximizada a 1920×1040. Al releer el objeto por `GetBlocks` y `GetBlockInfo`, TIA/MCP devuelve `isFailsafe=null` y lenguaje `DB`; `ImportBlock` no ofrece `dryRun`. Por tanto, **la creación gráfica observada no se acepta como flujo permitido de agente** y la importación MCP se bloqueó sin llamarla, conforme a la barrera de metadata desconocida. Evidencia y limitaciones completas: [registro Computer Use y exportación read-only](../../../90-tmp/e2e/20260924-globaldb-import-acceptance/artifacts/04-computer-use-globaldb.md), [XML exportado](../../../90-tmp/e2e/20260924-globaldb-import-acceptance/artifacts/DB_AgentGlobalAcceptance.xml/DB_AgentGlobalAcceptance.xml). La copia restaurada aparte coincide con el backup en 9/9 archivos; el clon abierto no se restauró in-place.
+
+**Inspección adicional de PLCSIM Advanced — 2026-09-24:** Computer Use abrió la aplicación instalada V6.0 Update 1. La interfaz mostró `No Active PLC Instance` y las opciones `PLCSIM`, `TCP/IP Single Adapter` y `TCP/IP Multiple Adapter`. No se creó instancia ni se descargó. Al abrir el selector de switch virtual la acción UI falló; una captura nueva confirmó que la vista seguía en el panel principal, así que no se reintentó. No se validó adaptador, ruta/IP ni CPU coincidente; comportamiento de PLC y runtime siguen sin verificar. TIA volvió a maximizarse y se confirmó una captura de 1920×1040 con el rebuild visible en 0 errores/0 advertencias. [Evidencia de la inspección](../../../70-runs/tia-capabilities/20260924-computer-use-plcsim-ui-check.json).
+
+La acción `ExportBlock` sí quedó verificada como lectura/exportación en el proyecto exacto `AgentDemo_V20`. La importación/edición de Global DB queda **bloqueada** hasta una clasificación F/Safety estándar explícita compatible con `AGENTS.md` y una ruta de escritura aprobada; no se infiere seguridad a partir de `GlobalDB`, lenguaje DB, tipo de CPU o compilación limpia.
+
+### Actualización PLCSIM Advanced — 2026-09-24
+
+La inspección de Siemens V20 confirma que **TIA Portal y PLCSIM Advanced sí se conectan**. Siemens ofrece Softbus local (predeterminado, punto PG/PC `PLCSIM`) y TCP/IP. En este equipo se adopta **Softbus como ruta predeterminada**: Siemens dice que limita la comunicación al PC/VM local y evita una descarga accidental a un PLC físico. TCP/IP queda como alternativa para integraciones que necesiten Ethernet; el modo `<Local>` apaga el switch hacia la red real.
+
+- **Verificado:** el adaptador nativo PLCSIM Advanced V6 registró y encendió una CPU virtual estándar 1513 con `networkMode=SOFTBUS`, `status=ready` y códigos de API `0x0`. TIA V20, con la fixture `AgentDemo_V20` abierta, mostró `Connected to PLC_1, via address IP=192.168.0.1` tras `Go online` por la interfaz gráfica. La ventana se mantuvo maximizada. La instancia se detuvo después con `powerOffCode`, `unregisterCode` y `destroyCode` en `0x0`.
+- **TCP/IP alternativo:** el equipo tuvo APIPA `169.254.242.16/16` en la NIC Siemens y CPU de prueba `192.168.0.1`; el helper read-only demostró la falta de subred coincidente. Asignar `192.168.0.2/24` devolvió `Access denied` sin modificar interfaces. Evidencia: [estado de NIC](../../../70-runs/acceptance/plcsim-tia-ip-state-20260924.json).
+- **Verificado en fixtures:** el runner deja Softbus por defecto, exige modo/interfaz Softbus y selecciona `PLCSIM` como PG/PC; la ruta TCP/IP se conserva como opción expresa `-PlcSimTransport tcpip-local`. Las pruebas de aceptación cubren gates, limpieza del runtime, expectativa funcional explícita, ruta única, discrepancias de IP/TCP-IP y selección de Softbus. Evidencia de ejecución: `Test-InvokeTiaSimulationAcceptance.ps1` y `Test-TiaSimulationAcceptanceSafety.ps1`.
+- **Bloqueado antes de descargar:** el perfil MCP leyó OB, FB y Global DB, pero `GetBlocks` no incluyó `isFailsafe`. El contrato exige clasificación F/Safety completa antes de cualquier escritura/descarga; CPU estándar, compilación limpia y ausencia aparente de bloques F no sustituyen esa metadata. Tampoco se ha leído de forma completa y autoritativa cada tabla de tags. No se descargó el programa ni se marcó comportamiento PLC como probado.
+- **Siguiente paso necesario:** exponer/leer por una vía soportada la clasificación Safety de todos los bloques y todas las tablas de tags del fixture, registrar readback, y solo entonces intentar la primera descarga en Softbus. Exigir que TIA identifique `CPU-1500 Simulation`/simulated CPU en la vista previa; cancelar si aparece ambiguo. Después ejecutar un plan con entrada virtual y lectura de salida esperada, registrar evidencias y parar/desregistrar la instancia.
+
+Fuentes Siemens: [qué es PLCSIM Advanced V20](https://docs.tia.siemens.cloud/r/simatic_s7_1500_et_200mp_manual_collection_enus_20/comprehensive-information/cpu-function-manuals/s7-plcsim-advanced-api/product-overview/what-is-s7-plcsim-advanced), [Control Panel V20 y sus modos](https://docs.tia.siemens.cloud/r/simatic_et_200sp_manual_collection_enus_20/general-information/cpu-function-manuals/s7-plcsim-advanced/simulating/simulating-a-cpu/control-panel-user-interface/s7-plcsim-advanced-control-panel), [descargar un proyecto STEP 7 a PLCSIM](https://docs.tia.siemens.cloud/r/simatic_s7_1500_et_200mp_manual_collection_enus_21/comprehensive-information/cpu-function-manuals/s7-plcsim-advanced/simulating/simulating-a-cpu/downloading-a-step-7-project).
+
+### Revisión de simulabilidad y secuencia final — 2026-09-24
+
+La documentación oficial V20 confirma que **Support simulation during block compilation** está
+en propiedades del proyecto > Protection y desactivada por defecto. Openness V20 también expone
+`Project.IsSimulationDuringBlockCompilationEnabled` como lectura/escritura. El perfil MCP probado no
+publica una operación específica para esa propiedad. [Propiedades TIA](https://docs.tia.siemens.cloud/r/en-us/v20/editing-projects/creating-and-managing-projects/displaying-properties-of-the-project),
+[API Openness](https://docs.tia.siemens.cloud/r/en-us/v20/tia-portal-openness-api-for-automation-of-engineering-workflows/tia-portal-openness-api/functions-for-projects-and-project-data/updating-project-properties).
+
+- **Verificado:** Siemens documenta que Softbus local usa el punto `PLCSIM`, limita el enlace al
+  host/VM y evita descargas accidentales a CPUs físicas. La instancia se inicializa con su primera
+  descarga desde TIA; el diálogo identifica `CPU-1500 Simulation` y declara que la descarga va a una
+  CPU simulada. [Comunicación local V21](https://docs.tia.siemens.cloud/r/simatic_s7_1500_et_200mp_manual_collection_enus_21/comprehensive-information/cpu-function-manuals/s7-plcsim-advanced/communication-paths/local-communication),
+  [descarga STEP 7 V21](https://docs.tia.siemens.cloud/r/simatic_s7_1500_et_200mp_manual_collection_enus_21/comprehensive-information/cpu-function-manuals/s7-plcsim-advanced/simulating/simulating-a-cpu/downloading-a-step-7-project).
+- **Verificado en host:** en el proyecto exacto visible, `tia-create lite` ofreció `AttachToOpenProject`
+  y adjuntó `AgentDemo_V20`. Computer Use activó **Support simulation during block compilation**
+  en Protection; se guardó y compiló por Openness con `Success`, 0 errores y 0 avisos. La lectura
+  posterior confirmó `PLCSimAdvancedSupport=true`, `isConsistent=true` y sin protección know-how
+  en `Main` y `FB_AgentDemo`. La ventana de TIA quedó maximizada a 1920×1040.
+- **Bloqueado antes de la primera descarga:** con `tia-create full`, `GetTags` respondió `Unknown
+  tool` y los objetos `GetBlocks` no contienen el campo `isFailsafe`. Ambos datos son obligatorios
+  para el veto Safety; no se permite inferirlos por el modelo de CPU o por nombres. PLCSIM Advanced
+  mostraba `PLCSIM` seleccionado y `No Active PLC Instance`. No se arrancó instancia, no se descargó
+  el programa ni se afirmó comportamiento. Evidencias: `plcsim-full-safety-preflight-20260924.json`,
+  `plcsim-visible-compile-20260924.json`, `plcsim-postcompile-inspection-20260924.json` y
+  `plcsim-ui-state-20260924.json`.
+- **Verificado — integridad de fixtures:** se cerró el proyecto guardado, se restauró la fixture
+  original desde su backup (su manifiesto volvió a pasar) y se guardó el snapshot con soporte de
+  simulación en `90-tmp/e2e/20260924-plcsim-simulation-support-enabled/`, con backup idéntico y
+  manifiesto validado. La lectura MCP adjunta a la ventana de ese snapshot volvió a confirmar
+  `PLCSimAdvancedSupport=true` en los dos bloques; `isFailsafe` continuó ausente. Evidencia:
+  `plcsim-enabled-fixture-readback-20260924.json`. El snapshot habilitado no equivale a aceptación
+  de descarga.
+- **Actualización 2026-09-25:** una fixture nueva confirmó preflight completo en `tia-inspect`
+  (`isFailsafe=false` en cada bloque y `isSafety=false` en las dos tags); el manifiesto siguió
+  pasando con los hashes del proyecto y backup idénticos. `PLCSimAdvancedSupport=false` en ambos
+  bloques, por lo que aún requiere activación y compilación. Computer Use no entregó una ventana
+  TIA targetable tras el lanzamiento y la enumeración posterior quedó vacía; no se cambió la
+  propiedad ni se descargó. Véase [evidencia fresca de fixture](../../../70-runs/e2e/20260925-plcsim-scaffold/plcsim-fixture-readiness.md).
+- **Siguiente paso necesario:** hacer que el perfil disponible proporcione un inventario completo
+  y explícito de bloques Safety y tags Safety en la misma sesión que se adjunta al proyecto visible.
+  Después repetir el preflight, iniciar una instancia Softbus estándar desechable, verificar en la
+  vista previa de TIA `CPU-1500 Simulation`/simulated CPU, descargar y ejecutar el plan funcional.
+- **No verificado:** descarga a PLCSIM, arranque de programa y respuesta funcional a un plan de E/S.
+  El siguiente intento debe partir de una copia desechable identificada, activar la propiedad,
+  recompilar 0/0, comprobar el target simulado en el diálogo, ejecutar el plan de entrada/salida,
+  guardar evidencia y apagar/desregistrar la instancia.
+- **Verificado en regresiones mock:** el runner bloquea metadata F/Safety/protección incompleta,
+  simulabilidad desactivada, advertencia/error de descarga y estado online distinto de `Online`; los
+  casos Softbus pasan `PLCSIM` como interfaz y se limpia la instancia. Las cuatro suites SCL,
+  aceptación PLCSIM y secretos quedan en [evidencia fechada](../../../70-runs/acceptance/plcsim-safety-runner-regression-20260924.json).
+  No se conectó TIA ni se descargó ningún programa en esas regresiones.
+
+La receta reproducible queda en [R17](../../../10-kb/20-recetas/R17-aceptacion-plcsim.md) y el
+procedimiento y límites del host en [PLCSIM README](../../../30-tools/plcsim/README.md).
+
+### Revalidación posterior — 2026-09-25
+
+Esta entrada supersede el estado anterior de la fixture nueva: la propiedad ya no está desactivada
+y Computer Use sí encuentra TIA en esta sesión.
+
+- **Verificado:** la lectura MCP más reciente en la ruta exacta de `AgentDemo_V20` marcó ambos
+  bloques como estándar, desprotegidos y consistentes, con `PLCSimAdvancedSupport=true`; las dos
+  tags tienen `isSafety=false`. Evidencia: [preflight serializado](../../../70-runs/e2e/20260925-plcsim-scaffold/simulation-ready-live-preflight.json).
+- **Verificado:** Computer Use nativo identificó TIA Portal V20 y el título apunta al clon
+  `AgentDemo_V20`; la ventana quedó maximizada. La barra de estado indicaba `Project closed`, así que
+  el estado UI/Openness no es inequívoco. [Registro](../../../70-runs/e2e/20260925-plcsim-scaffold/computer-use-tia-window-20260925.json).
+- **Bloqueado:** `Assert-TiaFixtureManifest.ps1` no pudo leer el `.ap20` porque un proceso lo tenía
+  abierto. Se observaron dos procesos de TIA Portal, uno sin título de ventana. No se cerró ni mató
+  ninguno; no se puede revalidar que fixture y backup coincidan byte a byte.
+- **No verificado:** no se creó una instancia PLCSIM en esta continuación; no hubo descarga, online
+  PLC ni prueba funcional de `Cmd_Enable` → `Status_Active`.
+- **Siguiente paso:** identificar y liberar el handle solo después de determinar que pertenece al
+  fixture desechable; validar manifiesto o crear una copia limpia desde el backup coincidente;
+  repetir el gate completo; luego usar Softbus y exigir `CPU-1500 Simulation` en el diálogo de TIA
+  antes de descargar. La evidencia histórica de Softbus/Go Online y la opción activada no sustituye
+  la prueba de descarga y comportamiento.
+
+### Aceptación de compile/export en el fixture limpio — 2026-09-25
+
+El lock del primer clon se evitó creando `retry-fixture-01` desde su backup cuyo hash coincidía con
+el manifiesto. La copia nueva y el backup se compararon antes de generar el manifiesto. La lectura
+aislada en una sesión MCP obtuvo árboles, bloques y tags; confirmó metadata explícita F/Safety y
+`PLCSimAdvancedSupport=true` para ambos bloques, sin tags Safety.
+
+- **Verificado:** `CompileSoftware(PLC_1)` devolvió `Success`, 0 errores y 0 avisos; `SaveProject`
+  terminó correctamente.
+- **Verificado con alcance parcial:** `ExportPlcAsSourceTree` reportó 3 objetos, 0 omitidos y 0
+  fallidos, pero el árbol físico solo incluye las tablas de tags y `Main.s7dcl`; no incluye
+  `FB_AgentDemo`. Se ejecutó `ExportBlock` explícito para el FB y el XML exportado identificó
+  `FB_AgentDemo`, lenguaje SCL, interfaz `Enable`/`Active`; `GetBlockSource` devolvió 4.685
+  caracteres sin truncamiento. El `exportPath` de `ExportBlock` es un directorio, donde TIA crea
+  `FB_AgentDemo.xml`.
+- **Verificado:** el manifiesto volvió a pasar después del ciclo y conservó el mismo snapshot
+  `7620c14dca12987a7823e1b7d721672bd332fa32a67de5a96df62496ad3899b8` que el backup. Compile/save
+  no cambiaron el árbol serializado, así que no hizo falta restauración por copia.
+- **No probado por esta aceptación:** modificación funcional, roundtrip de importación, descarga,
+  instancia PLCSIM, IP de CPU o comportamiento runtime. `Main.s7dcl` contiene un rung vacío; el FB
+  mapea `Active := Enable`, pero no está llamado desde `Main`, así que no debe usarse para alegar
+  aceptación conductual hasta incorporar una ruta de ejecución verificada.
+- Computer Use no se usó en esta fase; la consulta visual e identificación de IP/destino simulado
+  quedan pendientes después de las cancelaciones con Escape. TIA no se descargó.
+
+Evidencia: [resumen de aceptación](../../../70-runs/e2e/20260925-plcsim-scaffold/retry-fixture-01/acceptance-summary.md),
+[preflight](../../../70-runs/e2e/20260925-plcsim-scaffold/retry-fixture-01/safety-preflight-retry.json),
+[compile/save/export/readback](../../../70-runs/e2e/20260925-plcsim-scaffold/retry-fixture-01/compile-export-readback.json),
+[export explícito del FB](../../../70-runs/e2e/20260925-plcsim-scaffold/retry-fixture-01/block-export-readback.json),
+y [schema write aislado](../../../70-runs/e2e/20260925-plcsim-scaffold/retry-fixture-01/tia-inspect-write-tools.json).
+
+### Resolución documental de PLCSIM Advanced — 2026-09-25
+
+Sí, TIA Portal puede conectarse a PLCSIM Advanced y cargar el hardware/programa en una CPU virtual.
+Siemens documenta Softbus (`PLCSIM`) y TCP/IP. La compatibilidad de versión es obligatoria:
+Advanced V6.0 UPD1 cubre proyectos TIA V14–V19 y firmware V1.8–V3.1; Advanced V7.0 cubre TIA
+V14–V20 y firmware V1.8–V4.0. Este equipo tiene TIA V20, PLCSIM Standard V19 y Advanced V6.0.0.1,
+por tanto la descarga V20 está bloqueada. La observación histórica `Go online` por Softbus solo
+prueba conectividad parcial, no compatibilidad de fabricante, descarga o ejecución.
+
+La ruta de agente queda centralizada en [R17](../../../10-kb/20-recetas/R17-aceptacion-plcsim.md)
+y enlazada desde [AGENTS.md](../../../AGENTS.md) y [PLCSIM README](../../../30-tools/plcsim/README.md).
+Cuando se instale Advanced V7 o posterior con soporte V20 y se valide el adaptador/API, el flujo será:
+fixture aislada; compatibilidad exacta TIA/Advanced/CPU/firmware; preflight F/Safety y protección;
+activar compilación simulable y compilar 0/0; una instancia Softbus en `PLCSIM`; identificar en TIA
+la CPU simulada; descargar, pasar a RUN, ejecutar un plan de E/S con valores esperados, apagar y
+conservar evidencia. TCP/IP se reserva para pruebas Ethernet en `<Local>` con NIC Siemens aislada.
+
+Fuentes Siemens: [compatibilidad Advanced V7 con proyectos TIA V14–V20](https://support.industry.siemens.com/forum/ww/uk/posts/simatic-s7-plcsim-advanced-v7-0-download-incl-trial-license/326239/?page=0&pageSize=10&viewmode=print), [manual Advanced V7](https://support.industry.siemens.com/cs/attachments/109977691/s7-plcsim_advanced_function_manual_en-US_en-US.pdf), [manual Advanced V6 UPD1](https://cache.industry.siemens.com/dl/files/578/109955578/att_1267815/v1/s7-plcsim_advanced_function_manual_en-US.pdf), [qué es Advanced/Softbus](https://docs.tia.siemens.cloud/r/simatic_s7_1500_et_200mp_manual_collection_enus_20/comprehensive-information/cpu-function-manuals/s7-plcsim-advanced-api/product-overview/what-is-s7-plcsim-advanced), [compilación simulable V20](https://docs.tia.siemens.cloud/r/en-us/v20/editing-projects/creating-and-managing-projects/displaying-properties-of-the-project).
+
+**Estado local:** compilación 0/0, save y export/readback de la fixture se verificaron antes; no hubo descarga ni prueba funcional. La evidencia y el bloqueo por versiones están en [auditoría](../../../70-runs/tia-capabilities/20260925-plcsim-version-compatibility-audit.md) y [readiness](../../../70-runs/simulation/readiness-latest.json).
+### Revalidación de gates y estado UI — 2026-09-25
+
+Se revalidó el manifiesto de `retry-fixture-01`: snapshot y backup coinciden en
+`7620c14dca12987a7823e1b7d721672bd332fa32a67de5a96df62496ad3899b8`. Pasaron las regresiones
+`Test-InvokeTiaSimulationAcceptance.ps1` y `Test-TiaSimulationAcceptanceSafety.ps1`; su alcance es
+adaptadores/servidores simulados, no una descarga live. `Test-TiaCreationRecipes.ps1` detectó que
+R07 decía “no verificada” donde el contrato requiere el estado explícito “no verificado”; se corrigió
+la redacción y pasó en la repetición. `Test-DocumentationState.ps1` también pasó.
+
+El inventario nativo de Computer Use encontró TIA Portal V20 con una ventana cuyo título pertenece
+a la fixture hermana `20260925-plcsim-scaffold/isolated-fixture`, no a la fixture objetivo
+`retry-fixture-01/isolated-fixture`. Se leyó el estado visual, no se interactuó, reemplazó ni cerró
+el proyecto. No se lanzó instancia PLCSIM ni hubo descarga, RUN o prueba funcional. Evidencia:
+[revalidación de gates y UI](../../../70-runs/tia-capabilities/20260925-simulation-guard-and-documentation-revalidation.json).
+
+### Auditoría oficial de compatibilidad TIA/PLCSIM Advanced — 2026-09-25
+
+La revisión oficial encontró que la guía anterior “TIA V20 + PLCSIM Advanced V6” era incorrecta:
+el manual Siemens de Advanced V6.0 UPD1 limita el soporte a TIA V14–V19/FW V1.8–V3.1; Siemens
+indica que Advanced V7.0 admite proyectos TIA V14–V20 y firmware V1.8–V4.0. La evidencia histórica
+de `Go online` por Softbus solo demuestra conectividad parcial; no acredita una descarga compatible.
+
+- **Verificado:** están instalados TIA V20, PLCSIM Standard V19 y PLCSIM Advanced V6.0.0.1; consulte
+  el inventario Windows del 2026-09-25 y `70-runs/simulation/readiness-latest.json`.
+- **Bloqueado:** V20 + Advanced V6 no cumple la matriz de fabricante. No se debe iniciar el runner
+  de descarga con esa pareja.
+- **Ruta marcada para agentes:** comprobar versiones TIA/Advanced/CPU/FW; usar Advanced V7.0 o
+  posterior con cobertura V20; validar el adaptador/API; trabajar en una fixture aislada; pasar
+  preflight F/Safety/protección; activar compilación simulable y compilar 0/0; iniciar una sola CPU
+  virtual por Softbus `PLCSIM`; verificar el aviso de destino simulado; descargar, pasar a RUN,
+  ejecutar un plan funcional de E/S y limpiar la instancia. TCP/IP queda para pruebas Ethernet en
+  `<Local>` con NIC Siemens aislada.
+- **No verificado:** V7 no está instalado y el adaptador/API C++ actual se probó contra V6; hay que
+  validar esa implementación con V7 antes de habilitar la descarga automatizada.
+
+Fuentes: [compatibilidad Advanced V7 con TIA V14–V20](https://docs.tia.siemens.cloud/r/en-us/v20/what-s-new-in-tia-portal/changes-in-previous-versions-of-tia-portal/changes-in-tia-portal-v19/engineering-options), [manual Advanced V7](https://support.industry.siemens.com/cs/attachments/109977691/s7-plcsim_advanced_function_manual_en-US_en-US.pdf), [manual Advanced V6 UPD1](https://cache.industry.siemens.com/dl/files/578/109955578/att_1267815/v1/s7-plcsim_advanced_function_manual_en-US.pdf), [estado local](../../../70-runs/simulation/readiness-latest.json).
+
+### Preparación de la aceptación tras instalar PLCSIM Advanced V7 — 2026-09-25
+
+El usuario ha iniciado la instalación de PLCSIM Advanced V7. Mientras el instalador está activo,
+no se interactúa con TIA/PLCSIM ni se ejecutan pruebas que creen o administren CPUs virtuales. La
+instalación comunicada por el usuario no acredita todavía la versión instalada, la inicialización
+del API, la compatibilidad del adaptador, la descarga ni el comportamiento runtime.
+
+- **Verificado:** el paquete portable se reconstruyó desde el origen actual en un directorio
+  temporal, pasó `Test-PortablePackage.ps1`, `Test-PortablePackageContent.ps1` y
+  `Test-PortableInstallRelocation.ps1`; después se promovió a `TIA-Claude_Portable/dist`. La copia
+  anterior se conservó en `90-tmp/portable-dist-before-refresh-20260925`. El paquete nuevo declara
+  322 archivos core y 658 de ejemplos. Las pruebas de instalación y traslado verificaron hashes de
+  322 archivos del core.
+- **Verificado:** pruebas dirigidas de las regresiones `Test-TiaSimulationAcceptanceSafety.ps1` y
+  `Test-TiaAcceptanceStatus.ps1` pasaron tras ajustar sus fixtures para que el resultado no dependa
+  del orden de la suite ni de campos de readiness obsoletos. La prueba `Test-PlcSimNativeAdapter.ps1`
+  también pasó contra el API V6 presente en ese momento; incluyó ciclo de vida y limpieza de una
+  instancia virtual desechable, sin descargar un proyecto.
+- **Revalidado durante la instalación:** volvieron a pasar las pruebas de aceptación local, estado,
+  recetas y consistencia documental; `git diff --check` no encontró errores. El registro separa
+  estos mocks de toda prueba live en [comprobaciones locales pre-V7](../../../70-runs/checks/20260925-plcsim-pre-v7-local-tests.md).
+- **Corregido y verificado en prueba dirigida:** el adaptador rechazaba silenciosamente una opción
+  `--interface` desconocida y podía continuar con el transporte configurado. Ahora falla antes de
+  crear la instancia con `unsupported-interface-argument`; la prueba de regresión comprueba esa
+  parada. Esta prueba no autoriza una interfaz de red ni demuestra Softbus con TIA.
+- **No aceptada:** la primera suite completa guardada en
+  [latest.json](../../../70-runs/checks/latest.json) terminó con 44 PASS, 2 WARN y 3 BLOCKED.
+  Encontró los dos defectos de pruebas corregidos arriba; el bloqueo del adaptador ocurrió antes de
+  confirmar la regresión de opción desconocida. Un segundo intento fue interrumpido antes de generar
+  un informe final, así que no cuenta como suite completa aprobada.
+- **Pendiente tras el instalador:** comprobar Doctor/inventario de versiones, versión real del API
+  PLCSIM, compatibilidad con TIA V20 y CPU/FW objetivo; compilar y probar el adaptador contra V7; y
+  después, solo si los gates de seguridad y manifiesto pasan, ejecutar la aceptación PLC en una
+  fixture limpia con Softbus. La descarga simulada y los casos funcionales observados siguen
+  pendientes.
+- **Hallazgo de implementación para V7:** el builder nativo y el probe administrado apuntan
+  actualmente a `API\6.0` de forma fija. Tras instalar, hay que comprobar la ruta/ABI real del API V7
+  y cambiar la selección de versión para que el adaptador compile y cargue esa API explícitamente;
+  no basta con que el panel V7 aparezca instalado ni con pasar la prueba histórica V6.
+
+### Resultado de instalación y pruebas de PLCSIM Advanced V7 — 2026-09-25
+
+El usuario confirmó que PLCSIM Advanced V7 terminó de instalarse. La aceptación se retomó sin cerrar
+la aplicación: TIA Portal V20 quedó abierto y maximizado con el proyecto desechable
+`70-runs/e2e/20260925-plcsim-scaffold/retry-fixture-01/isolated-fixture/project/AgentDemo_V20/AgentDemo_V20.ap20`.
+
+- **Verificado:** el API instalado es 7.0.0.0 (`API\7.0`), declara la interfaz `0x00070000` e
+  inicializa/libera correctamente. El adaptador nativo, compilado para V7, creó, encendió, apagó y
+  limpió una instancia temporal por Softbus; los códigos fueron `0x0` y el recuento final fue cero.
+  Evidencias: [probe V7](../../../70-runs/simulation/20260925-api7-probe.json), [ciclo V7](../../../70-runs/simulation/20260925-api7-native-lifecycle.json), [estado limpio](../../../70-runs/simulation/20260925-api7-posttest-clean.json) y repetición [ciclo V7](../../../70-runs/simulation/20260925-api7-native-lifecycle-repeat.json).
+- **Verificado:** readiness detecta TIA V20 + Advanced V7 compatibles, API 7 y adaptador virtual
+  listo. Las suites `Test-SimulationReadiness`, `Test-InvokeTiaSimulationAcceptance`,
+  `Test-TiaSimulationAcceptanceSafety`, `Test-PlcSimRuntimeApiProbe`, `Test-PlcSimApiSelection`,
+  `Test-PlcSimNativeAdapter`, `Test-TiaAcceptanceStatus`, `Test-TiaCreationRecipes`,
+  `Test-DocumentationState` y `Test-PortablePackageContent` terminaron PASS. `git diff --check` no
+  encontró errores; solo informó conversiones de fin de línea.
+- **Verificado en UI:** TIA abrió con éxito `AgentDemo_V20` desde la ruta exacta de la fixture; el
+  árbol muestra `PLC_1 [CPU 1513-1 PN]`. La ventana sigue maximizada. No se descargó el proyecto ni
+  se afirmó comportamiento PLC.
+- **Bloqueado por preflight del perfil de descarga:** `tia-create full` ofrece `DownloadToPlc`, pero
+  el roster live no publica `GetTags` y `GetBlocks` no aporta metadata explícita `isFailsafe`.
+  `tia-inspect` sí leyó metadata completa en una sesión distinta; esa evidencia no se combina para
+  autorizar la descarga. Mantener el gate y no llamar `DownloadToPlc` hasta disponer de clasificación
+  F/Safety completa en la misma sesión mutante.
+- **Bloqueado el hash posterior a abrir:** `Assert-TiaFixtureManifest.ps1` no pudo calcular el hash
+  del `.ap20` porque TIA lo mantiene bloqueado. No se guardó ni editó desde el agente; no se cierra
+  TIA para liberar el archivo sin autorización. Verificar/restaurar el snapshot cuando el proyecto
+  se libere, antes de cualquier escritura.
+- **No verificado:** conexión de descarga TIA ↔ CPU virtual, primera descarga, paso a RUN y plan de
+  E/S con observaciones funcionales. API Softbus y compatibilidad de versiones por sí solas no
+  prueban esa ruta.
+
+La solución local para seleccionar API ya no fija V6: `Resolve-PlcSimApi.ps1` elige la versión
+instalada que tenga DLL y cabecera coincidentes, el builder genera `bin\v7`, y las pruebas
+comprueban selección explícita y automática. La preflight F/Safety del perfil de descarga quedó
+resuelta en el registro siguiente; aún falta regenerar/verificar la fixture libre y repetir R17 con
+Softbus.
+
+### Barrera F/Safety y preflight de descarga para tia-create — 2026-09-25
+
+- **Implementado:** se versionó un patch contra el commit upstream fijado de `tia-create`.
+  `GetBlocks` ahora devuelve `isFailsafe` nullable, `GetTags` enumera tags anidados con
+  `isSafety`, y `DownloadToPlc` vuelve a clasificar globalmente el PLC dentro de la propia sesión
+  antes de configurar una ruta o iniciar cualquier operación online. Rechaza clasificación nula,
+  objetos F/Safety, cero bloques enumerados y bloques con know-how protection.
+- **Verificado:** build reproducible desde `30-tools/mcp/tia-create/build.ps1`: 0 errores y dos
+  advertencias existentes (MSB3539 de rutas de salida y CS8602 en `OpcUaLiveReader.cs`). Doctor
+  confirmó TIA/Openness V20 y pertenencia al grupo Siemens. Smoke test lite detectó 56 tools,
+  incluyendo `GetTags`; disponibilidad y `git diff --check` pasaron.
+- **Verificado live, solo lectura:** desde el binario instalado en `30-tools/mcp/tia-create/bin/v20`,
+  la secuencia serializada Bootstrap → Connect → AttachToOpenProject → GetProjectTree →
+  GetBlocks → GetTags → Disconnect adjuntó `AgentDemo_V20`. El árbol confirmó `PLC_1`; leyó
+  `Main` y `FB_AgentDemo` con `isFailsafe=false`, `isConsistent=true`,
+  `isKnowHowProtected=false`, y los dos tags `isSafety=false`. Evidencia:
+  [lectura live instalada](../../../70-runs/tia-capabilities/20260925-tia-create-safety-live-read-built.json).
+- **No probado todavía:** ejecutar una descarga aceptada o probar en TIA una fixture con F/Safety
+  para observar el veto; no se creó ningún objeto Safety. La barrera compila y la ruta está
+  conectada antes de la operación mutante, pero la prueba de rechazo específica se mantiene
+  pendiente. No se descargó el PLC.
+- **Siguiente gate:** liberar/restaurar la fixture que TIA aún mantiene abierta, verificar hash del
+  manifiesto, compilar para simulación, confirmar el diálogo `CPU-1500 Simulation`, y solo entonces
+  usar R17 en Softbus para probar carga/RUN/comportamiento. La ventana de TIA sigue maximizada.

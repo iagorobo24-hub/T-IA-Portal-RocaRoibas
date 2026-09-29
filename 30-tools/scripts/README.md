@@ -19,6 +19,7 @@ Herramientas de consola para operar TIA Portal por Openness sin depender de un c
 | [`Find-TiaRuntimeMedia.ps1`](Find-TiaRuntimeMedia.ps1) | Busca medios de instalación Runtime/TIA sin instalar nada y exige confirmación para el siguiente paso |
 | [`Write-TiaSimulationReadiness.ps1`](Write-TiaSimulationReadiness.ps1) | Preflight de simulación: separa disponibilidad PLC, compatibilidad HMI V20 y evidencia conductual |
 | [`Invoke-TiaSimulationAcceptance.ps1`](Invoke-TiaSimulationAcceptance.ps1) | Preflight y aceptación PLC en PLCSIM: compila, valida rutas y descarga solo con confirmación virtual explícita |
+| [`Get-TiaUiAutomationInventory.ps1`](Get-TiaUiAutomationInventory.ps1) | Captura, en solo lectura, el árbol UI Automation de una ventana TIA/PLCSIM seleccionada por PID y título exactos |
 | [`Invoke-TiaProjectAnalysis.ps1`](Invoke-TiaProjectAnalysis.ps1) | Genera un dossier semántico de solo lectura desde un inventario MCP y fuentes exportadas |
 | [`New-TiaIoList.ps1`](New-TiaIoList.ps1) | Genera lista JSON/CSV/Markdown de E/S solo si hay tags detalladas verificables |
 | [`New-TiaFunctionalDescription.ps1`](New-TiaFunctionalDescription.ps1) | Compone una descripción funcional trazable desde dossier e I/O |
@@ -118,17 +119,42 @@ rechaza la descarga si ninguna ruta contiene el adaptador PLCSIM solicitado.
   -ProjectName "Sorting Plant Control_V20" `
   -SoftwarePath "Sorting Plant Controller" `
   -TargetIpAddress "192.168.0.1" `
+  -SimulationTargetEvidencePath "..\\..\\70-runs\\environment\\simulation-target.json" `
   -StartVirtualPlc -AcknowledgeVirtualTarget -Run
 ```
 
 El runner utiliza por defecto `tia-create` V20 con el perfil `full` para disponer de los esquemas
-de descarga. Con `-StartVirtualPlc` también mantiene viva la instancia nativa 1516F y la limpia
+de descarga. `-SimulationTargetEvidencePath` debe apuntar a una observación nativa de Computer Use
+reciente que identifique el proyecto, CPU simulada y aviso de destino; no generes el archivo con
+valores supuestos. Con `-StartVirtualPlc` también mantiene viva la instancia nativa CPU 1513 y la limpia
 en `finally`; si no se pasa, la instancia debe estar gestionada externamente. No se debe cambiar
 `-VirtualInterfacePattern` a una NIC física para el acceptance PLC.
 
 Para añadir una aceptación conductual, `-IoPlanPath` recibe un JSON con `steps[].command`,
 `steps[].expect` y opcionalmente `steps[].delayMs`; exige además `-StartVirtualPlc` y registra todas las respuestas del protocolo
 nativo. La receta completa está en [`R17`](../../10-kb/20-recetas/R17-aceptacion-plcsim.md).
+
+## `Get-TiaUiAutomationInventory.ps1`
+
+Herramienta de descubrimiento **solo lectura** para preparar automatización de ventanas nativas.
+Exige PID y un fragmento distintivo del título que se hayan identificado en el inventario vigente
+de Computer Use. Si no encuentra exactamente una ventana, falla. No activa ventanas, enfoca,
+escribe, hace clic ni ejecuta patrones UIA; enumera nombres, `AutomationId`, tipos y patrones
+disponibles, sin leer el contenido de campos `ValuePattern`.
+
+```powershell
+powershell.exe -NoProfile -File .\Get-TiaUiAutomationInventory.ps1 `
+  -ProcessId <pid-observado> `
+  -ExpectedTitleContains 'AgentDemo_V20' `
+  -OutputPath '..\..\70-runs\environment\uia-tia-project.json'
+```
+
+El título debe identificar la ventana correcta del proyecto/simulador; no uses un PID antiguo ni
+selecciones por nombre de proceso si hay más de una ventana. El inventario ayuda a descubrir
+selectores semánticos. **No autoriza acciones**: cada acción que modifique TIA o PLCSIM debe tener
+un runner acotado, precondiciones, comprobación posterior y evidencia. Usa Playwright solo para
+un runtime HMI que realmente esté servido como página web; para TIA Desktop la opción candidata
+es Windows UI Automation tras comprobar esos selectores con Computer Use.
 
 ## `Invoke-TiaProjectAnalysis.ps1`
 

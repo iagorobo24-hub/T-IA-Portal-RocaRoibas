@@ -8,25 +8,26 @@ $pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
 if (-not $pwsh) { $pwsh = (Get-Command powershell -ErrorAction Stop).Source }
 $temp = Join-Path ([IO.Path]::GetTempPath()) ('tia-claude-simulation-safety-test-' + [guid]::NewGuid().ToString('N'))
 
-function Invoke-Runner([string]$Name, [string]$RouteMode, [string]$PlanPath, [switch]$StartVirtualPlc, [string]$AdapterIp = '192.168.0.1', [string]$ReadinessPathOverride) {
+function Invoke-Runner([string]$Name, [string]$RouteMode, [string]$PlanPath, [switch]$StartVirtualPlc, [string]$AdapterIp = '192.168.0.1', [string]$ReadinessPathOverride, [string]$Transport = 'tcpip-local', [switch]$Fallback) {
     $reportPath = Join-Path $temp ($Name + '-report.json')
     $capturePath = Join-Path $temp ($Name + '-download.json')
     $deviceIp = if ($RouteMode -eq 'project-ip-mismatch') { '192.168.0.99' } else { '192.168.0.1' }
     $fixtureArguments = ' -NoProfile -NonInteractive -File "' + $fixtureServer + '" -RouteMode ' + $RouteMode + ' -DeviceIp ' + $deviceIp + ' -CapturePath "' + $capturePath + '"'
-    $adapterRunArguments = ' -NoProfile -NonInteractive -File "' + $adapterPath + '" -Ip ' + $AdapterIp
+    $adapterRunArguments = ' -NoProfile -NonInteractive -File "' + $adapterPath + '" -Ip ' + $AdapterIp + ' -Transport ' + $Transport
     $arguments = @(
         '-NoProfile', '-NonInteractive', '-File', $script,
         '-ReadinessPath', $(if ($ReadinessPathOverride) { $ReadinessPathOverride } else { $readinessPath }), '-OutputPath', $reportPath,
         '-ProjectFile', $projectFile, '-ProjectName', 'Fixture Project',
         '-SoftwarePath', 'Fixture PLC', '-DevicePath', 'Fixture PLC',
         '-TargetIpAddress', '192.168.0.1', '-VirtualInterfacePattern', 'PLCSIM',
-        '-PlcSimInterface', 'Siemens PLCSIM Virtual Ethernet Adapter',
+        '-PlcSimInterface', 'Siemens PLCSIM Virtual Ethernet Adapter', '-PlcSimTransport', $Transport,
         '-McpExecutablePath', $pwsh, '-McpArguments', $fixtureArguments,
         '-PlcSimAdapterPath', $pwsh, '-PlcSimAdapterArguments', $adapterRunArguments,
         '-AcknowledgeVirtualTarget', '-Run'
     )
     if (-not [string]::IsNullOrWhiteSpace($PlanPath)) { $arguments += @('-IoPlanPath', $PlanPath) }
     if ($StartVirtualPlc) { $arguments += '-StartVirtualPlc' }
+    if ($Fallback) { $arguments += '-AllowOpenProjectFallback' }
     $output = & $pwsh @arguments 2>&1 | Out-String
     [pscustomobject]@{
         exitCode = $LASTEXITCODE
@@ -43,8 +44,10 @@ try {
     [ordered]@{
         schemaVersion = 1
         status = 'READY_WITH_BLOCKERS'
+        versions = [ordered]@{ tiaMajor = 20; plcsimAdvanced = '7.0.0.0' }
         gates = [ordered]@{
             plcToolchainReady = $true
+            plcsimCompatibleWithTia = $true
             plcsimVirtualAdapterReady = $true
             hmiRuntimeAdvancedV20Ready = $false
             plcBehaviorVerified = $false
@@ -73,8 +76,12 @@ while ($line = [Console]::In.ReadLine()) {
         $argsObject = $request.params.arguments
         switch ($name) {
             'GetProjectTree' { $payload = [ordered]@{ tree = "Fixture Project`n└── Fixture PLC [PLC Program]"; message = 'Project tree retrieved' } }
+            'AttachToOpenProject' { $payload = [ordered]@{ message = "Attached to open project 'Fixture Project'"; meta = @{ success = $true } } }
+            'OpenProject' { $payload = [ordered]@{ message = "Opened project 'Fixture Project'"; meta = @{ success = $true } } }
             'GetSoftwareTree' { $payload = [ordered]@{ tree = "Fixture PLC`n└── Main [OB]"; message = 'Software tree retrieved' } }
             'GetDeviceIpAddress' { $payload = [ordered]@{ message = (@{ Ok = $true; Data = @{ found = $true; device = 'Fixture PLC'; ipAddress = $DeviceIp; nodeCount = 1; nodes = @(@{ nodeName = 'X1'; address = $DeviceIp; nodeType = 'Ethernet'; isIndustrialEthernet = $true }) }; Errors = $null; Warnings = $null; Message = "PLC IP: $DeviceIp" } | ConvertTo-Json -Depth 20 -Compress) } }
+            'GetBlocks' { $payload = [ordered]@{ meta = @{ success = $true }; items = @(@{ name = 'Main'; path = 'Main'; programmingLanguage = 'LAD'; isFailsafe = $false; isKnowHowProtected = $false; isConsistent = $true; attributes = @(@{ name = 'PLCSimAdvancedSupport'; value = $true }) }) } }
+            'GetTags' { $payload = [ordered]@{ meta = @{ success = $true; complete = $true; count = 1 }; items = @(@{ name = 'Cmd_Enable'; path = 'Agent_Signals/Cmd_Enable'; isSafety = $false }) } }
             'CompileSoftware' {
                 if ($RouteMode -eq 'compile-error') { $payload = [ordered]@{ state = 'Failure'; errorCount = 1; warningCount = 0; message = 'fixture compile error' } }
                 elseif ($RouteMode -eq 'compile-warning') { $payload = [ordered]@{ state = 'Warning'; errorCount = 0; warningCount = 1; message = 'fixture compile warning' } }
@@ -82,8 +89,14 @@ while ($line = [Console]::In.ReadLine()) {
             }
             'CheckDownloadReadiness' {
                 $routeIp = if ($RouteMode -eq 'route-ip-mismatch') { '192.168.0.99' } else { '192.168.0.1' }
-                $route = @{ pgPcInterface = 'Siemens PLCSIM Virtual Ethernet Adapter'; preferred = $true; targetInterface = '1 X1'; targetIpAddress = $routeIp }
+                $routeName = if ($RouteMode -eq 'softbus') { 'PLCSIM' } else { 'Siemens PLCSIM Virtual Ethernet Adapter' }
+                $route = @{ pgPcInterface = $routeName; preferred = $true; targetInterface = '1 X1'; targetIpAddress = $routeIp }
                 $routes = if ($RouteMode -eq 'ambiguous') { @($route, (@{} + $route + @{ targetInterface = '2 X1'; targetIpAddress = '192.168.0.2' })) } else { @($route) }
+                if ($RouteMode -eq 'no-softbus-route') {
+                    # Live shape 2026-09-25: five PN/IE NIC routes, no PLCSIM entry, empty addresses, none preferred.
+                    $routes = @('Realtek PCIe GbE Family Controller', 'Siemens PLCSIM Virtual Ethernet Adapter', 'ASIX USB to Gigabit Ethernet Family Adapter', 'TAP-Windows Adapter V9', 'Realtek 8822CE Wireless LAN 802.11ac PCI-E NIC') |
+                        ForEach-Object { @{ mode = 'PN/IE'; pgPcInterface = $_; pgPcInterfaceNumber = 1; pgPcAddresses = ''; targetInterface = '1 X1'; targetAddresses = ''; preferred = $false } }
+                }
                 $payload = [ordered]@{ Ready = $true; IsConsistent = $true; Message = 'ready'; Meta = @{ downloadRoutes = $routes } }
             }
             'DownloadToPlc' {
@@ -102,8 +115,9 @@ while ($line = [Console]::In.ReadLine()) {
 
     $adapterPath = Join-Path $temp 'adapter-fixture.ps1'
     @'
-param([string]$Ip = '192.168.0.1')
-[Console]::Out.WriteLine((@{ status = 'ready'; instanceName = 'FixtureVirtualPlc'; interfaceName = 'Ethernet 2'; interfaceDescription = 'Siemens PLCSIM Virtual Ethernet Adapter'; ip = $Ip } | ConvertTo-Json -Compress))
+param([string]$Ip = '192.168.0.1', [string]$Transport = 'tcpip-local')
+$ready = if ($Transport -eq 'softbus') { @{ status = 'ready'; instanceName = 'FixtureVirtualPlc'; interfaceName = 'PLCSIM'; interfaceDescription = 'Local Softbus'; ip = $null; networkMode = 'SOFTBUS' } } else { @{ status = 'ready'; instanceName = 'FixtureVirtualPlc'; interfaceName = 'Siemens PLCSIM Virtual Ethernet Adapter'; interfaceDescription = 'Siemens PLCSIM Virtual Ethernet Adapter'; ip = $Ip; networkMode = 'TCPIP_SINGLE_ADAPTER' } }
+[Console]::Out.WriteLine(($ready | ConvertTo-Json -Compress))
 [Console]::Out.Flush()
 while ($line = [Console]::In.ReadLine()) {
     if ($line -eq 'stop' -or $line -eq 'quit') {
@@ -167,8 +181,8 @@ while ($line = [Console]::In.ReadLine()) {
     foreach ($gateCase in $gateCases) {
         $caseReadinessPath = Join-Path $temp ($gateCase.name + '.json')
         $caseReadiness = Get-Content -Raw -LiteralPath $readinessPath | ConvertFrom-Json -AsHashtable
-        if ($gateCase.kind -eq 'missing') { $caseReadiness.gates.Remove('plcsimVirtualAdapterReady') | Out-Null }
-        else { $caseReadiness.gates.plcsimVirtualAdapterReady = $gateCase.value }
+        if ($gateCase.kind -eq 'missing') { $caseReadiness.gates.Remove('tiaInstanceSafeForApply') | Out-Null }
+        else { $caseReadiness.gates.tiaInstanceSafeForApply = $gateCase.value }
         $caseReadiness | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $caseReadinessPath -Encoding UTF8
         $gateResult = Invoke-Runner -Name $gateCase.name -RouteMode 'unique' -PlanPath $validPlanPath -StartVirtualPlc -ReadinessPathOverride $caseReadinessPath
         if ($gateResult.exitCode -ne 2 -or $gateResult.report.status -ne 'BLOCKED' -or $gateResult.report.mutationAttempted -ne $false) {
@@ -218,6 +232,31 @@ while ($line = [Console]::In.ReadLine()) {
     if ($downloadArgs.targetIpAddress -ne '192.168.0.1') { throw 'DownloadToPlc did not receive the checked target IP.' }
     if ($unique.report.behavior.verified -ne $true) { throw 'A successful download without an observed behavior result cannot be verified.' }
     Write-Output 'PASS: the unique exact interface and checked IP are passed to DownloadToPlc'
+
+    $softbus = Invoke-Runner -Name 'softbus-route' -RouteMode 'softbus' -PlanPath $validPlanPath -StartVirtualPlc -Transport 'softbus'
+    if ($softbus.exitCode -ne 0 -or $softbus.report.status -ne 'VERIFIED') { throw "Softbus route should pass the fixture. Output: $($softbus.output)" }
+    $softbusDownload = Get-Content -Raw -LiteralPath $softbus.capturePath | ConvertFrom-Json
+    if ($softbusDownload.pgPcInterface -ne 'PLCSIM') { throw 'Softbus acceptance did not select the PLCSIM PG/PC route.' }
+    if ($softbusDownload.PSObject.Properties['targetIpAddress']) { throw 'Softbus acceptance must not forward a target IP: Softbus targets carry no address and the server filters targetIpAddress against TargetAddresses.' }
+    if ($softbus.report.preflight.virtualInstance.ip -ne $null -or $softbus.report.preflight.virtualInstance.transport -ne 'softbus') { throw 'Softbus preflight incorrectly depended on an IP adapter.' }
+    Write-Output 'PASS: Softbus local mode selects PLCSIM and does not require a TCP/IP adapter address'
+
+    $noSoftbus = Invoke-Runner -Name 'no-softbus-route' -RouteMode 'no-softbus-route' -PlanPath $validPlanPath -StartVirtualPlc -Transport 'softbus'
+    if ($noSoftbus.exitCode -ne 1 -or $noSoftbus.report.status -ne 'FAILED' -or $noSoftbus.report.mutationAttempted -ne $false) {
+        throw "A Softbus request without an enumerated PLCSIM route must fail before download. Output: $($noSoftbus.output)"
+    }
+    if (Test-Path -LiteralPath $noSoftbus.capturePath -PathType Leaf) { throw 'Missing Softbus route reached DownloadToPlc.' }
+    if (@($noSoftbus.report.blockers | Where-Object { $_ -match 'not enumerated exactly once' }).Count -ne 1) {
+        throw 'The missing Softbus route was not reported as an explicit Softbus setup failure.'
+    }
+    if ($noSoftbus.report.virtualPlc.cleanup.status -ne 'stopped') { throw 'The started virtual PLC was not cleaned up after the Softbus route failure.' }
+    Write-Output 'PASS: Softbus without an enumerated PLCSIM route blocks before download and never falls back to a NIC'
+
+    $fallback = Invoke-Runner -Name 'open-fallback' -RouteMode 'unique' -PlanPath $validPlanPath -StartVirtualPlc -Fallback
+    if ($fallback.exitCode -ne 0 -or $fallback.report.status -ne 'VERIFIED') { throw "OpenProject fallback should pass the fixture. Output: $($fallback.output)" }
+    $fallbackDownload = Get-Content -Raw -LiteralPath $fallback.capturePath | ConvertFrom-Json
+    if ($fallbackDownload.pgPcInterface -ne 'Siemens PLCSIM Virtual Ethernet Adapter') { throw 'Fallback acceptance did not select the exact virtual interface.' }
+    Write-Output 'PASS: AllowOpenProjectFallback binds the exact fixture in every session without Attach'
 }
 finally {
     if (Test-Path -LiteralPath $temp -PathType Container) { Remove-Item -LiteralPath $temp -Recurse -Force }

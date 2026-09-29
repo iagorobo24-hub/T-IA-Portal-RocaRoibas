@@ -11,7 +11,7 @@ foreach ($path in @($smoke, $exe)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing runtime smoke input: $path" }
 }
 
-$output = & $smoke -ExecutablePath $exe -Arguments '--tia-major-version 20 --profile lite --logging 1' -ExpectedTool @('FindTools', 'CallTool', 'Doctor', 'CreateProject', 'ScaffoldProject') -OutputPath $reportPath
+$output = & $smoke -ExecutablePath $exe -Arguments '--tia-major-version 20 --profile lite --logging 1' -ExpectedTool @('FindTools', 'CallTool', 'Doctor', 'CreateProject', 'ScaffoldProject', 'GetTags', 'GetBlocks') -OutputPath $reportPath
 if ($LASTEXITCODE -ne 0) { throw "tia-create runtime smoke failed: $output" }
 $result = $output | Out-String | ConvertFrom-Json
 if ($result.toolCount -lt 5) { throw "Expected multiple lite tools, got $($result.toolCount)." }

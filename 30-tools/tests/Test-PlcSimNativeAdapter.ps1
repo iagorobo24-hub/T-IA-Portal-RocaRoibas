@@ -1,13 +1,19 @@
 [CmdletBinding()]
 param(
-    [string]$WorkspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+    [string]$WorkspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path,
+    [string]$EvidencePath
 )
 
 $ErrorActionPreference = 'Stop'
 $build = Join-Path $WorkspaceRoot '30-tools\plcsim\Build-PlcSimAdapter.ps1'
-$adapter = Join-Path $WorkspaceRoot '30-tools\plcsim\bin\v6\tia-claude-plcsim-adapter.exe'
+$apiResolver = Join-Path $WorkspaceRoot '30-tools\plcsim\Resolve-PlcSimApi.ps1'
 if (-not (Test-Path -LiteralPath $build -PathType Leaf)) { throw 'Native PLCSIM adapter build script is missing.' }
-& $build -Force | Out-Null
+if (-not (Test-Path -LiteralPath $apiResolver -PathType Leaf)) { throw 'PLCSIM API resolver is missing.' }
+. $apiResolver
+$api = Get-TiaPlcSimApiInstallation
+if (-not $api) { throw 'No Siemens PLCSIM Advanced API installation with a matching header and DLL was found.' }
+$adapter = Join-Path $WorkspaceRoot "30-tools\plcsim\bin\v$($api.Major)\tia-claude-plcsim-adapter.exe"
+& $build -ApiVersion $api.Version -Force | Out-Null
 if (-not (Test-Path -LiteralPath $adapter -PathType Leaf)) { throw 'Native PLCSIM adapter was not built.' }
 
 $inspectOutput = & $adapter --inspect 2>&1 | Out-String
@@ -46,12 +52,31 @@ if ($runtime.status -ne 'ready' -or $runtime.powerOnDisposable -ne $true -or
 # Probe the persistent acceptance path with an impossible adapter name. It must
 # refuse before registration/power-on and return the available adapter list;
 # this remains safe on machines where the real Siemens adapter is configured.
-$acceptanceOutput = & $adapter --register-acceptance --interface '__TIA_CLAUDE_TEST_NO_SUCH_ADAPTER__' 2>&1 | Out-String
+$acceptanceOutput = & $adapter --register-acceptance --transport softbus --interface '__TIA_CLAUDE_TEST_NO_SUCH_ADAPTER__' 2>&1 | Out-String
 if ($LASTEXITCODE -eq 0) { throw "Acceptance probe unexpectedly started a CPU: $acceptanceOutput" }
 $acceptanceJsonLine = @($acceptanceOutput -split "`r?`n" | Where-Object { $_.TrimStart().StartsWith('{') } | Select-Object -First 1)
 if ($acceptanceJsonLine.Count -ne 1) { throw "Acceptance path returned no JSON diagnostics: $acceptanceOutput" }
 $acceptance = $acceptanceJsonLine | ConvertFrom-Json
-if ($acceptance.status -ne 'failed' -or $acceptance.stage -notin @('select-interface', 'enumerate-interfaces')) {
-    throw "Acceptance path did not fail safely during interface selection: $acceptanceOutput"
+if ($acceptance.status -ne 'failed' -or $acceptance.stage -ne 'unsupported-interface-argument') {
+    throw "Acceptance path did not reject the unsupported adapter override before starting a PLC: $acceptanceOutput"
+}
+$evidence = [ordered]@{
+    schemaVersion = 1
+    generatedAt = (Get-Date).ToString('o')
+    status = 'PASS'
+    api = [ordered]@{ version = $api.Version; interfaceVersion = $api.InterfaceVersionHex; dllPath = $api.DllPath }
+    adapterPath = $adapter
+    inspect = $inspect
+    registrationInspection = $registration
+    disposableLifecycle = $lifecycle
+    disposablePowerCycle = $runtime
+    invalidInterfaceGuard = $acceptance
+    tiaProjectOpened = $false
+    projectDownloadAttempted = $false
+}
+if (-not [string]::IsNullOrWhiteSpace($EvidencePath)) {
+    $EvidencePath = [IO.Path]::GetFullPath($EvidencePath)
+    New-Item -ItemType Directory -Path (Split-Path -Parent $EvidencePath) -Force | Out-Null
+    $evidence | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $EvidencePath -Encoding UTF8
 }
 Write-Output 'PASS: native PLCSIM adapter inspects, powers on/off, cleans up, and gates persistent acceptance'

@@ -38,11 +38,20 @@ Verificado leyendo los nodos de cada JSON:
 `CONFIGURE_MINDCONNECT_AGENT_LOCALLY`; prepara una credencial nueva fuera del repositorio antes de
 intentar ejecutar el flujo. La credencial anterior estuvo versionada: considérala expuesta y rótala
 o revócala en el tenant/proveedor correspondiente antes de volver a habilitar ese flujo. Esta
-rotación externa aún no se ha confirmado. El archivo fuente actual y el árbol de ejemplos pasan el
-escaneo JWT-like, pero la auditoría local detectó esa credencial en los 47 commits que conservan ese
-árbol. No publiques ni compartas el historial de este repositorio hasta que el propietario
-del tenant confirme la revocación/rotación y el responsable del repositorio apruebe un saneamiento
-de historial coordinado. La limpieza del working tree no elimina objetos de commits antiguos.
+rotación externa aún no se ha confirmado. La revalidación local del 2026-09-24 aplicó el patrón del
+escáner JWT-like a los 66 snapshots alcanzables del archivo y encontró la credencial en 47 commits;
+las 17 copias actuales del flujo y 437 archivos ZIP inspeccionados no tuvieron hallazgos ni entradas
+del flujo con hallazgos. El valor no se imprimió ni se registró. Evidencia redactada:
+[`20260924-mindsphere-history-redacted-audit.json`](../../70-runs/tia-capabilities/20260924-mindsphere-history-redacted-audit.json).
+No publiques ni compartas el historial de este repositorio hasta que el propietario del tenant
+confirme la revocación/rotación y el responsable del repositorio apruebe un saneamiento de historial
+coordinado. La limpieza del working tree no elimina objetos de commits antiguos.
+
+**Revalidación local 2026-09-25:** se inspeccionaron las 18 copias actuales localizadas, incluida
+`TIA-Claude_Portable/dist`: todas parsean como JSON, comparten el mismo SHA-256 y el escaneo de
+patrón JWT-like dio cero hallazgos. Véase el [registro redactado de distribución actual](../../70-runs/tia-capabilities/20260925-mindsphere-current-distribution-audit.json).
+Esto confirma el contenido local/portable, no la revocación del tenant ni la eliminación de los 47
+commits históricos con hallazgos.
 
 ## El código de apoyo
 

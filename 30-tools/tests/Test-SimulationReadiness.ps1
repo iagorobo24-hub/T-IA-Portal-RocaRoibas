@@ -30,7 +30,10 @@ try {
     & $scriptPath -WorkspaceRoot $fixtureRoot -OutputPath $outputPath -SkipLiveProcessCheck | Out-Null
     $report = Get-Content -Raw -LiteralPath $outputPath | ConvertFrom-Json
     if ($report.readOnly -ne $true) { throw 'Read-only flag is missing.' }
-    if ($report.gates.plcToolchainReady -ne $true) { throw 'PLC toolchain should be ready in the fixture.' }
+    if ($report.gates.plcToolchainReady -ne $false) { throw 'TIA V20 + PLCSIM Advanced V6 must be blocked as an unsupported pairing.' }
+    if ($report.gates.plcsimCompatibleWithTia -ne $false) { throw 'Unsupported PLCSIM/TIA pairing passed the compatibility gate.' }
+    if (@($report.blockers | Where-Object { $_ -match 'PLCSIM Advanced V6.0 no está confirmado como compatible con TIA Portal 20' }).Count -ne 1) { throw 'Expected PLC simulator compatibility blocker is missing.' }
+    if ($report.evidence.tiaSessionSafety.status -ne 'live-process-check-skipped' -or $report.evidence.tiaSessionSafety.safe -ne $false) { throw 'Skipped live TIA inspection must not be treated as safe.' }
     if ($null -eq $report.gates.plcsimVirtualAdapterReady) { throw 'PLCSIM virtual adapter gate is missing.' }
     if ($report.gates.hmiRuntimeAdvancedV20Ready -ne $false) { throw 'V17 runtime must not pass the V20 HMI gate.' }
     if ($report.blockers -notcontains 'WinCC Runtime Advanced V20 compatible no está verificado') { throw 'Expected HMI compatibility blocker is missing.' }

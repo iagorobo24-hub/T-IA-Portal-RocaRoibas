@@ -84,6 +84,70 @@ La interfaz gráfica es para lo que Openness **no puede** hacer.
 | Saber el **modelo exacto de CPU y de panel** | **GUI**, o `GetDeviceInfo` |
 | Diagnosticar una advertencia de compilación | **GUI** — el detalle está en la ventana de Info |
 
+### Automatizar tareas gráficas repetibles
+
+**Playwright no es el controlador de TIA Portal Desktop.** Playwright controla páginas en
+navegadores; no obtiene el árbol de controles de la aplicación de ingeniería Windows. Reservarlo
+para interfaces web, por ejemplo una prueba de un runtime HMI que realmente se ejecute en navegador.
+No asumir que WinCC Runtime Advanced o Unified sea una página web: identificar primero el runtime y
+su interfaz concreta. Referencias: [Playwright — Browsers](https://playwright.dev/docs/browsers) y
+[Microsoft UI Automation](https://learn.microsoft.com/en-us/windows/win32/winauto/entry-uiauto-win32).
+
+Para TIA Desktop, usar esta secuencia:
+
+1. **Openness/MCP primero** para las operaciones del modelo de ingeniería que exponga el perfil:
+   proyecto, bloques, tags, hardware, compilación, exportación y demás.
+2. **Computer Use nativo** para descubrir la ventana y los controles, entender contenido visual y
+   confirmar diálogos o vistas que Openness no exponga. En Codex/Windows, usar `node_repl` +
+   `@oai/sky`; seleccionar la ventana devuelta por el inventario, comprobar el proyecto y mantenerla
+   maximizada.
+3. **Windows UI Automation (UIA)** es la opción candidata para automatizar controles de escritorio,
+   una vez inspeccionados en la aplicación y versión exactas. Usa selectores semánticos únicos
+   (`Name`, `AutomationId`, tipo y patrón soportado); no uses coordenadas fijas ni `SendKeys` ciego
+   para una mutación. El script `30-tools/scripts/Get-TiaUiAutomationInventory.ps1` solo enumera
+   controles de una ventana identificada por PID y título: no mueve el foco, no hace clic y no
+   ejecuta patrones.
+
+Antes de promover un flujo UIA a herramienta reutilizable: aprender el flujo una vez en un fixture
+desechable; registrar versión de TIA, identidad/ruta del proyecto, controles y estado esperado;
+crear un modo preview que solo enumere controles; ejecutar una acción cada vez; verificar el estado
+posterior en UI y por lectura MCP; y conservar evidencia y recuperación. Si el control no aparece,
+es ambiguo o cambia de versión, parar y volver a Computer Use. No automatizar por imagen un diálogo
+de destino de descarga. La primera aceptación PLCSIM requiere confirmar visualmente que TIA muestra
+`CPU-1500 Simulation` y el aviso de CPU simulada antes de cargar.
+
+| Tramo repetible | Ruta preferida | Candidato de automatización | Condición para aceptarlo |
+|---|---|---|---|
+| Enumerar ventanas, identificar proyecto y maximizar TIA | Computer Use nativo | API del harness; UIA solo si identifica la ventana sin ambigüedad | Título/ruta visibles y estado maximizado confirmados |
+| Leer bloques, tags, hardware y compilar | MCP/Openness | Runner MCP existente | Respuesta completa y metadata de seguridad presente |
+| Navegar árbol y abrir una vista para inspección | MCP para datos; GUI para renderizado | UIA si el árbol publica selectores únicos; Computer Use para confirmar | Proyecto correcto y panel esperado visibles |
+| Abrir un proyecto o resolver diálogos de migración | GUI observada | No automatizar inicialmente; UIA solo tras prueba aislada | Identidad, versión y ruta confirmadas antes de continuar |
+| Confirmar destino de descarga PLCSIM | Computer Use nativo | UIA puede recoger texto accesible como evidencia auxiliar | Un humano/agente verifica `CPU-1500 Simulation` y el aviso; luego runner con evidencia fresca |
+| Arrancar/parar instancia virtual | Adaptador/API PLCSIM Advanced | Runner existente; panel como verificación secundaria | Código de resultado de API más estado final comprobado |
+| Probar botones, alarmas y navegación de HMI | Runtime correspondiente | Playwright solo si el runtime es una web; UIA/CU si es escritorio | Modelo/runtime identificado y plan funcional con resultados esperados |
+
+Regla de inversión: automatizar primero observación y navegación de bajo riesgo; dejar carga,
+guardado y cambios de ingeniería en MCP/Openness cuando exista una operación soportada. Un script
+de UI no reemplaza los gates del runner ni convierte una observación visual en prueba de runtime.
+
+**Estado 2026-09-28:** Computer Use abrió y dejó maximizado TIA V20 con la fixture desechable exacta
+`70-runs/e2e/20260928-objective-resume-acceptance-supported/isolated-fixture/project/AgentDemo_V20/AgentDemo_V20.ap20`.
+Se observaron `PLC_1 [CPU 1513-1 PN]`, `Main [OB1]` y `FB_AgentDemo [FB1]`; se abrió el SCL de
+`FB_AgentDemo` y Device configuration solo para inspección. No se editó el proyecto. El asistente
+de descarga no quedó abierto, no se descargó y el firmware no se confirmó visualmente.
+
+PLCSIM Advanced V7 mostró una instancia `TIAClaudeAcceptance_1513 / CPU1513 / 192.168.0.1` y una
+instancia activa; no se pudo leer el estado actual del LED. No se pulsaron RUN, STOP, MRES, Power ni
+Unregister. La instancia se deja intacta porque su estado/origen no está confirmado.
+
+La página Start y el diálogo estándar expusieron nombres UIA (`Path`, `m_BrowseButton`,
+`m_OpenButton`, `Nombre`, `Abrir`); en el panel PLCSIM también se observaron controles semánticos.
+Esto justifica preparar un inventario UIA de solo lectura, pero **no demuestra que se pueda operar
+TIA de forma fiable**: no se ha probado el script nuevo ni hay selectores aceptados para abrir un
+proyecto, navegar bloques o ejecutar acciones. Primero se debe capturar el árbol actual con
+`Get-TiaUiAutomationInventory.ps1`, comparar los selectores con Computer Use y aceptar cada
+operación repetible por separado en fixture.
+
 ---
 
 ## Mecánica Windows del harness anterior — referencia histórica

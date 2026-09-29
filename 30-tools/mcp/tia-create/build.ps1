@@ -70,6 +70,15 @@ if (-not (Test-Path $upstream)) {
 } else {
     Write-Step "upstream/ ya existe, revirtiendo cambios locales"
     Invoke-Native "git checkout" { git -C $upstream checkout -- . }
+    foreach ($relativePath in @(
+        'tools\tiaportal-mcp\src\TiaMcpServer\Siemens\Portal.Safety.cs',
+        'tools\tiaportal-mcp\src\TiaMcpServer\Siemens\SafetyClassification.cs'
+    )) {
+        $patchedFile = Join-Path $upstream $relativePath
+        if (Test-Path -LiteralPath $patchedFile -PathType Leaf) {
+            Remove-Item -LiteralPath $patchedFile -Force
+        }
+    }
 }
 $actualCommit = (git -C $upstream rev-parse HEAD)
 if ($actualCommit -ne $pinnedCommit) {
@@ -78,13 +87,33 @@ if ($actualCommit -ne $pinnedCommit) {
 }
 Write-Ok ("commit " + $actualCommit.Substring(0, 7))
 
+$safetyPatch = Join-Path $root 'patches\0001-explicit-failsafe-and-safety-gates.patch'
+if (-not (Test-Path -LiteralPath $safetyPatch -PathType Leaf)) {
+    throw "Required local safety patch is missing: $safetyPatch"
+}
+Write-Step 'Aplicando la barrera F/Safety y la clasificación de tags del workspace'
+$reverseCheck = & git -C $upstream -c core.whitespace=cr-at-eol apply --reverse --check $safetyPatch 2>&1
+if ($LASTEXITCODE -eq 0) {
+    Write-Ok 'el patch del workspace ya estaba aplicado'
+}
+else {
+    Invoke-Native 'git apply safety patch' {
+        git -C $upstream -c core.whitespace=cr-at-eol apply --check $safetyPatch
+        if ($LASTEXITCODE -ne 0) { throw 'El patch ya no coincide con el commit upstream fijado.' }
+        git -C $upstream -c core.whitespace=cr-at-eol apply $safetyPatch
+    }
+    Write-Ok 'patch aplicado'
+}
+
 $srcDir = Join-Path $upstream 'tools\tiaportal-mcp\src\TiaMcpServer'
 if ($TiaMajor -eq 20) {
     $csproj = Join-Path $srcDir 'TiaMcpServer.V20.csproj'
-    $built = Join-Path $srcDir 'bin-v20\Release\net48'
+    $framework = if (Test-Path 'C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8') { 'net48' } else { 'net481' }
+    $built = Join-Path $srcDir "bin-v20\Release\$framework"
 } else {
     $csproj = Join-Path $srcDir 'TiaMcpServer.csproj'
     $built = Join-Path $srcDir 'bin\Release\net48'
+    $framework = 'net48'
 }
 if (-not (Test-Path -LiteralPath $csproj)) {
     throw "No encuentro $csproj. El upstream ha podido reestructurarse; revisa tools/tiaportal-mcp/src/TiaMcpServer en $upstream."
@@ -93,7 +122,10 @@ if (-not (Test-Path -LiteralPath $csproj)) {
 $outDir = Join-Path $root "bin\v$TiaMajor"
 Write-Step "Compilando para TIA V$TiaMajor ($(Split-Path $csproj -Leaf))"
 Invoke-Native "dotnet build" {
-    & $dotnet build $csproj -c Release --nologo
+    & $dotnet restore $csproj --nologo -p:TargetFramework=$framework
+}
+Invoke-Native "dotnet build" {
+    & $dotnet build $csproj -c Release --no-restore --nologo -p:TargetFramework=$framework
 }
 
 if (-not (Test-Path (Join-Path $built 'TiaMcpServer.exe'))) {

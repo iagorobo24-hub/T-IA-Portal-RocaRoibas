@@ -1,0 +1,244 @@
+diff --git a/tools/tiaportal-mcp/src/TiaMcpServer/ModelContextProtocol/Helper.cs b/tools/tiaportal-mcp/src/TiaMcpServer/ModelContextProtocol/Helper.cs
+index 1f1675315af3e4d6dc65c366c958f097aee21890..b3b08a248632ab4349828222099c7577c2460644 100644
+--- a/tools/tiaportal-mcp/src/TiaMcpServer/ModelContextProtocol/Helper.cs
++++ b/tools/tiaportal-mcp/src/TiaMcpServer/ModelContextProtocol/Helper.cs
+@@ -1,5 +1,6 @@
+ ﻿using Siemens.Engineering;
+ using Siemens.Engineering.SW.Blocks;
++using TiaMcpServer.Siemens;
+ using System;
+ using System.Collections.Generic;
+ 
+@@ -62,6 +63,7 @@ namespace TiaMcpServer.ModelContextProtocol
+                     ProgrammingLanguage = Enum.GetName(typeof(ProgrammingLanguage), block.ProgrammingLanguage),
+                     MemoryLayout = Enum.GetName(typeof(MemoryLayout), block.MemoryLayout),
+                     IsConsistent = block.IsConsistent,
++                    IsFailsafe = SafetyClassification.GetFailsafeClassification(block),
+                     HeaderName = block.HeaderName,
+                     ModifiedDate = block.ModifiedDate,
+                     IsKnowHowProtected = block.IsKnowHowProtected,
+diff --git a/tools/tiaportal-mcp/src/TiaMcpServer/ModelContextProtocol/McpServer.Blocks.cs b/tools/tiaportal-mcp/src/TiaMcpServer/ModelContextProtocol/McpServer.Blocks.cs
+index c8740d01cc6b2f2123cadd241eefd5ca6c8349a6..70f842289a4fa649ebfdfcd1f1970d823fc29bce 100644
+--- a/tools/tiaportal-mcp/src/TiaMcpServer/ModelContextProtocol/McpServer.Blocks.cs
++++ b/tools/tiaportal-mcp/src/TiaMcpServer/ModelContextProtocol/McpServer.Blocks.cs
+@@ -46,6 +46,7 @@ namespace TiaMcpServer.ModelContextProtocol
+                         ProgrammingLanguage = Enum.GetName(typeof(ProgrammingLanguage),block.ProgrammingLanguage),
+                         MemoryLayout = Enum.GetName(typeof(MemoryLayout), block.MemoryLayout),
+                         IsConsistent = block.IsConsistent,
++                        IsFailsafe = SafetyClassification.GetFailsafeClassification(block),
+                         HeaderName = block.HeaderName,
+                         ModifiedDate = block.ModifiedDate,
+                         IsKnowHowProtected = block.IsKnowHowProtected,
+@@ -105,6 +106,7 @@ namespace TiaMcpServer.ModelContextProtocol
+                             ProgrammingLanguage = Enum.GetName(typeof(ProgrammingLanguage), block.ProgrammingLanguage),
+                             MemoryLayout = Enum.GetName(typeof(MemoryLayout), block.MemoryLayout),
+                             IsConsistent = block.IsConsistent,
++                            IsFailsafe = SafetyClassification.GetFailsafeClassification(block),
+                             HeaderName = block.HeaderName,
+                             ModifiedDate = block.ModifiedDate,
+                             IsKnowHowProtected = block.IsKnowHowProtected,
+diff --git a/tools/tiaportal-mcp/src/TiaMcpServer/ModelContextProtocol/McpServer.PlcSoftware.cs b/tools/tiaportal-mcp/src/TiaMcpServer/ModelContextProtocol/McpServer.PlcSoftware.cs
+index 9c5ce3f55fe7e9de7570015aca2fdda7f4751109..13db5604876585fbd43da3faced89612ac62e99d 100644
+--- a/tools/tiaportal-mcp/src/TiaMcpServer/ModelContextProtocol/McpServer.PlcSoftware.cs
++++ b/tools/tiaportal-mcp/src/TiaMcpServer/ModelContextProtocol/McpServer.PlcSoftware.cs
+@@ -2339,6 +2339,26 @@ namespace TiaMcpServer.ModelContextProtocol
+             }
+         }
+ 
++        [McpServerTool(Name = "GetTags"), Description("[L1][PLC-Software][ReadOnly] Enumerate every PLC tag in every nested tag table and return its exact path and IsSafety classification. A null classification is unknown and must block writes/downloads. Requires an attached/open project and exact softwarePath from GetProjectTree.")]
++        public static ResponsePlcTagSafetyInfo GetTags(
++            [Description("softwarePath: exact PLC software path from GetProjectTree (for example PLC_1)")] string softwarePath)
++        {
++            try
++            {
++                var items = Portal.GetPlcTags(softwarePath);
++                return new ResponsePlcTagSafetyInfo
++                {
++                    Message = $"PLC tags and Safety classification retrieved from '{softwarePath}'",
++                    Items = items,
++                    Meta = new JsonObject { ["timestamp"] = DateTime.Now, ["success"] = true, ["complete"] = true, ["count"] = items.Count }
++                };
++            }
++            catch (Exception ex) when (ex is not McpException)
++            {
++                throw new McpException($"Unable to classify all PLC tags in '{softwarePath}': {ex.Message}{McpHints.Recovery(ex)}", ex, McpErrorCode.InternalError);
++            }
++        }
++
+         [McpServerTool(Name = "GetPlcTagTables"), Description("[L2][PLC-Software] List all PLC tag table names. Requires: Connect + OpenProject. softwarePath from GetProjectTree (e.g. 'PLC_1'). Use before ExportPlcTagTable to get exact table names, or before ImportPlcTagTable to check for conflicts.")]
+         public static ResponseStringList GetPlcTagTables(
+             [Description("softwarePath: path in the project structure to the PLC software")] string softwarePath)
+diff --git a/tools/tiaportal-mcp/src/TiaMcpServer/ModelContextProtocol/McpServer.Profile.cs b/tools/tiaportal-mcp/src/TiaMcpServer/ModelContextProtocol/McpServer.Profile.cs
+index 127512853ccedf73301b91aa5db01df265319ad7..4eca044745cefef3b95efc5ab78687b95e8a669c 100644
+--- a/tools/tiaportal-mcp/src/TiaMcpServer/ModelContextProtocol/McpServer.Profile.cs
++++ b/tools/tiaportal-mcp/src/TiaMcpServer/ModelContextProtocol/McpServer.Profile.cs
+@@ -54,7 +54,7 @@ namespace TiaMcpServer.ModelContextProtocol
+             // instructions; tag tables and cross-references are what a model needs to read a
+             // project it did not write.
+             "ImportBlocksFromDocuments", "ExportBlocksAsDocuments",
+-            "GetPlcTagTables", "GetCrossReferences",
++            "GetPlcTagTables", "GetTags", "GetCrossReferences",
+             "GetBlocks", "GetBlocksWithHierarchy", "GetBlockInfo",
+             "ExportAsDocuments", "GoOffline",
+             // 大响应寄存与分页。**任何档都必须能翻页** —— 超过阈值的响应会被寄存，
+diff --git a/tools/tiaportal-mcp/src/TiaMcpServer/ModelContextProtocol/Responses.cs b/tools/tiaportal-mcp/src/TiaMcpServer/ModelContextProtocol/Responses.cs
+index 406468cf34eb696751595294974acf5ce511ace6..eea0fd10f65dd2d226773b2d87c602d33b1f9b24 100644
+--- a/tools/tiaportal-mcp/src/TiaMcpServer/ModelContextProtocol/Responses.cs
++++ b/tools/tiaportal-mcp/src/TiaMcpServer/ModelContextProtocol/Responses.cs
+@@ -49,6 +49,7 @@ namespace TiaMcpServer.ModelContextProtocol
+         public string? ProgrammingLanguage { get; set; }
+         public string? MemoryLayout { get; set; }
+         public bool? IsConsistent { get; set; }
++        public bool? IsFailsafe { get; set; }
+         public string? HeaderName { get; set; }
+         public DateTime? ModifiedDate { get; set; }
+         public bool? IsKnowHowProtected { get; set; }
+@@ -515,6 +516,11 @@ namespace TiaMcpServer.ModelContextProtocol
+         public IEnumerable<ResponseBlockInfo>? Items { get; set; }
+     }
+ 
++    public class ResponsePlcTagSafetyInfo : ResponseMessage
++    {
++        public IEnumerable<TiaMcpServer.Siemens.PlcTagSafetyInfo>? Items { get; set; }
++    }
++
+     public class ResponseExportBlock : ResponseMessage
+     {
+     }
+diff --git a/tools/tiaportal-mcp/src/TiaMcpServer/Siemens/Portal.Download.cs b/tools/tiaportal-mcp/src/TiaMcpServer/Siemens/Portal.Download.cs
+index 19c184c825dd6671b4194da827a22e0219eb7904..1ecc1c8f640cbe2dd7fce4e21874292d48435041 100644
+--- a/tools/tiaportal-mcp/src/TiaMcpServer/Siemens/Portal.Download.cs
++++ b/tools/tiaportal-mcp/src/TiaMcpServer/Siemens/Portal.Download.cs
+@@ -62,6 +62,10 @@ namespace TiaMcpServer.Siemens
+             if (plcSoftware == null)
+                 return new ResponseDownload { Ok = false, Message = $"PLC software not found: '{softwarePath}'." };
+ 
++            // This check runs inside the same Openness session immediately before any download
++            // configuration or online operation. Missing/unknown F/Safety metadata is a hard stop.
++            EnsureNoSafetyObjectsForDownload(softwarePath);
++
+             // Declared outside the try so the catch can report which PG/PC route was used.
+             DownloadRouteSelection? routeDiagnostics = null;
+ 
+diff --git a/tools/tiaportal-mcp/src/TiaMcpServer/Siemens/Portal.Safety.cs b/tools/tiaportal-mcp/src/TiaMcpServer/Siemens/Portal.Safety.cs
+new file mode 100644
+index 0000000000000000000000000000000000000000..07b67317c72dcf4141f72cd7b21a918460309c0c
+--- /dev/null
++++ b/tools/tiaportal-mcp/src/TiaMcpServer/Siemens/Portal.Safety.cs
+@@ -0,0 +1,90 @@
++using Siemens.Engineering;
++using Siemens.Engineering.HW;
++using Siemens.Engineering.HW.Features;
++using Siemens.Engineering.SW;
++using Siemens.Engineering.SW.Blocks;
++using Siemens.Engineering.SW.Tags;
++using Microsoft.Extensions.Logging;
++using System;
++using System.Collections.Generic;
++using System.Linq;
++
++namespace TiaMcpServer.Siemens
++{
++    public sealed class PlcTagSafetyInfo
++    {
++        public string Path { get; set; } = "";
++        public string Name { get; set; } = "";
++        public bool? IsSafety { get; set; }
++    }
++
++    public partial class Portal
++    {
++        public List<PlcTagSafetyInfo> GetPlcTags(string softwarePath)
++        {
++            if (IsProjectNull()) throw new PortalException(PortalErrorCode.InvalidState, "No project open; PLC tag classification is incomplete.");
++            var software = GetPlcSoftware(softwarePath);
++            if (software == null) throw new PortalException(PortalErrorCode.NotFound, $"PLC software not found: '{softwarePath}'.");
++            var root = software.TagTableGroup;
++            if (root == null) throw new PortalException(PortalErrorCode.InvalidState, $"PLC software '{softwarePath}' has no readable tag-table root.");
++            var result = new List<PlcTagSafetyInfo>();
++            CollectTags(root, "", result);
++            return result;
++        }
++
++        public void EnsureNoSafetyObjectsForDownload(string softwarePath)
++        {
++            if (IsProjectNull()) throw new PortalException(PortalErrorCode.InvalidState, "Download blocked: no valid TIA project is open for F/Safety preflight.");
++            var software = GetPlcSoftware(softwarePath);
++            if (software == null) throw new PortalException(PortalErrorCode.NotFound, $"Download blocked: PLC software not found at '{softwarePath}'.");
++            var blockRoot = software.BlockGroup;
++            if (blockRoot == null) throw new PortalException(PortalErrorCode.InvalidState, $"Download blocked: PLC '{softwarePath}' has no readable block root.");
++
++            var blocks = new List<PlcBlock>();
++            CollectBlocks(blockRoot, blocks);
++            if (blocks.Count == 0) throw new PortalException(PortalErrorCode.InvalidState, $"Download blocked: no PLC blocks were enumerated for '{softwarePath}'.");
++            foreach (var block in blocks)
++            {
++                var classification = SafetyClassification.GetFailsafeClassification(block);
++                if (classification != false)
++                {
++                    var state = classification == true ? "F/Safety" : "unknown";
++                    throw new PortalException(PortalErrorCode.InvalidState, $"Download blocked: block '{block.Name}' is classified as {state}.");
++                }
++                if (block.IsKnowHowProtected)
++                    throw new PortalException(PortalErrorCode.InvalidState, $"Download blocked: block '{block.Name}' has know-how protection.");
++            }
++
++            var tags = GetPlcTags(softwarePath);
++            foreach (var tag in tags)
++            {
++                if (tag.IsSafety != false)
++                {
++                    var state = tag.IsSafety == true ? "Safety" : "unknown";
++                    throw new PortalException(PortalErrorCode.InvalidState, $"Download blocked: tag '{tag.Path}' is classified as {state}.");
++                }
++            }
++
++            _logger?.LogInformation("F/Safety download preflight passed for {SoftwarePath}: {BlockCount} standard blocks, {TagCount} non-Safety tags.", softwarePath, blocks.Count, tags.Count);
++        }
++
++        private static void CollectBlocks(PlcBlockGroup group, List<PlcBlock> result)
++        {
++            foreach (var composition in group.Blocks)
++                if (composition is PlcBlock block) result.Add(block);
++            foreach (PlcBlockGroup child in group.Groups) CollectBlocks(child, result);
++        }
++
++        private static void CollectTags(PlcTagTableGroup group, string prefix, List<PlcTagSafetyInfo> result)
++        {
++            foreach (PlcTagTable table in group.TagTables)
++            {
++                var tablePath = string.IsNullOrEmpty(prefix) ? table.Name : prefix + "/" + table.Name;
++                foreach (PlcTag tag in table.Tags)
++                    result.Add(new PlcTagSafetyInfo { Path = tablePath + "/" + tag.Name, Name = tag.Name, IsSafety = tag.IsSafety });
++            }
++            foreach (PlcTagTableGroup child in group.Groups)
++                CollectTags(child, string.IsNullOrEmpty(prefix) ? child.Name : prefix + "/" + child.Name, result);
++        }
++    }
++}
+diff --git a/tools/tiaportal-mcp/src/TiaMcpServer/Siemens/SafetyClassification.cs b/tools/tiaportal-mcp/src/TiaMcpServer/Siemens/SafetyClassification.cs
+new file mode 100644
+index 0000000000000000000000000000000000000000..da7c2164357acad99efb70811a99c7350a16231f
+--- /dev/null
++++ b/tools/tiaportal-mcp/src/TiaMcpServer/Siemens/SafetyClassification.cs
+@@ -0,0 +1,20 @@
++using Siemens.Engineering.Safety;
++using Siemens.Engineering.SW.Blocks;
++using System;
++
++namespace TiaMcpServer.Siemens
++{
++    /// <summary>Fail-closed classification for PLC blocks used by the write/download gate.</summary>
++    public static class SafetyClassification
++    {
++        public static bool? GetFailsafeClassification(PlcBlock block)
++        {
++            if (block == null) return null;
++            var language = Enum.GetName(typeof(ProgrammingLanguage), block.ProgrammingLanguage);
++            if (string.IsNullOrWhiteSpace(language) || language == "Undef") return null;
++            if (language.StartsWith("F_", StringComparison.Ordinal)) return true;
++            try { return block.GetService<SafetySignatureProvider>() != null; }
++            catch { return null; }
++        }
++    }
++}
