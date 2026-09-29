@@ -17,11 +17,12 @@
   },
   "plcsimAdvancedRuntimeApi": {
     "status": "installed-and-native-lifecycle-probe-verified",
-    "version": "6.0.0.1",
-    "apiDll": "C:\\Program Files (x86)\\Common Files\\Siemens\\PLCSIMADV\\API\\6.0\\Siemens.Simatic.Simulation.Runtime.Api.x64.dll",
+    "version": "7.0.0.0",
+    "apiInterfaceVersion": "0x00070000",
+    "apiDll": "C:\\Program Files (x86)\\Common Files\\Siemens\\PLCSIMADV\\API\\7.0\\Siemens.Simatic.Simulation.Runtime.Api.x64.dll",
     "redistributed": false,
     "nativeAdapter": "source-included; build requires LLVM clang-cl, Visual Studio C++ Build Tools and Windows SDK",
-    "lifecycle": "register-disposable, PowerOn, PowerOff, then unregister verified; no project download performed",
+    "lifecycle": "API initialization and register-disposable, PowerOn, PowerOff, then unregister verified against API 7.0; no project download performed",
     "note": "Siemens runtime binaries remain installed locally; the portable package ships source and tests, not vendor DLLs."
   },
   "distribution": {

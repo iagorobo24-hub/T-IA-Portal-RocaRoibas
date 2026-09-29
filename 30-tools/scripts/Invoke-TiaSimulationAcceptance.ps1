@@ -4,10 +4,17 @@
 
 .DESCRIPTION
     El modo predeterminado solo genera un preview. El modo -Run exige todos los
-    datos del proyecto y una confirmación explícita de que el destino es virtual.
-    Abre el proyecto indicado, recompila, consulta CheckDownloadReadiness y solo
-    entonces descarga si la ruta PG/PC contiene el adaptador PLCSIM solicitado.
-    Nunca elige una NIC por heurística cuando el destino es ambiguo.
+    datos del proyecto, una confirmación de destino y un artefacto reciente de Computer Use
+    que vincula la identidad visual del CPU simulado al proyecto exacto antes de la descarga.
+    Se adjunta al proyecto ya abierto (AttachToOpenProject) sin abrir, cerrar ni
+    sustituir ningún proyecto; con -AllowOpenProjectFallback cada sesión abre ella
+    misma la fixture exacta (OpenProject con closeForeignProject=false, que rechaza
+    tocar un proyecto ajeno) porque el TIA headless muere con su servidor MCP.
+    Recompila, consulta CheckDownloadReadiness y solo entonces descarga si la ruta
+    PG/PC identifica inequívocamente al adaptador virtual solicitado.
+    Nunca elige una NIC por heurística cuando el destino es
+    ambiguo. En Softbus solo reenvía pgPcInterface='PLCSIM' exacto (los targets
+    Softbus no llevan IP); en TCP/IP local reenvía interfaz exacta + IP objetivo.
 #>
 [CmdletBinding()]
 param(
@@ -18,12 +25,15 @@ param(
     [string]$ProjectName,
     [string]$DevicePath,
     [string]$SoftwarePath,
+    [string]$SimulationTargetEvidencePath,
     [string]$TargetIpAddress,
     [string]$VirtualInterfacePattern = 'PLCSIM',
-    [string]$PlcSimAdapterPath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path '30-tools\plcsim\bin\v6\tia-claude-plcsim-adapter.exe'),
+    [ValidateSet('softbus', 'tcpip-local')]
+    [string]$PlcSimTransport = 'softbus',
+    [string]$PlcSimAdapterPath,
     [string]$PlcSimAdapterArguments,
     [string]$PlcSimInterface = 'Siemens PLCSIM Virtual Ethernet Adapter',
-    [string]$VirtualPlcName = 'TIAClaudeAcceptance_1516F',
+    [string]$VirtualPlcName = 'TIAClaudeAcceptance_1513',
     [int]$PlcSimTimeoutMs = 60000,
     [string]$McpExecutablePath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path '30-tools\mcp\tia-create\bin\v20\TiaMcpServer.exe'),
     [string]$McpArguments = '--tia-major-version 20 --profile full --allow-write',
@@ -31,13 +41,35 @@ param(
     [int]$TimeoutSeconds = 900,
     [switch]$Run,
     [switch]$StartVirtualPlc,
-    [switch]$AcknowledgeVirtualTarget
+    [switch]$AcknowledgeVirtualTarget,
+    [switch]$AllowOpenProjectFallback
 )
 
 $ErrorActionPreference = 'Stop'
 $WorkspaceRoot = [IO.Path]::GetFullPath($WorkspaceRoot)
 $ReadinessPath = [IO.Path]::GetFullPath($ReadinessPath)
 $OutputPath = [IO.Path]::GetFullPath($OutputPath)
+if (-not [string]::IsNullOrWhiteSpace($ProjectFile)) {
+    if (-not [IO.Path]::IsPathRooted($ProjectFile)) {
+        $ProjectFile = Join-Path $WorkspaceRoot $ProjectFile
+    }
+    $ProjectFile = [IO.Path]::GetFullPath($ProjectFile)
+}
+if (-not [string]::IsNullOrWhiteSpace($SimulationTargetEvidencePath)) {
+    if (-not [IO.Path]::IsPathRooted($SimulationTargetEvidencePath)) {
+        $SimulationTargetEvidencePath = Join-Path $WorkspaceRoot $SimulationTargetEvidencePath
+    }
+    $SimulationTargetEvidencePath = [IO.Path]::GetFullPath($SimulationTargetEvidencePath)
+}
+if ([string]::IsNullOrWhiteSpace($PlcSimAdapterPath)) {
+    $apiResolver = Join-Path $WorkspaceRoot '30-tools\plcsim\Resolve-PlcSimApi.ps1'
+    if (-not (Test-Path -LiteralPath $apiResolver -PathType Leaf)) { throw "PLCSIM API resolver is missing: $apiResolver" }
+    . $apiResolver
+    $api = Get-TiaPlcSimApiInstallation
+    $apiMajor = if ($api) { $api.Major } else { 6 }
+    $PlcSimAdapterPath = Join-Path $WorkspaceRoot "30-tools\plcsim\bin\v$apiMajor\tia-claude-plcsim-adapter.exe"
+}
+$PlcSimAdapterPath = [IO.Path]::GetFullPath($PlcSimAdapterPath)
 
 function Read-Json([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "JSON file does not exist: $Path" }
@@ -45,10 +77,18 @@ function Read-Json([string]$Path) {
 }
 
 function Write-Report([hashtable]$Report, [int]$ExitCode) {
-    New-Item -ItemType Directory -Path (Split-Path -Parent $OutputPath) -Force | Out-Null
-    ($Report | ConvertTo-Json -Depth 30) | Set-Content -LiteralPath $OutputPath -Encoding UTF8
+    Save-ReportSnapshot $Report
     Write-Output (Get-Content -Raw -LiteralPath $OutputPath)
     if ($ExitCode -ne 0) { exit $ExitCode }
+}
+
+function Save-ReportSnapshot([object]$Report) {
+    $directory = Split-Path -Parent $OutputPath
+    New-Item -ItemType Directory -Path $directory -Force | Out-Null
+    $Report.lastUpdatedAt = [DateTimeOffset]::Now.ToString('o')
+    $temporaryPath = $OutputPath + '.pending'
+    ($Report | ConvertTo-Json -Depth 30) | Set-Content -LiteralPath $temporaryPath -Encoding UTF8
+    Move-Item -LiteralPath $temporaryPath -Destination $OutputPath -Force
 }
 
 function Get-ToolPayload([object]$Call) {
@@ -76,6 +116,9 @@ function New-BaseReport([object]$Readiness) {
         blockers = @()
         nextActions = @()
         calls = @()
+        activeSequence = $null
+        lastUpdatedAt = $null
+        simulationTargetEvidence = $null
         readiness = $Readiness
     }
 }
@@ -87,7 +130,11 @@ function Start-VirtualPlcProcess {
     $psi = [Diagnostics.ProcessStartInfo]::new()
     $psi.FileName = [IO.Path]::GetFullPath($PlcSimAdapterPath)
     $psi.Arguments = if ([string]::IsNullOrWhiteSpace($PlcSimAdapterArguments)) {
-        '--register-acceptance --name "{0}" --interface "{1}" --ip "{2}" --timeout-ms {3}' -f $VirtualPlcName, $PlcSimInterface, $TargetIpAddress, $PlcSimTimeoutMs
+        if ($PlcSimTransport -eq 'softbus') {
+            '--register-acceptance --name "{0}" --cpu 1513 --transport softbus --timeout-ms {1}' -f $VirtualPlcName, $PlcSimTimeoutMs
+        } else {
+            '--register-acceptance --name "{0}" --cpu 1513 --transport tcpip-local --interface "{1}" --ip "{2}" --timeout-ms {3}' -f $VirtualPlcName, $PlcSimInterface, $TargetIpAddress, $PlcSimTimeoutMs
+        }
     } else { $PlcSimAdapterArguments }
     $psi.WorkingDirectory = Split-Path -Parent $psi.FileName
     $psi.UseShellExecute = $false
@@ -231,15 +278,154 @@ function Test-StrictTrue([object]$Value) {
     return ($Value -is [bool] -and $Value -eq $true)
 }
 
+function Read-ValidatedSimulationTargetEvidence([string]$Path, [object]$Readiness) {
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        throw 'Falta -SimulationTargetEvidencePath; la descarga exige evidencia Computer Use del destino simulado.'
+    }
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "No existe la evidencia visual del destino simulado: $Path"
+    }
+    $evidence = Read-Json $Path
+    if ([int]$evidence.schemaVersion -ne 1 -or [string]$evidence.source -cne 'native-computer-use' -or
+        -not (Test-StrictTrue $evidence.confirmed)) {
+        throw 'La evidencia debe declarar schemaVersion=1, source=native-computer-use y confirmed=true.'
+    }
+    $evidenceProjectFile = [string]$evidence.projectFile
+    if (-not [IO.Path]::IsPathRooted($evidenceProjectFile)) { $evidenceProjectFile = Join-Path $WorkspaceRoot $evidenceProjectFile }
+    if ([IO.Path]::GetFullPath($evidenceProjectFile) -ine [IO.Path]::GetFullPath($ProjectFile) -or
+        [string]$evidence.projectName -cne $ProjectName -or [string]$evidence.devicePath -cne $DevicePath) {
+        throw 'La evidencia visual no corresponde al mismo ProjectFile, ProjectName y DevicePath de esta ejecución.'
+    }
+    $expectedMajor = [int]$Readiness.versions.tiaMajor
+    if ([int]$evidence.tiaMajorVersion -ne $expectedMajor) {
+        throw "La evidencia visual es de TIA V$($evidence.tiaMajorVersion), pero readiness declara TIA V$expectedMajor."
+    }
+    $expectedRoute = if ($PlcSimTransport -eq 'softbus') { 'PLCSIM' } else { $PlcSimInterface }
+    if ([string]$evidence.pgPcInterface -ine $expectedRoute) {
+        throw "La evidencia visual confirma '$($evidence.pgPcInterface)', no la ruta seleccionada '$expectedRoute'."
+    }
+    if ([string]$evidence.targetDisplayName -cne 'CPU-1500 Simulation' -or
+        [string]$evidence.windowState -ine 'maximized' -or [string]$evidence.stage -cne 'before-download' -or
+        [string]$evidence.downloadNotice -notmatch '(?i)The downloads are performed on a simulated CPU') {
+        throw 'La evidencia debe mostrar TIA maximizado, CPU-1500 Simulation y el aviso de CPU simulada antes de descargar.'
+    }
+    $evidenceIp = $null
+    $expectedIp = $null
+    if (-not [Net.IPAddress]::TryParse([string]$evidence.targetIpAddress, [ref]$evidenceIp) -or
+        -not [Net.IPAddress]::TryParse($TargetIpAddress, [ref]$expectedIp) -or $evidenceIp.ToString() -ne $expectedIp.ToString()) {
+        throw 'La evidencia visual no confirma la misma TargetIpAddress solicitada para esta ejecución.'
+    }
+    try {
+        if ($evidence.observedAt -is [DateTimeOffset]) { $observedAt = $evidence.observedAt }
+        elseif ($evidence.observedAt -is [datetime]) { $observedAt = [DateTimeOffset]::new([datetime]$evidence.observedAt) }
+        else { $observedAt = [DateTimeOffset]::Parse([string]$evidence.observedAt, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind) }
+    }
+    catch { throw 'La evidencia visual necesita observedAt en formato de fecha ISO 8601.' }
+    $ageMinutes = ([DateTimeOffset]::Now - $observedAt).TotalMinutes
+    if ($ageMinutes -gt 30 -or $ageMinutes -lt -2) {
+        throw 'La evidencia visual del destino debe tener como máximo 30 minutos y no puede estar fechada en el futuro.'
+    }
+    [ordered]@{
+        confirmed = $true
+        source = [string]$evidence.source
+        path = [IO.Path]::GetFullPath($Path)
+        sha256 = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
+        observedAt = $observedAt.ToString('o')
+        targetDisplayName = [string]$evidence.targetDisplayName
+        downloadNotice = [string]$evidence.downloadNotice
+        pgPcInterface = [string]$evidence.pgPcInterface
+        windowState = [string]$evidence.windowState
+    }
+}
+
+function Get-RequiredBoolean([object]$InputObject, [string]$PropertyName, [string]$Context) {
+    $property = if ($null -ne $InputObject) { $InputObject.PSObject.Properties[$PropertyName] } else { $null }
+    if (-not $property -or $property.Value -isnot [bool]) {
+        throw "$Context lacks an explicit boolean '$PropertyName'; simulation download is blocked."
+    }
+    return [bool]$property.Value
+}
+
+function Assert-DownloadSafetyInventory([object]$BlocksPayload, [object]$TagsPayload) {
+    if (-not $BlocksPayload -or -not (Test-StrictTrue $BlocksPayload.meta.success) -or
+        -not $BlocksPayload.PSObject.Properties['items']) {
+        throw 'GetBlocks did not return a complete successful inventory; simulation download is blocked.'
+    }
+    $blocks = @($BlocksPayload.items)
+    if ($blocks.Count -eq 0) { throw 'GetBlocks returned no PLC blocks; simulation download is blocked.' }
+    foreach ($block in $blocks) {
+        $label = if ($block.path) { [string]$block.path } elseif ($block.name) { [string]$block.name } else { '<unknown block>' }
+        $languageProperty = if ($null -ne $block) { $block.PSObject.Properties['programmingLanguage'] } else { $null }
+        if (-not $languageProperty -or $languageProperty.Value -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$languageProperty.Value)) {
+            throw "Block '$label' lacks an explicit programming-language classification; simulation download is blocked."
+        }
+        if ([string]$languageProperty.Value -match '^(?i:F(?:[-_ ]|$))') {
+            throw "Block '$label' reports failsafe programming language '$($languageProperty.Value)'; simulation download is blocked."
+        }
+        if (Get-RequiredBoolean $block 'isFailsafe' "Block '$label'") {
+            throw "Block '$label' is F/Safety; simulation download is blocked."
+        }
+        if (Get-RequiredBoolean $block 'isKnowHowProtected' "Block '$label'") {
+            throw "Block '$label' has know-how protection; simulation download is blocked."
+        }
+        if (-not (Get-RequiredBoolean $block 'isConsistent' "Block '$label'")) {
+            throw "Block '$label' is inconsistent after compile; simulation download is blocked."
+        }
+        $simulationAttribute = @($block.attributes | Where-Object {
+            [string]::Equals([string]$_.name, 'PLCSimAdvancedSupport', [StringComparison]::OrdinalIgnoreCase)
+        } | Select-Object -First 1)
+        if ($simulationAttribute.Count -ne 1 -or $simulationAttribute[0].value -isnot [bool] -or $simulationAttribute[0].value -ne $true) {
+            throw "Block '$label' does not explicitly confirm PLCSIM Advanced compilation support; enable project simulation support, compile, and read back again."
+        }
+    }
+
+    if (-not $TagsPayload -or -not $TagsPayload.PSObject.Properties['items'] -or
+        -not $TagsPayload.PSObject.Properties['meta'] -or -not $TagsPayload.meta.PSObject.Properties['count'] -or
+        -not $TagsPayload.meta.PSObject.Properties['complete'] -or -not $TagsPayload.meta.PSObject.Properties['success']) {
+        throw 'GetTags did not return items/meta.count/meta.complete/meta.success; simulation download is blocked.'
+    }
+    if (-not (Test-StrictTrue $TagsPayload.meta.success)) {
+        throw 'GetTags did not report meta.success=true; the tag inventory may be partial. Simulation download is blocked.'
+    }
+    if (-not (Test-StrictTrue $TagsPayload.meta.complete)) {
+        throw 'GetTags reports meta.complete=false; nested tag tables may be missing. Simulation download is blocked.'
+    }
+    $tags = @($TagsPayload.items)
+    $expectedTagCount = 0L
+    if ($TagsPayload.meta.count -is [bool] -or
+        -not [long]::TryParse([string]$TagsPayload.meta.count, [ref]$expectedTagCount) -or
+        $expectedTagCount -ne $tags.Count) {
+        throw 'GetTags inventory count (meta.count) is incomplete or inconsistent with items; simulation download is blocked.'
+    }
+    foreach ($tag in $tags) {
+        $label = if ($tag.path) { [string]$tag.path } elseif ($tag.name) { [string]$tag.name } else { '<unknown tag>' }
+        if (Get-RequiredBoolean $tag 'isSafety' "PLC tag '$label'") {
+            throw "PLC tag '$label' is Safety or ambiguously classified; simulation download is blocked."
+        }
+    }
+    [ordered]@{ blockCount = $blocks.Count; tagCount = $tags.Count; safetyBlocks = 0; protectedBlocks = 0; safetyTags = 0; allBlocksSimulationSupported = $true }
+}
+
 $readiness = Read-Json $ReadinessPath
 $report = New-BaseReport $readiness
-$requiredGates = @('plcToolchainReady', 'plcsimVirtualAdapterReady', 'tiaInstanceSafeForApply')
+$requiredGates = @('plcToolchainReady', 'plcsimCompatibleWithTia', 'tiaInstanceSafeForApply')
 $gateBlockers = [System.Collections.Generic.List[string]]::new()
 foreach ($gate in $requiredGates) {
     $gateProperty = if ($readiness.gates) { $readiness.gates.PSObject.Properties[$gate] } else { $null }
     if (-not $gateProperty -or -not (Test-StrictTrue $gateProperty.Value)) {
         $gateBlockers.Add("Readiness gate '$gate' must be the JSON boolean true.")
     }
+}
+
+$tiaMajor = $null
+$advancedMajor = $null
+if ($readiness.versions -and $null -ne $readiness.versions.tiaMajor) { $tiaMajor = [int]$readiness.versions.tiaMajor }
+if ($readiness.versions -and [string]$readiness.versions.plcsimAdvanced -match '^\s*(\d+)') { $advancedMajor = [int]$Matches[1] }
+$compatiblePair = ($null -ne $tiaMajor -and $null -ne $advancedMajor -and
+    (($tiaMajor -eq 20 -and $advancedMajor -ge 7) -or
+     ($tiaMajor -ge 14 -and $tiaMajor -le 19 -and $advancedMajor -ge 6)))
+if (-not $compatiblePair) {
+    $gateBlockers.Add("TIA Portal $tiaMajor + PLCSIM Advanced $($readiness.versions.plcsimAdvanced) no está en la matriz local admitida; simulación bloqueada.")
 }
 
 if (-not $Run) {
@@ -269,6 +455,13 @@ if ($missing.Count -gt 0 -or -not $AcknowledgeVirtualTarget) {
     Write-Report $report 2
 }
 
+if (-not (Test-Path -LiteralPath $ProjectFile -PathType Leaf)) {
+    $report.status = 'BLOCKED'
+    $report.blockers = @("El proyecto TIA exacto no existe: $ProjectFile")
+    $report.nextActions = @('Resuelva ProjectFile desde WorkspaceRoot o proporcione la ruta absoluta al .ap20 de la fixture.')
+    Write-Report $report 2
+}
+
 if (-not $StartVirtualPlc) {
     $report.status = 'BLOCKED'
     $report.blockers = @('La aceptación requiere -StartVirtualPlc para identificar, mantener y limpiar la instancia virtual usada por el plan.')
@@ -282,6 +475,14 @@ catch {
     $report.status = 'BLOCKED'
     $report.blockers = @($_.Exception.Message)
     $report.nextActions = @('Corrija el plan de E/S y compruebe sus expectativas funcionales antes de iniciar PLCSIM o contactar con el servidor MCP.')
+    Write-Report $report 2
+}
+
+try { $report.simulationTargetEvidence = Read-ValidatedSimulationTargetEvidence -Path $SimulationTargetEvidencePath -Readiness $readiness }
+catch {
+    $report.status = 'BLOCKED'
+    $report.blockers = @($_.Exception.Message)
+    $report.nextActions = @('Confirme en TIA, sobre el proyecto y dispositivo exactos, CPU-1500 Simulation y el aviso de CPU simulada; guarde la evidencia Computer Use reciente y repita.')
     Write-Report $report 2
 }
 
@@ -302,39 +503,68 @@ $exitCode = 0
 
 try {
     if ($StartVirtualPlc) {
+        $report.status = 'RUNNING'
         $report.phase = 'VIRTUAL_PLC_START'
+        Save-ReportSnapshot $report
         $virtualAdapterResult = Start-VirtualPlcProcess
         $virtualProcess = $virtualAdapterResult.process
         $report.virtualPlc = [ordered]@{
             started = $true
             adapterPath = [IO.Path]::GetFullPath($PlcSimAdapterPath)
             name = $VirtualPlcName
-            interface = $PlcSimInterface
+            transport = $PlcSimTransport
+            interface = if ($PlcSimTransport -eq 'softbus') { 'PLCSIM' } else { $PlcSimInterface }
             targetIpAddress = $TargetIpAddress
             ready = $virtualAdapterResult.ready
         }
+        Save-ReportSnapshot $report
     }
     else {
         $report.virtualPlc = [ordered]@{ started = $false; reason = 'StartVirtualPlc no solicitado; el proceso debe estar gestionado externamente.' }
     }
 
     $report.phase = 'PREFLIGHT'
+    # Headless TIA dies with its MCP server process, so Attach across sessions is
+    # impossible there: with -AllowOpenProjectFallback each session opens the exact
+    # fixture path itself (closeForeignProject=false still refuses to touch a foreign
+    # open project). Default (UI flow) stays Attach-only.
+    $openCall = if ($AllowOpenProjectFallback) {
+        @{ name = 'OpenProject'; args = @{ path = $ProjectFile; closeForeignProject = $false } }
+    } else {
+        @{ name = 'AttachToOpenProject'; args = @{ projectName = $ProjectName } }
+    }
     $preflightCalls = @(
     @{ name = 'Bootstrap'; args = @{} },
         @{ name = 'Connect'; args = @{} },
-        @{ name = 'OpenProject'; args = @{ path = $ProjectFile; closeForeignProject = $false } },
+        $openCall,
         @{ name = 'GetProjectTree'; args = @{} },
         @{ name = 'GetSoftwareTree'; args = @{ softwarePath = $SoftwarePath } },
         @{ name = 'GetDeviceIpAddress'; args = @{ devicePath = $DevicePath } },
         @{ name = 'CompileSoftware'; args = @{ softwarePath = $SoftwarePath; password = '' } },
+        @{ name = 'GetBlocks'; args = @{ softwarePath = $SoftwarePath; regexName = '' } },
+        @{ name = 'GetTags'; args = @{ softwarePath = $SoftwarePath } },
         @{ name = 'CheckDownloadReadiness'; args = @{ softwarePath = $SoftwarePath } },
         @{ name = 'Disconnect'; args = @{} }
     )
     $callsJson = $preflightCalls | ConvertTo-Json -Depth 20 -Compress
+    $report.status = 'RUNNING'
+    $report.activeSequence = [ordered]@{ kind = 'preflight'; outputPath = $preflightSequencePath; startedAt = [DateTimeOffset]::Now.ToString('o') }
+    Save-ReportSnapshot $report
     & $pwsh -NoProfile -NonInteractive -File $sequenceScript -ExecutablePath $McpExecutablePath -Arguments $McpArguments -CallsJson $callsJson -OutputPath $preflightSequencePath -TimeoutSeconds $TimeoutSeconds | Out-Null
     $preflight = if (Test-Path -LiteralPath $preflightSequencePath) { Read-Json $preflightSequencePath } else { $null }
-    if (-not $preflight -or -not (Test-StrictTrue $preflight.success)) { throw 'The MCP preflight sequence did not complete successfully.' }
-    $report.calls = @($preflight.calls)
+    $report.activeSequence = $null
+    if ($preflight) { $report.calls = @($preflight.calls) }
+    Save-ReportSnapshot $report
+    if (-not $preflight -or -not (Test-StrictTrue $preflight.success)) {
+        $sequenceFailure = if ($preflight.error) { [string]$preflight.error } else { 'no sequence result file was produced' }
+        throw "The MCP preflight sequence did not complete successfully: $sequenceFailure"
+    }
+    $openCallName = if ($AllowOpenProjectFallback) { 'OpenProject' } else { 'AttachToOpenProject' }
+    $attachCall = @($preflight.calls | Where-Object name -eq $openCallName | Select-Object -Last 1)
+    if ($attachCall.Count -ne 1 -or -not (Test-StrictTrue $attachCall[0].success)) { throw "$openCallName did not bind the exact project '$ProjectName' ('$ProjectFile'); refusing to open or replace any other project." }
+    $attachPayload = Get-ToolPayload ($attachCall | Select-Object -First 1)
+    $attachText = if ($attachPayload.message) { [string]$attachPayload.message } else { [string]$attachCall[0].text }
+    if ($attachText -notmatch [regex]::Escape($ProjectName)) { throw "$openCallName did not confirm the exact project '$ProjectName'." }
     $treeCall = @($preflight.calls | Where-Object name -eq 'GetProjectTree' | Select-Object -Last 1)
     $treePayload = Get-ToolPayload $treeCall
     $treeText = if ($treePayload.tree) { [string]$treePayload.tree } else { [string]$treeCall.text }
@@ -355,6 +585,11 @@ try {
         -not $compileWarningsProperty -or [int]$compileWarningsProperty.Value -ne 0) {
         throw 'CompileSoftware debe terminar en Success con 0 errores y 0 avisos antes de descargar.'
     }
+    $blocksCall = @($preflight.calls | Where-Object name -eq 'GetBlocks' | Select-Object -Last 1)
+    $tagsCall = @($preflight.calls | Where-Object name -eq 'GetTags' | Select-Object -Last 1)
+    $blocksPayload = Get-ToolPayload ($blocksCall | Select-Object -First 1)
+    $tagsPayload = Get-ToolPayload ($tagsCall | Select-Object -First 1)
+    $report.safetyPreflight = Assert-DownloadSafetyInventory -BlocksPayload $blocksPayload -TagsPayload $tagsPayload
     $deviceIpCall = @($preflight.calls | Where-Object name -eq 'GetDeviceIpAddress' | Select-Object -Last 1)
     $deviceIpPayload = Get-ToolPayload $deviceIpCall
     $configuredIpAddresses = @(Get-IpAddressPropertyValues $deviceIpPayload)
@@ -370,53 +605,106 @@ try {
     }
     $routes = @($downloadReadiness.Meta.downloadRoutes)
     $adapterReady = $virtualAdapterResult.ready
-    $adapterIp = $null
-    if (-not [Net.IPAddress]::TryParse([string]$adapterReady.ip, [ref]$adapterIp) -or $adapterIp.ToString() -ne $parsedTargetIp.ToString()) {
-        throw "La instancia PLCSIM lista no confirma la misma IP objetivo ($TargetIpAddress)."
+    if ([string]$adapterReady.status -ne 'ready') { throw 'PLCSIM runtime no confirma status=ready.' }
+    if ($PlcSimTransport -eq 'softbus') {
+        if ([string]$adapterReady.networkMode -ne 'SOFTBUS' -or [string]$adapterReady.interfaceName -ne 'PLCSIM' -or $null -ne $adapterReady.ip) {
+            throw 'La instancia no confirma Softbus local (SOFTBUS/PLCSIM/sin IP).'
+        }
+        $adapterIp = $null
+    } else {
+        if ([string]$adapterReady.networkMode -ne 'TCPIP_SINGLE_ADAPTER') { throw 'La instancia no confirma TCP/IP Single Adapter.' }
+        $adapterIp = $null
+        if (-not [Net.IPAddress]::TryParse([string]$adapterReady.ip, [ref]$adapterIp) -or $adapterIp.ToString() -ne $parsedTargetIp.ToString()) {
+            throw "La instancia PLCSIM lista no confirma la misma IP objetivo ($TargetIpAddress)."
+        }
+        $adapterInterfaces = @([string]$adapterReady.interfaceName, [string]$adapterReady.interfaceDescription) |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+        if (@($adapterInterfaces | Where-Object { [string]::Equals($_, $PlcSimInterface, [StringComparison]::OrdinalIgnoreCase) }).Count -ne 1) {
+            throw "La instancia PLCSIM no confirma la interfaz virtual esperada '$PlcSimInterface'."
+        }
     }
-    $adapterInterfaces = @(
-        [string]$adapterReady.interfaceName,
-        [string]$adapterReady.interfaceDescription
-    ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
-    if (@($adapterInterfaces | Where-Object { [string]::Equals($_, $PlcSimInterface, [StringComparison]::OrdinalIgnoreCase) }).Count -ne 1) {
-        throw "La instancia PLCSIM no confirma la interfaz virtual esperada '$PlcSimInterface'."
-    }
+    # NOTE: the runner-managed adapter identity above never selects the download route by
+    # itself. Route selection below uses only the exact names enumerated by
+    # CheckDownloadReadiness; no NIC heuristic is applied.
+    $expectedRouteName = if ($PlcSimTransport -eq 'softbus') { 'PLCSIM' } else { $PlcSimInterface }
     $virtualRoutes = @($routes | Where-Object {
         $routeName = [string]$_.pgPcInterface
         $patternMatch = $false
         try { $patternMatch = ($routeName -match $VirtualInterfacePattern) } catch { throw "VirtualInterfacePattern no es una expresión válida: $VirtualInterfacePattern" }
-        $exactAdapterMatch = @($adapterInterfaces | Where-Object { [string]::Equals($_, $routeName, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0
-        $patternMatch -and $exactAdapterMatch
+        # Exact name match on purpose: a substring would confuse Softbus 'PLCSIM' with the
+        # TCP/IP 'Siemens PLCSIM Virtual Ethernet Adapter' NIC. Never fall back to another NIC.
+        $exactNameMatch = [string]::Equals($routeName, $expectedRouteName, [StringComparison]::OrdinalIgnoreCase)
+        $patternMatch -and $exactNameMatch
     })
-    if ($virtualRoutes.Count -ne 1) { throw "Se esperaba exactamente una ruta para '$PlcSimInterface' con patrón '$VirtualInterfacePattern'; se encontraron $($virtualRoutes.Count)." }
-    $selectedRoute = $virtualRoutes[0]
-    foreach ($ipPropertyName in @('targetIpAddress', 'ipAddress', 'cpuIpAddress', 'targetAddress')) {
-        $routeIpProperty = $selectedRoute.PSObject.Properties[$ipPropertyName]
-        if ($routeIpProperty -and -not [string]::Equals([string]$routeIpProperty.Value, $parsedTargetIp.ToString(), [StringComparison]::OrdinalIgnoreCase)) {
-            throw "La ruta seleccionada declara $ipPropertyName='$($routeIpProperty.Value)', no la IP objetivo '$TargetIpAddress'."
+    if ($virtualRoutes.Count -ne 1) {
+        if ($PlcSimTransport -eq 'softbus') {
+            throw "Softbus route 'PLCSIM' is not enumerated exactly once by CheckDownloadReadiness (found $($virtualRoutes.Count)). Possible causes: no virtual instance running, or the TIA PG/PC access path is not set to PLCSIM. Falling back to a physical NIC is forbidden; fix the Softbus setup and retry."
         }
+        throw "Se esperaba exactamente una ruta para '$expectedRouteName' con patrón '$VirtualInterfacePattern'; se encontraron $($virtualRoutes.Count)."
+    }
+    $selectedRoute = $virtualRoutes[0]
+    if ($PlcSimTransport -eq 'softbus') {
+        # Softbus targets carry no IP (runtime reports ip=null); the project IP was already
+        # validated against GetDeviceIpAddress above. Passing targetIpAddress here would make
+        # the server filter routes against TargetAddresses and reject the download, so only
+        # the exact PG/PC interface name is forwarded.
+        $downloadRouteArgs = @{ pgPcInterface = [string]$selectedRoute.pgPcInterface }
+    }
+    else {
+        foreach ($ipPropertyName in @('targetIpAddress', 'ipAddress', 'cpuIpAddress', 'targetAddress')) {
+            $routeIpProperty = $selectedRoute.PSObject.Properties[$ipPropertyName]
+            if ($routeIpProperty -and -not [string]::Equals([string]$routeIpProperty.Value, $parsedTargetIp.ToString(), [StringComparison]::OrdinalIgnoreCase)) {
+                throw "La ruta seleccionada declara $ipPropertyName='$($routeIpProperty.Value)', no la IP objetivo '$TargetIpAddress'."
+            }
+        }
+        $downloadRouteArgs = @{ pgPcInterface = [string]$selectedRoute.pgPcInterface; targetIpAddress = $parsedTargetIp.ToString() }
     }
     $report.preflight = [ordered]@{
         readiness = $downloadReadiness
         configuredDeviceIpAddresses = $configuredIpAddresses
-        virtualInstance = [ordered]@{ ip = $adapterIp.ToString(); interfaceName = $adapterReady.interfaceName; interfaceDescription = $adapterReady.interfaceDescription }
+        virtualInstance = [ordered]@{ transport = $PlcSimTransport; ip = if ($adapterIp) { $adapterIp.ToString() } else { $null }; interfaceName = $adapterReady.interfaceName; interfaceDescription = $adapterReady.interfaceDescription }
         selectedRoutes = @($selectedRoute)
+        downloadRouteArgs = $downloadRouteArgs
     }
 
+    $downloadArgs = @{ softwarePath = $SoftwarePath; consistentBlocksOnly = $true; keepActualValues = $true; startAfterDownload = $true; stopBeforeDownload = $true; password = '' }
+    foreach ($key in @($downloadRouteArgs.Keys)) { $downloadArgs[$key] = $downloadRouteArgs[$key] }
     $downloadCalls = @(
         @{ name = 'Bootstrap'; args = @{} },
         @{ name = 'Connect'; args = @{} },
-        @{ name = 'AttachToOpenProject'; args = @{ projectName = $ProjectName } },
-        @{ name = 'DownloadToPlc'; args = @{ softwarePath = $SoftwarePath; consistentBlocksOnly = $true; keepActualValues = $true; startAfterDownload = $true; stopBeforeDownload = $true; password = ''; pgPcInterface = [string]$selectedRoute.pgPcInterface; targetIpAddress = $parsedTargetIp.ToString() } },
+        $openCall,
+        @{ name = 'DownloadToPlc'; args = $downloadArgs },
         @{ name = 'GetOnlineState'; args = @{ softwarePath = $SoftwarePath } },
         @{ name = 'Disconnect'; args = @{} }
     )
+    $report.phase = 'DOWNLOAD_AND_ONLINE_CHECK'
+    $report.status = 'RUNNING'
     $report.mutationAttempted = $true
+    $report.activeSequence = [ordered]@{ kind = 'download'; outputPath = $downloadSequencePath; startedAt = [DateTimeOffset]::Now.ToString('o'); outcome = 'not yet recorded' }
+    Save-ReportSnapshot $report
     $downloadJson = $downloadCalls | ConvertTo-Json -Depth 20 -Compress
     & $pwsh -NoProfile -NonInteractive -File $sequenceScript -ExecutablePath $McpExecutablePath -Arguments $McpArguments -CallsJson $downloadJson -OutputPath $downloadSequencePath -TimeoutSeconds $TimeoutSeconds | Out-Null
     $download = if (Test-Path -LiteralPath $downloadSequencePath) { Read-Json $downloadSequencePath } else { $null }
-    $report.calls += @($download.calls)
+    $report.activeSequence = $null
+    if ($download) { $report.calls += @($download.calls) }
+    Save-ReportSnapshot $report
     if (-not $download.success) { throw "Download sequence failed; inspect calls in the report." }
+    $downloadOpenCall = @($download.calls | Where-Object name -eq $openCallName | Select-Object -Last 1)
+    if ($downloadOpenCall.Count -ne 1 -or -not (Test-StrictTrue $downloadOpenCall[0].success)) { throw "Download session did not bind the exact project via $openCallName; refusing to download." }
+    $downloadCall = @($download.calls | Where-Object name -eq 'DownloadToPlc' | Select-Object -Last 1)
+    $downloadPayload = Get-ToolPayload ($downloadCall | Select-Object -First 1)
+    $downloadState = if ($downloadPayload) { $downloadPayload.PSObject.Properties['state'] } else { $null }
+    if (-not $downloadState -or [string]$downloadState.Value -cne 'Success') {
+        throw "DownloadToPlc did not report an explicit Success state; acceptance is blocked. Response: $($downloadCall.text)"
+    }
+    $report.download = [ordered]@{ success = $true; state = [string]$downloadState.Value; response = $downloadPayload }
+    $onlineCall = @($download.calls | Where-Object name -eq 'GetOnlineState' | Select-Object -Last 1)
+    $onlinePayload = Get-ToolPayload ($onlineCall | Select-Object -First 1)
+    $onlineState = if ($onlinePayload) { $onlinePayload.PSObject.Properties['state'] } else { $null }
+    if (-not $onlineState -or [string]$onlineState.Value -cne 'Online') {
+        throw "GetOnlineState did not confirm Online after download; acceptance is blocked. Response: $($onlineCall.text)"
+    }
+    $report.online = [ordered]@{ confirmed = $true; state = [string]$onlineState.Value; response = $onlinePayload }
     $report.phase = 'BEHAVIOR'
     $report.behavior = Invoke-IoPlan $virtualProcess $validatedIoPlan.path $validatedIoPlan.plan $validatedIoPlan.sha256
     $report.status = 'VERIFIED'

@@ -8,15 +8,32 @@ $scriptPath = Join-Path $WorkspaceRoot '30-tools\scripts\Write-TiaAcceptanceStat
 $tempPath = Join-Path $env:TEMP ('tia-claude-acceptance-' + [guid]::NewGuid().ToString('N') + '.json')
 $negativeEvidencePath = Join-Path $env:TEMP ('tia-claude-acceptance-negative-' + [guid]::NewGuid().ToString('N') + '.json')
 $negativeOutputPath = Join-Path $env:TEMP ('tia-claude-acceptance-negative-result-' + [guid]::NewGuid().ToString('N') + '.json')
+$portableValidationPath = Join-Path $env:TEMP ('tia-claude-portable-validation-' + [guid]::NewGuid().ToString('N') + '.json')
 try {
-    & $scriptPath -WorkspaceRoot $WorkspaceRoot -OutputPath $tempPath | Out-Null
+    [ordered]@{ schemaVersion = 1; checks = [ordered]@{
+        package = [ordered]@{ status = 'PASS' }
+        contents = [ordered]@{ status = 'PASS' }
+        relocation = [ordered]@{ status = 'PASS' }
+    } } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $portableValidationPath -Encoding UTF8
+    & $scriptPath -WorkspaceRoot $WorkspaceRoot -OutputPath $tempPath -PortableValidationPath $portableValidationPath | Out-Null
     $report = Get-Content -Raw -LiteralPath $tempPath | ConvertFrom-Json
     if ($null -eq $report.verified -or $report.verified.Count -lt 3) { throw 'Acceptance status did not record verified evidence.' }
     if ($report.notVerified.Count -lt 2) { throw 'Acceptance status must preserve incomplete runtime claims.' }
     if ($report.accepted -eq $true) { throw 'Acceptance must remain false before live scaffold/simulation evidence.' }
     if (-not $report.evidence.simulationReadiness) { throw 'Acceptance status must reference the simulation readiness preflight.' }
+    if ($report.simulation.plcsimCompatibleWithTia -ne $true -or
+        $report.simulation.tiaMajor -ne 20 -or $report.simulation.plcsimAdvanced -ne '7.0.0.0') {
+        throw 'Acceptance status must report the installed TIA V20 / PLCSIM Advanced V7 pairing.'
+    }
+    if (@($report.blocked | Where-Object { $_ -match 'PLCSIM Advanced .* no está en la matriz admitida para TIA Portal 20' }).Count -gt 0) {
+        throw 'Acceptance status must not retain the resolved Siemens V6 compatibility blocker.'
+    }
     if ($report.verified -notcontains 'portable core installation and relocation') {
         throw 'Acceptance status must include the portable installation evidence.'
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$report.evidence.portableValidation) -or
+        [IO.Path]::GetFullPath([string]$report.evidence.portableValidation) -ne [IO.Path]::GetFullPath($portableValidationPath)) {
+        throw "Acceptance status must identify the explicit portable validation evidence used by this test. Expected '$portableValidationPath'; got '$($report.evidence.portableValidation)'."
     }
     if ($report.verified -notcontains 'tia-create MCP startup and lite tool roster') {
         throw 'Acceptance status must include the tia-create smoke evidence.'
@@ -132,4 +149,5 @@ finally {
     if (Test-Path -LiteralPath $tempPath) { Remove-Item -LiteralPath $tempPath -Force }
     if (Test-Path -LiteralPath $negativeEvidencePath) { Remove-Item -LiteralPath $negativeEvidencePath -Force }
     if (Test-Path -LiteralPath $negativeOutputPath) { Remove-Item -LiteralPath $negativeOutputPath -Force }
+    if (Test-Path -LiteralPath $portableValidationPath) { Remove-Item -LiteralPath $portableValidationPath -Force }
 }

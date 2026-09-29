@@ -1,9 +1,10 @@
 # tia-create V20
 
-Estado actual: **instalado y verificado**.
+Estado actual: **V20 reconstruido con barreras explícitas F/Safety y verificado en una sesión live de solo lectura**.
 
-El runtime se compiló desde `bulaofen0036-coder/TIA_Portal_Openness_MCP`, proyecto
-`TiaMcpServer.V20.csproj`, contra Openness V20 local. La versión es `2.7.2` y el manifest central
+El runtime se compila desde `bulaofen0036-coder/TIA_Portal_Openness_MCP`, commit fijado
+`218e829df3f056b653d7831c60a6297818db72fd`, aplicando el patch versionado
+`patches/0001-explicit-failsafe-and-safety-gates.patch`, y contra Openness V20 local. La versión es `2.7.2` y el manifest central
 lo expone solo mediante el perfil explícito `create` o `full`, ambos con reconocimiento obligatorio.
 
 Ruta relativa:
@@ -28,3 +29,11 @@ Evidencia de instalación y uso:
   desechable, compila con 0 errores/0 warnings, guarda, inspecciona y exporta el bloque creado.
 - Secuencia MCP: `30-tools/scripts/Invoke-McpToolSequence.ps1` conserva una única sesión
   Bootstrap → Connect → trabajo → Disconnect y aplica un lease global para evitar carreras.
+- **F/Safety:** `GetBlocks` devuelve `isFailsafe` (bool nullable y fail-closed); `GetTags`
+  enumera tags anidados y devuelve `isSafety` explícito. `DownloadToPlc` repite dentro de la
+  misma sesión la clasificación completa de bloques/tags y bloquea metadata desconocida, objetos
+  F/Safety o bloques protegidos.
+- Evidencia live V20 de lectura: `70-runs/tia-capabilities/20260925-tia-create-safety-live-read.json`.
+  En la fixture abierta se leyeron dos bloques (`isFailsafe=false`, no protegidos) y dos tags
+  (`isSafety=false`); no se editó ni descargó el proyecto.
+- En este host se usa `.NET Framework net481` porque el Developer Pack net48 no está instalado.

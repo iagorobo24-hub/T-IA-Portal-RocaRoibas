@@ -16,6 +16,8 @@ Codex, Claude Code, OpenCode u otros agentes.
 | Siemens Openness API | TIA/Openness de versión compatible y una integración .NET/cliente autorizada | Leer, crear, modificar, borrar, compilar, importar/exportar o diagnosticar los objetos soportados por esa versión/modelo | La API documentada no demuestra que este host la invoque directamente; las llamadas locales fueron mediante MCP |
 | Servidores MCP locales | Binario instalado, perfil actual, herramientas y esquema expuestos | Acciones concretas listadas por `tools/list` o `FindTools`, sujetas a guardas del servidor y contrato de `AGENTS.md` | Hay inventario por nombre/schema y evidencia solo para las llamadas enumeradas en el plan maestro; schema no equivale a ejecución |
 | Computer Use nativo | Integración y permiso habilitado en la aplicación Codex/host y sesión Windows activa | Inspeccionar y operar la UI visible cuando Openness no muestra renderizado, diálogos o runtime | Verificado en Codex por `node_repl` + `@oai/sky`; el acceso debe redescubrirse por sesión y no se hereda a otros hosts |
+| Windows UI Automation (UIA) | Controles de TIA que publiquen propiedades/patrones accesibles; script .NET/PowerShell | Automatizar controles estables por selector semántico, con comprobaciones de estado | Candidato para flujos gráficos repetibles; todavía sin inspección/aceptación live de controles TIA V20. No usar coordenadas fijas para mutaciones |
+| Playwright | Página web abierta en un navegador compatible | Automatizar navegación y pruebas de aplicaciones web | No controla TIA Portal Desktop. Reservar para runtimes/paneles HMI que se ejecuten realmente en navegador; compatibilidad pendiente por modelo/runtime |
 
 El registro accionable del perfil MCP está en el apéndice del [plan maestro](../../../docs/superpowers/plans/2026-09-21-tia-agent-operating-model.md).
 
@@ -126,6 +128,10 @@ y `CallTool`. El schema no enumera necesariamente las capacidades dinámicas.
   222 tools. Esa captura demuestra schema, no configuración activa ni ejecución. Si falta una
   capacidad, se busca con `FindTools` en lenguaje natural y se llama con
   `CallTool` y la firma exacta — no se declara "no existe" sin haber hecho esa comprobación.
+- El build local V20 añade `GetTags.isSafety` y `GetBlocks.isFailsafe`; el propio
+  `DownloadToPlc` vuelve a enumerar todos los bloques y tags, bloquea F/Safety, protección o
+  clasificación desconocida y hace esa barrera en la sesión que descarga. Esto evita depender del
+  juicio del agente o de un JSON de propuesta.
 
 **Qué NO puede hacer:**
 - No sustituye a `tia-inspect` para inspección fina, `WhereUsed`, `FindInCode` ni export textual
@@ -151,6 +157,14 @@ use ambos servidores ni que todas las acciones estén autorizadas. El schema gua
 tools/list no permite ejecutar esas operaciones. Toda sesión que combine servidores debe usar el
 mutex `Local\TIA-Claude-McpSession`; nunca se paralelizan llamadas Openness.
 
+**Estado V20 del build local (2026-09-25):** el roster `full` ahora incluye `GetTags`, y
+`GetBlocks` devuelve `isFailsafe` nullable. La evidencia de solo lectura en una sesión MCP
+adjuntada al proyecto de prueba confirmó dos bloques estándar y dos tags no Safety:
+[`20260925-tia-create-safety-live-read.json`](../../70-runs/tia-capabilities/20260925-tia-create-safety-live-read.json).
+La propia ruta `DownloadToPlc` ejecuta un veto F/Safety y protección independiente. La descarga
+sigue pendiente: falta completar integridad/restauración del manifiesto de la fixture, compilar
+para simulación, confirmar destino simulado en el diálogo y ejecutar el plan funcional de R17.
+
 ---
 
 ## 6. El eje que cruza a los cuatro perfiles: destino de una descarga
@@ -160,7 +174,7 @@ depende de **a qué target apunta la ruta PG/PC**, y ese eje es ortogonal a los 
 
 | Destino | Autorización | Detalle |
 |---|---|---|
-| **PLCSIM / PLCSIM Advanced** | Libre, sin pedir permiso cada vez | Debe ser una instancia **virtual desechable**: la ruta PG/PC tiene que identificar explícitamente el `Siemens PLCSIM Virtual Ethernet Adapter` (gate `plcsimVirtualAdapterReady=true` en `Write-TiaSimulationReadiness.ps1`). Tener PLCSIM Advanced instalado o poder hacer `PowerOn/PowerOff` de una CPU temporal **no** autoriza la descarga por sí solo. |
+| **PLCSIM / PLCSIM Advanced** | Libre, sin pedir permiso cada vez | Preferir instancia virtual desechable por Softbus local (`PLCSIM` como PG/PC y `networkMode=SOFTBUS`). TCP/IP local es alternativo y exige `<Local>`, adaptador Siemens con IP en la misma subred y ruta inequívoca. La instancia debe ser identificada como simulada antes de descargar; tener PLCSIM Advanced instalado o poder hacer `PowerOn/PowerOff` no autoriza la descarga por sí solo. |
 | **Hardware físico** | **NUNCA sin confirmación explícita del usuario en ese mismo momento** | Una autorización de hace diez mensajes no vale. Una autorización para otro PLC no vale. Antes de proponerlo hay que decir qué PLC, qué bloques y qué pasa si la máquina está en marcha. **Si no se puede distinguir con certeza si el target es simulado o real, se asume real.** |
 
 Esta regla está en `AGENTS.md` §3.1 y es la única de todo el documento que no admite

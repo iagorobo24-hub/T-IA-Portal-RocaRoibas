@@ -146,6 +146,11 @@ $inspect = @($environment.mcpServers | Where-Object name -eq 'tia-inspect').Coun
 $create = @($environment.mcpServers | Where-Object name -eq 'tia-create').Count -gt 0
 $plcsim = Get-InstalledPlcSim $environment
 $plcsimVirtualAdapter = Get-PlcSimVirtualAdapter
+$advancedMajor = $null
+if ([string]$plcsim.advancedVersion -match '^\s*(\d+)') { $advancedMajor = [int]$Matches[1] }
+$plcsimCompatibleWithTia = $false
+if ($tia20 -and $advancedMajor -ge 7) { $plcsimCompatibleWithTia = $true }
+elseif ($environment.tiaMajor -ge 14 -and $environment.tiaMajor -le 19 -and $advancedMajor -ge 6) { $plcsimCompatibleWithTia = $true }
 
 $runtimeEntries = @($environment.runtimeAdvanced.installedEntries)
 $runtimeV20 = @($runtimeEntries | Where-Object {
@@ -167,12 +172,18 @@ if (Test-Path -LiteralPath $plcBehaviorEvidence -PathType Leaf) {
 }
 
 $visibleTia = if ($SkipLiveProcessCheck) { @() } else { Get-VisibleTiaProcesses }
-$tiaSessionSafety = Get-TiaSessionSafety $visibleTia
+$tiaSessionSafety = if ($SkipLiveProcessCheck) {
+    [ordered]@{ safe = $false; status = 'live-process-check-skipped'; visiblePids = @(); probe = $null }
+} else { Get-TiaSessionSafety $visibleTia }
 $blockers = [System.Collections.Generic.List[string]]::new()
 $nextActions = [System.Collections.Generic.List[string]]::new()
 if (-not $tia20) { $blockers.Add('TIA Portal/Openness V20 no está verificado') }
 if (-not $inspect) { $blockers.Add('tia-inspect no está disponible') }
 if (-not $plcsim.advancedInstalled) { $blockers.Add('PLCSIM Advanced no está instalado') }
+if (-not $plcsimCompatibleWithTia) {
+    $blockers.Add("PLCSIM Advanced $($plcsim.advancedVersion) no está confirmado como compatible con TIA Portal $($environment.tiaMajor)")
+    $nextActions.Add('Para TIA V20, instalar S7-PLCSIM Advanced V7.0 o posterior cuya matriz oficial incluya V20; volver a validar CPU/firmware y el adaptador/API antes de descargar')
+}
 if (-not $plcsimVirtualAdapter.ready) {
     $blockers.Add('El adaptador virtual Siemens PLCSIM no está operativo')
     $configuratorPath = [string]$plcsim.adapterConfiguratorPath
@@ -191,7 +202,10 @@ if (-not $plcBehaviorVerified) {
     $nextActions.Add('Ejecutar la aceptación Sorting Plant con una instancia virtual y registrar una transición observable')
 }
 if (-not $tiaSessionSafety.safe) {
-    if ($tiaSessionSafety.status -eq 'visible-tia-project-open') {
+    if ($tiaSessionSafety.status -eq 'live-process-check-skipped') {
+        $blockers.Add('La comprobación de proyecto TIA visible se omitió; no se autoriza un apply')
+        $nextActions.Add('Identificar visualmente cualquier ventana TIA y repetir Doctor/preflight antes de una operación con proyecto')
+    } elseif ($tiaSessionSafety.status -eq 'visible-tia-project-open') {
         $blockers.Add('Hay un proyecto abierto en una instancia visible de TIA Portal; el flujo de aplicación debe esperar')
         $nextActions.Add('Cerrar el proyecto visible o confirmar que es el proyecto objetivo antes de continuar')
     } else {
@@ -205,7 +219,7 @@ if ($scaffold -and $scaffold.applied -eq $true -and $scaffold.postApply) {
     $nextActions.Add('Aplicar el scaffold de agente en una carpeta desechable cuando TIA esté libre')
 }
 
-$plcReady = $tia20 -and $inspect -and [bool]$plcsim.advancedInstalled
+$plcReady = $tia20 -and $inspect -and [bool]$plcsim.advancedInstalled -and $plcsimCompatibleWithTia
 $result = [ordered]@{
     schemaVersion = 1
     generatedAt = [DateTimeOffset]::Now.ToString('o')
@@ -215,10 +229,12 @@ $result = [ordered]@{
     versions = [ordered]@{
         tiaMajor = if ($environment) { $environment.tiaMajor } else { $null }
         plcsimAdvanced = $plcsim.advancedVersion
+        plcsimAdvancedMajor = $advancedMajor
         runtimeAdvancedV20 = @($runtimeV20 | ForEach-Object { $_.displayVersion })
     }
     gates = [ordered]@{
         plcToolchainReady = $plcReady
+        plcsimCompatibleWithTia = $plcsimCompatibleWithTia
         plcsimVirtualAdapterReady = [bool]$plcsimVirtualAdapter.ready
         hmiRuntimeAdvancedV20Ready = $hmiV20Ready
         plcBehaviorVerified = $plcBehaviorVerified

@@ -332,6 +332,104 @@ index c747acd418c58770a190dc275f4fc7802ee1c5d8..6de4260290d494483632f64e09eb7cb8
                  var block = Portal.CreateFB(softwarePath, groupPath, name, autoNumber, number, language);
                  return Created("FB", block.Name, Join(groupPath, block.Name));
              });
+diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.CompileHardware.cs b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.CompileHardware.cs
+new file mode 100644
+index 0000000000000000000000000000000000000000..13d0f4e48f97b6161ae34ed00132a459f3627836
+--- /dev/null
++++ b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.CompileHardware.cs
+@@ -0,0 +1,92 @@
++using ModelContextProtocol;
++using ModelContextProtocol.Server;
++using Siemens.Engineering.Compiler;
++using System;
++using System.Collections.Generic;
++using System.ComponentModel;
++using System.Linq;
++using System.Text.Json.Nodes;
++
++namespace TiaMcpServer.ModelContextProtocol
++{
++    public static partial class McpServerWrite
++    {
++        [McpServerTool(Name = "CompileHardware", Title = "Compile PLC hardware configuration", Destructive = false, Idempotent = true, OpenWorld = false, UseStructuredContent = true),
++         Description("In an isolated disposable fixture, compile the exact PLC DeviceItem as hardware. Requires a complete F/Safety preflight and verifies that every enumerated device is offline. Returns the compiler message tree and does not save the project.")]
++        public static ResponseCompileHardware CompileHardware(
++            [Description("deviceItemPath: exact PLC DeviceItem path read from GetProjectTree, for example PLC_1/PLC_1")] string deviceItemPath)
++        {
++            return CompileGuarded(nameof(CompileHardware), () =>
++            {
++                var result = Portal.CompileHardware(deviceItemPath);
++                var compilerResult = result.CompilerResult;
++                var messages = FlattenHardwareCompileMessages(compilerResult.Messages, 0).ToList();
++                var failed = compilerResult.State == CompilerResultState.Error || compilerResult.ErrorCount > 0;
++                var state = compilerResult.State.ToString();
++
++                return new ResponseCompileHardware
++                {
++                    DeviceItemPath = result.DeviceItemPath,
++                    State = state,
++                    ErrorCount = compilerResult.ErrorCount,
++                    WarningCount = compilerResult.WarningCount,
++                    OfflineDeviceItemsVerified = result.OfflineDeviceItemsVerified,
++                    Messages = messages,
++                    Message = $"Hardware compile for '{result.DeviceItemPath}' finished with state '{state}': {compilerResult.ErrorCount} error(s), {compilerResult.WarningCount} warning(s). Verified {result.OfflineDeviceItemsVerified} device online-provider state(s) are Offline.",
++                    Meta = new JsonObject
++                    {
++                        ["timestamp"] = DateTime.UtcNow,
++                        ["success"] = !failed,
++                        ["compileType"] = "Hardware",
++                        ["deviceItemPath"] = result.DeviceItemPath,
++                        ["offlineDeviceItemsVerified"] = result.OfflineDeviceItemsVerified,
++                        ["errorCount"] = compilerResult.ErrorCount,
++                        ["warningCount"] = compilerResult.WarningCount,
++                        ["messageCount"] = messages.Count
++                    }
++                };
++            });
++        }
++
++        private static IEnumerable<CompileMessage> FlattenHardwareCompileMessages(CompilerResultMessageComposition? messages, int depth)
++        {
++            if (messages == null)
++            {
++                yield break;
++            }
++
++            foreach (var message in messages)
++            {
++                if (message == null)
++                {
++                    continue;
++                }
++
++                yield return new CompileMessage
++                {
++                    Path = message.Path,
++                    State = message.State.ToString(),
++                    Description = message.Description,
++                    ErrorCount = message.ErrorCount,
++                    WarningCount = message.WarningCount,
++                    Depth = depth
++                };
++
++                foreach (var child in FlattenHardwareCompileMessages(message.Messages, depth + 1))
++                {
++                    yield return child;
++                }
++            }
++        }
++    }
++
++    public sealed class ResponseCompileHardware : ResponseMessage
++    {
++        public string? DeviceItemPath { get; set; }
++        public string? State { get; set; }
++        public int? ErrorCount { get; set; }
++        public int? WarningCount { get; set; }
++        public int? OfflineDeviceItemsVerified { get; set; }
++        public IEnumerable<CompileMessage>? Messages { get; set; }
++    }
++}
 diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Documents.cs b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Documents.cs
 index bb1c61a0e6c2d351ab9afc9c3f58b41a344850d9..e9f68c3ee027622a2c1bfecb283542ffe4acb8ce 100644
 --- a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Documents.cs
@@ -676,6 +774,58 @@ index e5eb0d3185b8c77a8c792279fc781b4665c28aa4..958d7d66b6c2bbaf50cc4048ddd78d31
          public static ResponseRenamed MoveType(
              [Description("softwarePath: defines the path in the project structure to the plc software")] string softwarePath,
              [Description("typePath: root-relative path of the type to move")] string typePath,
+diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.PlcAccessLevel.cs b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.PlcAccessLevel.cs
+new file mode 100644
+index 0000000000000000000000000000000000000000..29e070db87177ecd97d7d8c58a331c6161599f44
+--- /dev/null
++++ b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.PlcAccessLevel.cs
+@@ -0,0 +1,46 @@
++using ModelContextProtocol;
++using ModelContextProtocol.Server;
++using System;
++using System.ComponentModel;
++using System.Text.Json.Nodes;
++
++namespace TiaMcpServer.ModelContextProtocol
++{
++    public static partial class McpServerWrite
++    {
++        [McpServerTool(Name = "SetFixturePlcAccessLevelNoProtection", Title = "Set disposable test PLC to full access without a password", Destructive = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true),
++         Description("Only for an isolated disposable simulation fixture. Sets the exact standard PLC CPU access level to Siemens FullAccess (no protection) when the current level is ReadAccess, HMIAccess, or NoAccess. Rejects SafetyAdministration and unknown states. Never creates, requests, reads, or resets a password.")]
++        public static ResponsePlcAccessLevel SetFixturePlcAccessLevelNoProtection(
++            [Description("deviceItemPath: exact standard PLC CPU DeviceItem path read from GetProjectTree")] string deviceItemPath)
++        {
++            return Guarded(nameof(SetFixturePlcAccessLevelNoProtection), () =>
++            {
++                var result = Portal.SetFixturePlcAccessLevelNoProtection(deviceItemPath);
++                return new ResponsePlcAccessLevel
++                {
++                    DeviceItemPath = result.DeviceItemPath,
++                    Before = result.Before,
++                    After = result.After,
++                    Changed = result.Changed,
++                    Message = result.Changed
++                        ? $"Access level changed from {result.Before} to {result.After} without setting a password. {SaveHint}"
++                        : $"Access level is already {result.After}; no project change was made.",
++                    Meta = new JsonObject
++                    {
++                        ["timestamp"] = DateTime.UtcNow,
++                        ["success"] = true,
++                        ["pendingSave"] = result.Changed
++                    }
++                };
++            });
++        }
++    }
++
++    public sealed class ResponsePlcAccessLevel : ResponseMessage
++    {
++        public string? DeviceItemPath { get; set; }
++        public string? Before { get; set; }
++        public string? After { get; set; }
++        public bool Changed { get; set; }
++    }
++}
 diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Tables.cs b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Tables.cs
 index 44fb5cc64ca9e88fc9704131436a6af92b5aab1a..596e49a53b83be5ffa10c08b2d2bcc3fe286422f 100644
 --- a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.Tables.cs
@@ -705,7 +855,7 @@ index b3d9d902832a6baacf3a39406d9122e8014c9a6b..94c393070259d44dc75fe71bd337bc52
              [Description("softwarePath: defines the path in the project structure to the plc software")] string softwarePath,
              [Description("groupPath: root-relative tag table group that receives the table; empty uses the PLC tags root. A leading 'PLC tags' segment, as written by preservePath exports, is accepted and ignored")] string groupPath,
 diff --git a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.cs b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.cs
-index ce9f73749b66e8a16181bdca977a88c057370d92..bddd12a160d42018abd510d8aa3af3f9422dd883 100644
+index ce9f73749b66e8a16181bdca977a88c057370d92..6ca12b82dcd896dd4e3cffd6568d1c3086cf0b87 100644
 --- a/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.cs
 +++ b/src/TiaMcpServer/ModelContextProtocol/McpServerWrite.cs
 @@ -10,8 +10,8 @@ namespace TiaMcpServer.ModelContextProtocol
@@ -739,7 +889,36 @@ index ce9f73749b66e8a16181bdca977a88c057370d92..bddd12a160d42018abd510d8aa3af3f9
              }
              catch (PortalException pex)
              {
-@@ -68,1 +68,26 @@
+@@ -65,6 +66,57 @@ private static T Guarded<T>(string toolName, Func<T> body)
+             }
+         }
+ 
++        /// <summary>
++        /// Runs a non-transactional operation, such as Siemens compilation, under exclusive
++        /// access while preserving the same fail-closed project-wide F/Safety preflight.
++        /// </summary>
++        private static T CompileGuarded<T>(string toolName, Func<T> body)
++        {
++            WritePolicy.EnsureEnabled(toolName);
++
++            try
++            {
++                return Portal.InExclusiveAccess($"MCP: {toolName}", () =>
++                {
++                    Portal.EnsureNoSafetyObjectsForWrite(toolName);
++                    return body();
++                });
++            }
++            catch (PortalException pex)
++            {
++                throw new McpException(pex.Message, pex);
++            }
++            catch (Exception ex) when (ex is not McpException)
++            {
++                throw new McpException($"Unexpected error in '{toolName}': {ex.Message}", ex);
++            }
++        }
++
 +        /// <summary>
 +        /// Persists the current local project/session after a write transaction has committed.
 +        /// TIA Portal rejects Project.Save/LocalSession.Save while a Transaction is active, so
@@ -766,6 +945,8 @@ index ce9f73749b66e8a16181bdca977a88c057370d92..bddd12a160d42018abd510d8aa3af3f9
 +        }
 +
          private static JsonObject OkMeta() => new JsonObject
+         {
+             ["timestamp"] = DateTime.Now,
 diff --git a/src/TiaMcpServer/ModelContextProtocol/Responses.cs b/src/TiaMcpServer/ModelContextProtocol/Responses.cs
 index f3bcdde2278e95cf2f3a671357050b510ff3b841..74b30f2e20023e83df70b223e576d6c407ae987c 100644
 --- a/src/TiaMcpServer/ModelContextProtocol/Responses.cs
@@ -1023,6 +1204,253 @@ index 322b6ff5572453449c1a5813bae65e6d3211b706..c58d0e60077aaafd10b7c55f3aa393fa
  
          // Registry sub keys below 'TIAP{version}' that hold the installation path, most specific first.
          private static readonly string[] PreferredInstallPathSubKeys = { "TIA_Opns", "Global", "EditionMain" };
+diff --git a/src/TiaMcpServer/Siemens/Portal.CompileHardware.cs b/src/TiaMcpServer/Siemens/Portal.CompileHardware.cs
+new file mode 100644
+index 0000000000000000000000000000000000000000..f91b40c70d49156f34fa2e81e407c65fc1a71959
+--- /dev/null
++++ b/src/TiaMcpServer/Siemens/Portal.CompileHardware.cs
+@@ -0,0 +1,151 @@
++using Siemens.Engineering.Compiler;
++using Siemens.Engineering.HW;
++using Siemens.Engineering.Online;
++using Siemens.Engineering.SW;
++using System;
++
++namespace TiaMcpServer.Siemens
++{
++    public partial class Portal
++    {
++        /// <summary>
++        /// Compiles one exact PLC DeviceItem as hardware. The isolated write guard performs
++        /// the complete project F/Safety and protection preflight before this method runs.
++        /// TIA requires every device to be offline, so that condition is checked first.
++        /// </summary>
++        public HardwareCompileResult CompileHardware(string deviceItemPath)
++        {
++            if (string.IsNullOrWhiteSpace(deviceItemPath))
++            {
++                throw new PortalException(PortalErrorCode.InvalidParams,
++                    "A deviceItemPath read from GetProjectTree is required.");
++            }
++
++            if (IsProjectNull())
++            {
++                throw new PortalException(PortalErrorCode.InvalidState,
++                    "Cannot compile hardware because no project is open.");
++            }
++
++            var deviceItem = GetDeviceItem(deviceItemPath);
++            if (deviceItem == null)
++            {
++                throw new PortalException(PortalErrorCode.NotFound,
++                    $"No DeviceItem was found at '{deviceItemPath}'. Read the exact path from GetProjectTree.");
++            }
++
++            var offlineDeviceItemsVerified = VerifyAllDevicesOffline(deviceItem, deviceItemPath);
++            var compileService = deviceItem.GetService<ICompilable>();
++            if (compileService == null)
++            {
++                throw new PortalException(PortalErrorCode.NotSupported,
++                    $"DeviceItem '{deviceItemPath}' does not expose the Siemens ICompilable service.");
++            }
++
++            return new HardwareCompileResult(deviceItemPath, offlineDeviceItemsVerified, compileService.Compile());
++        }
++
++        private int VerifyAllDevicesOffline(DeviceItem target, string targetPath)
++        {
++            var targetOnlineProvider = target.GetService<OnlineProvider>();
++            if (targetOnlineProvider == null)
++            {
++                throw new PortalException(PortalErrorCode.NotSupported,
++                    $"DeviceItem '{targetPath}' does not expose OnlineProvider; offline state cannot be verified.");
++            }
++
++            EnsureOffline(target.Name, targetOnlineProvider);
++
++            var providerCount = 0;
++            if (_project?.Devices != null)
++            {
++                foreach (Device device in _project.Devices)
++                {
++                    VerifyDeviceItemsOffline(device.DeviceItems, ref providerCount);
++                }
++            }
++
++            if (_project?.DeviceGroups != null)
++            {
++                VerifyDeviceGroupsOffline(_project.DeviceGroups, ref providerCount);
++            }
++
++            if (_project?.UngroupedDevicesGroup?.Devices != null)
++            {
++                foreach (var composition in _project.UngroupedDevicesGroup.Devices)
++                {
++                    if (composition is Device device)
++                    {
++                        VerifyDeviceItemsOffline(device.DeviceItems, ref providerCount);
++                    }
++                }
++            }
++
++            if (providerCount == 0)
++            {
++                throw new PortalException(PortalErrorCode.InvalidState,
++                    "No device OnlineProvider states were enumerated; the all-devices-offline precondition cannot be proven.");
++            }
++
++            return providerCount;
++        }
++
++        private void VerifyDeviceGroupsOffline(DeviceUserGroupComposition groups, ref int providerCount)
++        {
++            foreach (DeviceUserGroup group in groups)
++            {
++                foreach (var composition in group.Devices)
++                {
++                    if (composition is Device device)
++                    {
++                        VerifyDeviceItemsOffline(device.DeviceItems, ref providerCount);
++                    }
++                }
++
++                VerifyDeviceGroupsOffline(group.Groups, ref providerCount);
++            }
++        }
++
++        private void VerifyDeviceItemsOffline(DeviceItemComposition items, ref int providerCount)
++        {
++            foreach (DeviceItem item in items)
++            {
++                var onlineProvider = item.GetService<OnlineProvider>();
++                if (onlineProvider != null)
++                {
++                    EnsureOffline(item.Name, onlineProvider);
++                    providerCount++;
++                }
++
++                if (item.DeviceItems != null && item.DeviceItems.Count > 0)
++                {
++                    VerifyDeviceItemsOffline(item.DeviceItems, ref providerCount);
++                }
++            }
++        }
++
++        private static void EnsureOffline(string deviceItemName, OnlineProvider onlineProvider)
++        {
++            var state = onlineProvider.State;
++            if (state != OnlineState.Offline)
++            {
++                throw new PortalException(PortalErrorCode.InvalidState,
++                    $"Compilation requires every device to be offline; '{deviceItemName}' reports '{state}'. Go offline and retry.");
++            }
++        }
++    }
++
++    public sealed class HardwareCompileResult
++    {
++        public HardwareCompileResult(string deviceItemPath, int offlineDeviceItemsVerified, CompilerResult compilerResult)
++        {
++            DeviceItemPath = deviceItemPath;
++            OfflineDeviceItemsVerified = offlineDeviceItemsVerified;
++            CompilerResult = compilerResult;
++        }
++
++        public string DeviceItemPath { get; }
++        public int OfflineDeviceItemsVerified { get; }
++        public CompilerResult CompilerResult { get; }
++    }
++}
+diff --git a/src/TiaMcpServer/Siemens/Portal.PlcAccessLevel.cs b/src/TiaMcpServer/Siemens/Portal.PlcAccessLevel.cs
+new file mode 100644
+index 0000000000000000000000000000000000000000..4725516b54dbefefc0e8edccc1a22c4772a42c75
+--- /dev/null
++++ b/src/TiaMcpServer/Siemens/Portal.PlcAccessLevel.cs
+@@ -0,0 +1,84 @@
++using Siemens.Engineering.HW;
++using Siemens.Engineering.HW.Features;
++using Siemens.Engineering.Safety;
++using System;
++
++namespace TiaMcpServer.Siemens
++{
++    public partial class Portal
++    {
++        /// <summary>
++        /// In a disposable, isolated fixture, selects Siemens' FullAccess (no protection)
++        /// level without setting or resetting any password. This is for non-production
++        /// simulation fixtures only; fail-safe CPUs and unknown states are rejected.
++        /// </summary>
++        public PlcAccessLevelChangeResult SetFixturePlcAccessLevelNoProtection(string deviceItemPath)
++        {
++            if (string.IsNullOrWhiteSpace(deviceItemPath))
++            {
++                throw new PortalException(PortalErrorCode.InvalidParams,
++                    "A deviceItemPath read from GetProjectTree is required.");
++            }
++
++            var cpu = GetDeviceItem(deviceItemPath);
++            if (cpu == null)
++            {
++                throw new PortalException(PortalErrorCode.NotFound,
++                    $"No CPU DeviceItem was found at '{deviceItemPath}'. Read the exact path from GetProjectTree.");
++            }
++
++            if (cpu.GetService<SafetyAdministration>() != null)
++            {
++                throw new PortalException(PortalErrorCode.InvalidState,
++                    $"Refusing to change access protection for '{deviceItemPath}': a SafetyAdministration service is present.");
++            }
++
++            var provider = cpu.GetService<PlcAccessLevelProvider>();
++            if (provider == null)
++            {
++                throw new PortalException(PortalErrorCode.NotSupported,
++                    $"Device item '{deviceItemPath}' does not expose PlcAccessLevelProvider.");
++            }
++
++            var before = provider.PlcProtectionAccessLevel;
++            if (before == PlcProtectionAccessLevel.FullAccess)
++            {
++                return new PlcAccessLevelChangeResult(deviceItemPath, before.ToString(), before.ToString(), false);
++            }
++
++            if (before != PlcProtectionAccessLevel.ReadAccess &&
++                before != PlcProtectionAccessLevel.HMIAccess &&
++                before != PlcProtectionAccessLevel.NoAccess)
++            {
++                throw new PortalException(PortalErrorCode.InvalidState,
++                    $"Refusing to change '{deviceItemPath}': access level is '{before}', not a recognized standard protected level. No password will be set or reset.");
++            }
++
++            provider.PlcProtectionAccessLevel = PlcProtectionAccessLevel.FullAccess;
++            var after = provider.PlcProtectionAccessLevel;
++            if (after != PlcProtectionAccessLevel.FullAccess)
++            {
++                throw new PortalException(PortalErrorCode.InvalidState,
++                    $"Access level changed, but readback for '{deviceItemPath}' is '{after}', not FullAccess. Do not save; restore the disposable fixture.");
++            }
++
++            return new PlcAccessLevelChangeResult(deviceItemPath, before.ToString(), after.ToString(), true);
++        }
++    }
++
++    public sealed class PlcAccessLevelChangeResult
++    {
++        public PlcAccessLevelChangeResult(string deviceItemPath, string before, string after, bool changed)
++        {
++            DeviceItemPath = deviceItemPath;
++            Before = before;
++            After = after;
++            Changed = changed;
++        }
++
++        public string DeviceItemPath { get; }
++        public string Before { get; }
++        public string After { get; }
++        public bool Changed { get; }
++    }
++}
 diff --git a/src/TiaMcpServer/Siemens/Portal.Safety.cs b/src/TiaMcpServer/Siemens/Portal.Safety.cs
 new file mode 100644
 index 0000000000000000000000000000000000000000..d2fb620538879efab492dc6bce7ccbf26993da4b
@@ -1218,10 +1646,10 @@ index 0000000000000000000000000000000000000000..d2fb620538879efab492dc6bce7ccbf2
 +    }
 +}
 diff --git a/src/TiaMcpServer/Siemens/Portal.Transactions.cs b/src/TiaMcpServer/Siemens/Portal.Transactions.cs
-index 39b2cdfa10db3f7b7c4aeab3b8e375c01243384a..a987e58ad308c739eb75545300773ba8dbaf74f4 100644
+index 39b2cdfa10db3f7b7c4aeab3b8e375c01243384a..c62fa140dd74286e1fb3f19959d97038adba9b89 100644
 --- a/src/TiaMcpServer/Siemens/Portal.Transactions.cs
 +++ b/src/TiaMcpServer/Siemens/Portal.Transactions.cs
-@@ -11,22 +11,15 @@ namespace TiaMcpServer.Siemens
+@@ -11,22 +11,53 @@ namespace TiaMcpServer.Siemens
      /// tool. Affected API: no signature changes - the wrapper is invisible to callers, it only
      /// changes what TIA Portal does with the edits underneath. Reads and writes no data files.
      ///
@@ -1244,12 +1672,50 @@ index 39b2cdfa10db3f7b7c4aeab3b8e375c01243384a..a987e58ad308c739eb75545300773ba8
 -        /// Runs <paramref name="body"/> inside a named transaction when TIA Portal allows one.
 -        /// The transaction commits only if the body returns without throwing, so a failed write
 -        /// rolls back instead of leaving the project half-edited.
++        /// Runs a non-transactional engineering operation under exclusive access. Siemens
++        /// compilation services reject invocation inside a Transaction, while exclusive
++        /// access still closes the race between a safety preflight and the operation.
++        /// </summary>
++        public T InExclusiveAccess<T>(string description, Func<T> body)
++        {
++            if (_portal == null || !ProjectIsValid)
++            {
++                throw new PortalException(PortalErrorCode.InvalidState,
++                    $"Cannot perform '{description}': no connected project is available for exclusive access.");
++            }
++
++            ExclusiveAccess access;
++            try
++            {
++                access = _portal.ExclusiveAccess(description);
++            }
++            catch (Exception ex)
++            {
++                _logger?.LogWarning(ex, "Exclusive access refused for '{Description}'", description);
++                throw new PortalException(PortalErrorCode.InvalidState,
++                    $"Cannot perform '{description}': TIA Portal refused exclusive access.");
++            }
++
++            using (access)
++            {
++                var result = body();
++                if (access.IsCancellationRequested)
++                {
++                    throw new OperationCanceledException(
++                        $"The operator cancelled '{description}'; the operation result must be treated as incomplete.");
++                }
++
++                return result;
++            }
++        }
++
++        /// <summary>
 +        /// Runs <paramref name="body"/> inside a named transaction. If TIA Portal cannot provide
 +        /// exclusive access or transaction support, the operation is rejected before the body runs.
          /// </summary>
          /// <param name="description">
          /// What the operator sees: the exclusive-access banner while it runs, and the undo entry
-@@ -36,9 +29,8 @@ public T InTransaction<T>(string description, Func<T> body)
+@@ -36,9 +67,8 @@ public T InTransaction<T>(string description, Func<T> body)
          {
              if (_portal == null || _project is not ITransactionSupport persistence)
              {
@@ -1261,7 +1727,7 @@ index 39b2cdfa10db3f7b7c4aeab3b8e375c01243384a..a987e58ad308c739eb75545300773ba8
              }
  
              ExclusiveAccess? access;
-@@ -49,9 +41,9 @@ public T InTransaction<T>(string description, Func<T> body)
+@@ -49,9 +79,9 @@ public T InTransaction<T>(string description, Func<T> body)
              }
              catch (Exception ex)
              {
@@ -1274,7 +1740,7 @@ index 39b2cdfa10db3f7b7c4aeab3b8e375c01243384a..a987e58ad308c739eb75545300773ba8
              }
  
              using (access)
-@@ -64,24 +56,32 @@ public T InTransaction<T>(string description, Func<T> body)
+@@ -64,24 +94,32 @@ public T InTransaction<T>(string description, Func<T> body)
                  }
                  catch (Exception ex)
                  {

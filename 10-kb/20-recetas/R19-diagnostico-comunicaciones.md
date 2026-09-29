@@ -124,12 +124,17 @@ conexiones.
    una copia desechable cuyo manifiesto identifique el `.ap20` exacto y su backup coincidente;
    verificar hash/restauración prevista. Para escritura PLC, comprobar independientemente
    `GetBlocks.isFailsafe=false`, SCL, no protegido y ausencia de tags Safety cuando corresponda.
-2. Antes de cualquier test PLC, actualizar `Write-TiaSimulationReadiness.ps1` y exigir
-   `plcsimVirtualAdapterReady=true`. Registrar instancia PLC virtual, adaptador PG/PC Siemens,
-   dirección IP y endpoint de cada partner; demostrar que todos son virtuales y pertenecen a una
-   subred de prueba aislada. Verificar que no existe puente/ruta hacia la NIC física ni hacia la
-   red de planta. Si el endpoint/IP o el aislamiento no se pueden probar, detenerse y tratarlo
-   como target físico.
+2. Antes de cualquier test PLC, regenerar `70-runs/simulation/readiness-latest.json` con
+   `Write-TiaSimulationReadiness.ps1`. Exigir `plcsimCompatibleWithTia=true` para la pareja TIA /
+   PLCSIM Advanced, además de la compatibilidad exacta CPU/firmware de Siemens. Si el gate falta,
+   es falso o la versión del adaptador/API no está validada con ese runtime, parar antes de iniciar
+   la instancia o llamar `DownloadToPlc`. Superado ese gate, Softbus exige registrar
+   `networkMode=SOFTBUS` y `PLCSIM` como ruta PG/PC. TCP/IP exige `plcsimVirtualAdapterReady=true`.
+   En ambos casos identificar la instancia virtual y el endpoint de cada partner. Softbus no tiene
+   IP de runtime (`ip=null`): si hace falta una dirección PLC, usa la IP configurada en el proyecto.
+   TCP/IP local exige IP de instancia/NIC coincidente y subred de prueba aislada. Verificar que no
+   existe puente/ruta hacia la NIC física ni hacia la red de planta. Si endpoint o aislamiento no se
+   pueden probar, detenerse y tratarlo como target físico.
 3. Para una mutación de proyecto, usar el perfil correcto y su reconocimiento explícito:
    `tia-inspect --isolated --fixture-root <run-dir> --allow-write` para una escritura soportada,
    o `tia-create` `create`/`full` para la capacidad HMI/red correspondiente. Ejecutar primero
@@ -171,7 +176,8 @@ Guardar en el run de `70-runs/`:
 - `STATUS`/errores/counters y heartbeat/lectura, con el resultado esperado y observado;
 - problemas descartados frente a hechos aún no comprobados;
 - fixture, plan, logs y estado `stopped` si se usó PLCSIM;
-- para fase mutante: manifiesto/backup/hash del fixture, `plcsimVirtualAdapterReady=true`,
+- para fase mutante: manifiesto/backup/hash del fixture, identidad Softbus local o NIC Siemens TCP/IP
+  con IP coincidente,
   IP/endpoints virtuales, evidencia de subred aislada y evidencia de limpieza/restauración;
 - secretos eliminados del informe.
 

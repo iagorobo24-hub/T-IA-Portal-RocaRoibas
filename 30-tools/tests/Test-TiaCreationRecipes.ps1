@@ -7,7 +7,7 @@ $recipes = @{
     'R05-proyecto-nuevo.md' = @('ScaffoldProject', 'dryRun=true', 'SearchHardwareCatalog')
     'R06-tags-io.md' = @('GetPlcTagTables', 'CreateTag')
     'R26-importar-tabla-tags.md' = @('ImportPlcTagTable', 'preflight', 'restaur')
-    'R07-udt-db.md' = @('PlcBuildAndImport', 'kind="udt"', 'UDT → global DB')
+    'R07-udt-db.md' = @('ImportType', 'groupPath=""', 'DB global', 'no verificado', 'crossReferenceAvailable')
 }
 foreach ($entry in $recipes.GetEnumerator()) {
     $path = Join-Path $root ('10-kb\20-recetas\' + $entry.Key)
@@ -17,4 +17,4 @@ foreach ($entry in $recipes.GetEnumerator()) {
         if ($text -notmatch [regex]::Escape($needle)) { throw "$($entry.Key) is missing '$needle'." }
     }
 }
-Write-Output 'PASS: creation recipes name verified V20 tools, dry-run gates and dependency order'
+Write-Output 'PASS: creation recipes distinguish accepted V20 tools, limits and safety gates'

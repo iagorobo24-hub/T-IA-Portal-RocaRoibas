@@ -81,11 +81,11 @@ visualmente. [Listado oficial de objetos Openness V20](https://docs.tia.siemens.
 5. Para tags PLC dependientes, leer tags/bloques PLC y compilar primero el software PLC; después
    compilar el dispositivo HMI. Si también se tienen que validar direcciones/IP, efectuar la
    compilación completa apropiada de `Devices & networks`, no solo `changes only`.
-6. Para prueba HMI–PLC en simulación, actualizar `Write-TiaSimulationReadiness.ps1` y exigir
-   `plcsimVirtualAdapterReady=true`. Registrar instancia virtual, adaptador PG/PC Siemens, IP
-   del PLC y de cada partner/endpoint; verificar que son los destinos simulados del fixture y
-   que la subred está aislada, sin puente/ruta a NIC física o red de planta. Si falla cualquier
-   verificación, detenerse y asumir que es un PLC físico.
+6. Para prueba HMI–PLC en simulación, preferir Softbus local: registrar `networkMode=SOFTBUS`,
+   `PLCSIM` como PG/PC y la instancia virtual estándar identificada. Para TCP/IP local, exigir
+   `plcsimVirtualAdapterReady=true`, `<Local>`, IP coincidente y subred aislada. Registrar IP del
+   PLC y endpoint de cada partner; verificar que son destinos simulados del fixture. Si falla
+   cualquier identificación, detenerse y asumir que es un PLC físico.
 7. Antes de cualquier cambio HMI, confirmar el perfil MCP que realmente expone esa familia y
    operación, su esquema vigente y el reconocimiento explícito del perfil `create`/`full` si
    corresponde. Ejecutar `dryRun`/preview primero cuando la herramienta lo ofrezca y revisar el

@@ -1,10 +1,12 @@
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Globalization;
+using System.Text.RegularExpressions;
 
 internal static class Program
 {
-    private const uint ApiInterfaceVersion = 0x00060000;
-    private const string DefaultApiDll = @"C:\Program Files (x86)\Common Files\Siemens\PLCSIMADV\API\6.0\Siemens.Simatic.Simulation.Runtime.Api.x64.dll";
+    private const string ApiDllName = "Siemens.Simatic.Simulation.Runtime.Api.x64.dll";
+    private const string ApiHeaderName = "SimulationRuntimeApi.h";
 
     [UnmanagedFunctionPointer(CallingConvention.Winapi)]
     private delegate int InitializeDelegate(out IntPtr runtimeManager, uint interfaceVersion);
@@ -17,7 +19,7 @@ internal static class Program
 
     private static int Main(string[] args)
     {
-        var apiDll = DefaultApiDll;
+        var apiDll = ResolveDefaultApiDll();
         var json = args.Any(a => string.Equals(a, "--json", StringComparison.OrdinalIgnoreCase));
         for (var i = 0; i < args.Length - 1; i++)
         {
@@ -33,23 +35,56 @@ internal static class Program
         return result.Success ? 0 : 1;
     }
 
+    private static string ResolveDefaultApiDll()
+    {
+        var commonFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.CommonProgramFilesX86);
+        var apiRoot = Path.Combine(commonFilesX86, "Siemens", "PLCSIMADV", "API");
+        if (Directory.Exists(apiRoot))
+        {
+            var candidates = Directory.GetDirectories(apiRoot)
+                .Select(path => new { Path = path, Name = Path.GetFileName(path) })
+                .Where(item => Version.TryParse(item.Name, out _))
+                .OrderByDescending(item => Version.Parse(item.Name));
+            foreach (var candidate in candidates)
+            {
+                var dll = Path.Combine(candidate.Path, ApiDllName);
+                var header = Path.Combine(candidate.Path, ApiHeaderName);
+                if (File.Exists(dll) && File.Exists(header)) return dll;
+            }
+        }
+
+        return Path.Combine(apiRoot, "7.0", ApiDllName);
+    }
+
+    private static uint ReadInterfaceVersion(string apiDll)
+    {
+        var headerPath = Path.Combine(Path.GetDirectoryName(apiDll) ?? string.Empty, ApiHeaderName);
+        if (!File.Exists(headerPath)) throw new FileNotFoundException("The Siemens API header beside the selected DLL is missing.", headerPath);
+
+        var header = File.ReadAllText(headerPath);
+        var match = Regex.Match(header, @"(?m)^\s*#define\s+DAPI_DLL_INTERFACE_VERSION\s+0x([0-9A-Fa-f]{8})\b");
+        if (!match.Success) throw new InvalidDataException("The Siemens API header does not declare DAPI_DLL_INTERFACE_VERSION.");
+        return uint.Parse(match.Groups[1].Value, NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+    }
+
     private static ProbeResult Probe(string apiDll, bool readManagerCount)
     {
         if (!File.Exists(apiDll))
         {
-            return new(false, "missing", apiDll, null, null, "API DLL not found.", null);
+            return new(false, "missing", apiDll, null, null, null, "API DLL not found.", null);
         }
 
         IntPtr library = IntPtr.Zero;
         IntPtr manager = IntPtr.Zero;
         try
         {
+            var interfaceVersion = ReadInterfaceVersion(apiDll);
             library = NativeLibrary.Load(apiDll);
             var initializeAddress = NativeLibrary.GetExport(library, "RuntimeApiEntry_Initialize");
             var destroyAddress = NativeLibrary.GetExport(library, "RuntimeApiEntry_DestroyInterface");
             var initialize = Marshal.GetDelegateForFunctionPointer<InitializeDelegate>(initializeAddress);
             var destroy = Marshal.GetDelegateForFunctionPointer<DestroyInterfaceDelegate>(destroyAddress);
-            var initializeCode = initialize(out manager, ApiInterfaceVersion);
+            var initializeCode = initialize(out manager, interfaceVersion);
             var success = initializeCode == 0 && manager != IntPtr.Zero;
             uint? managerCount = null;
             if (success && readManagerCount)
@@ -71,6 +106,7 @@ internal static class Program
                 success,
                 success ? "initialized" : "initialization-failed",
                 apiDll,
+                $"0x{interfaceVersion:X8}",
                 $"0x{initializeCode:X8}",
                 cleanupCode.HasValue ? $"0x{cleanupCode.Value:X8}" : null,
                 success ? "PLCSIM Advanced runtime API initialized and released." : "Runtime API initialization failed.",
@@ -78,7 +114,7 @@ internal static class Program
         }
         catch (Exception ex)
         {
-            return new(false, "probe-failed", apiDll, null, null, ex.GetType().Name + ": " + ex.Message, null);
+            return new(false, "probe-failed", apiDll, null, null, null, ex.GetType().Name + ": " + ex.Message, null);
         }
         finally
         {
@@ -95,12 +131,13 @@ internal static class Program
     }
 
     private static string FormatText(ProbeResult result) =>
-        $"PLCSIM API: {result.Status}\nDLL: {result.ApiDll}\nInitialize: {result.InitializeCode ?? "-"}\nDestroy: {result.DestroyCode ?? "-"}\nManager instances: {result.ManagerInstanceCount?.ToString() ?? "-"}\n{result.Message}";
+        $"PLCSIM API: {result.Status}\nDLL: {result.ApiDll}\nInterface: {result.InterfaceVersion ?? "-"}\nInitialize: {result.InitializeCode ?? "-"}\nDestroy: {result.DestroyCode ?? "-"}\nManager instances: {result.ManagerInstanceCount?.ToString() ?? "-"}\n{result.Message}";
 
     private sealed record ProbeResult(
         bool Success,
         string Status,
         string ApiDll,
+        string? InterfaceVersion,
         string? InitializeCode,
         string? DestroyCode,
         string Message,

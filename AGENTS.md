@@ -71,6 +71,15 @@ para y pregunta.
 - Bloque con **know-how protection**: no lo toques. Pide al usuario que quite la protección
   en TIA.
 - **F-blocks / tags de safety**: no los edites. Requieren password y auditoría. Reporta y para.
+- Los proyectos de prueba de este workspace son generados o proceden de proyectos abiertos; no
+  presupongas que exista una contraseña de proyecto ni la pidas o inventes. Si una fixture
+  desechable tiene activada `Protection of the PLC configuration data` y eso bloquea la
+  compilación/certificado, primero valida copia y manifiesto y usa
+  `DisableUnconfiguredPlcConfigurationProtection` en el perfil `tia-inspect --isolated
+  --fixture-root <run-dir> --allow-write`; solo desactiva el estado `WithoutPassword` y confirma
+  `None` por readback. Si encuentra `WithPassword` o estado desconocido, detente. No uses
+  `Reset()` ni bridges genéricos. Esta regla no permite rebajar protección know-how, F/Safety ni
+  la política de un proyecto de cliente/producción.
 - Antes de cualquier importación/escritura de un bloque, exige `GetBlocks.isFailsafe=false` y
   `programmingLanguage=SCL` leídos del proyecto live. Si el servidor/perfil no expone `isFailsafe`,
   o devuelve `null`, para: el heurístico de nombre/grupo y `noBlockingFindings` no autorizan la
@@ -129,6 +138,11 @@ maximizado para que el proyecto y sus paneles sean legibles. Verifica el tamaño
 de abrirla o restaurarla y déjala maximizada al terminar la operación, salvo que una acción concreta
 requiera temporalmente otra disposición.
 
+Para automatizar interacciones gráficas repetibles, sigue el método y los límites de
+[`tia-interfaz-y-computer-use.md`](10-kb/00-fundamentos/tia-interfaz-y-computer-use.md): Openness/MCP
+primero; Playwright solo para una interfaz web; UI Automation nativa únicamente después de descubrir
+y validar controles semánticos de TIA en un fixture desechable.
+
 Si el inventario nativo no devuelve una ventana TIA, refresca el inventario y revisa Doctor/procesos.
 Solo si se confirma que no hay otra instancia de TIA ni proyecto abierto, y la aplicación exacta está
 identificada, puedes lanzarla con Computer Use; después vuelve a enumerar y selecciona el ID nuevo
@@ -180,9 +194,12 @@ clasificación F-compliant están desregistradas.
 
 La lista visible de `tia-create lite` no es el roster completo. Si una capacidad no aparece,
 ejecuta `FindTools` con lenguaje natural y después `CallTool` con la firma exacta; no declares
-que falta sin esa comprobación. Para E/S, si `GetTags` no está disponible, usa
+que falta sin esa comprobación. En el build V20 local, `GetTags` devuelve `isSafety` por tag y
+`GetBlocks` devuelve `isFailsafe`; úsalos en la misma sesión de cualquier escritura/descarga.
+Para E/S, si otro perfil/agente no expone `GetTags`, usa
 `FindTools("export PLC tag table")` → `CallTool("ExportPlcTagTable", ...)` y normaliza la evidencia
-con `Convert-TiaTagTableExportToInventory.ps1`.
+con `Convert-TiaTagTableExportToInventory.ps1`; ese inventario no sustituye la clasificación
+`isSafety` requerida para autorizar una descarga.
 
 Todas las secuencias automatizadas deben ejecutarse con
 `30-tools/scripts/Invoke-McpToolSequence.ps1`, que mantiene una única sesión MCP y adquiere el
@@ -219,10 +236,71 @@ posterior; si la compilación no queda en 0 errores y 0 advertencias, no guarda.
 Los pasos 8 y 9 **no son opcionales**. Un `.ap20` es binario: sin el export en `src/` nadie —
 tú incluido, dentro de tres meses — puede ver qué tocó el agente.
 
-Para simulación PLC, `Write-TiaSimulationReadiness.ps1` debe mostrar también
-`plcsimVirtualAdapterReady=true`. Tener PLCSIM Advanced instalado o poder hacer `PowerOn/PowerOff`
-de una CPU temporal no autoriza una descarga: la ruta PG/PC debe identificar explícitamente el
-adaptador virtual de Siemens y el target debe ser una instancia virtual desechable.
+Antes de simular, exige que TIA, PLCSIM Advanced y CPU/firmware estén en la matriz Siemens:
+Advanced V6.0 UPD1 cubre proyectos TIA V14–V19/FW V1.8–V3.1; TIA V20 requiere Advanced V7.0 o
+posterior con cobertura V20. En este host TIA V20 + Advanced V7.0.0.0/API 7.0 ya pasó la
+inicialización del API y el ciclo nativo desechable de registro/encendido/apagado, sin proyecto ni
+descarga. La compatibilidad general de versiones está cubierta; la aceptación de proyecto sigue
+bloqueada hasta validar una fixture limpia y obtener en una misma sesión las clasificaciones
+completas `GetBlocks.isFailsafe` y `GetTags.isSafety`, además del target simulado confirmado por TIA.
+No descargues por el mero hecho de que API, Softbus o `Go online` estén disponibles. La ruta
+predeterminada es Softbus local (`PLCSIM` en PG/PC) con una instancia virtual
+desechable administrada por el adaptador. El runtime debe confirmar `status=ready`, modelo
+estándar no F y `networkMode=SOFTBUS`; TIA debe identificar el destino como CPU simulada antes de
+la descarga, mostrando en la primera carga `CPU-1500 Simulation` y el aviso de CPU simulada. Antes
+de compilar para PLCSIM Advanced, comprueba que la propiedad del proyecto **Support simulation
+during block compilation** está activada; V20 la deja desactivada por defecto. Si se activa,
+recompila y vuelve a verificar. Openness expone `Project.IsSimulationDuringBlockCompilationEnabled`,
+pero no des por hecho que el perfil MCP la lee o escribe. El gate `plcsimVirtualAdapterReady` solo describe la NIC TCP/IP y no se exige para
+Softbus. TCP/IP queda como alternativa local aislada cuando la tarea lo requiere; exige `<Local>`
+en PLCSIM Advanced, NIC Siemens con IP fija en la subred y ruta PG/PC inequívoca. La disponibilidad
+del producto o un `PowerOn/PowerOff` no autorizan una descarga: antes se exige preflight completo
+F/Safety y de protección. Si falta metadata, no descargues aunque el target sea virtual.
+`Invoke-TiaSimulationAcceptance.ps1` consulta `GetBlocks` y `GetTags` y bloquea metadata F/Safety,
+protección, consistencia o simulabilidad desconocida/falsa; después exige respuesta `Success` de
+`DownloadToPlc`, estado `Online` y expectativas funcionales. Sus pruebas mock no son evidencia de
+descarga live: el primer uso debe guardar la respuesta real, confirmar la ruta `PLCSIM` y completar
+la aceptación de comportamiento antes de anunciar que la simulación funciona. Antes de iniciar
+PLCSIM o MCP, el runner exige `-SimulationTargetEvidencePath` con la evidencia reciente definida en
+`10-kb/20-recetas/R17-aceptacion-plcsim.md`; `-AcknowledgeVirtualTarget` por sí solo no confirma
+visualmente el destino.
+
+El procedimiento ejecutable completo, incluida la elección de PLCSIM según CPU/firmware, arranque,
+primera descarga, RUN, plan funcional y limpieza está en
+[`10-kb/20-recetas/R17-aceptacion-plcsim.md`](10-kb/20-recetas/R17-aceptacion-plcsim.md); todos los
+agentes deben seguirlo. En Softbus deja una sola instancia activa por vez. Si el CPU no aparece en la
+matriz de la versión instalada, la metadata F/Safety está incompleta o el diálogo no confirma
+explícitamente que el target es simulado, para sin descargar.
+
+Estado observado el 2026-09-24: la fixture lista para esta prueba es
+`90-tmp/e2e/20260924-plcsim-simulation-support-enabled/`; el ajuste quedó activo en el snapshot y
+`GetBlocks` leyó `PLCSimAdvancedSupport=true` después de compilar. Aun así, la descarga está
+bloqueada: el perfil `tia-create full` probado no ofrece `GetTags` (`Unknown tool`) y omite
+`GetBlocks.isFailsafe`. No intentes descarga hasta que el inventario live proporcione ambas
+clasificaciones completas; Softbus disponible no elimina ese veto. `tia-inspect --isolated` sí leyó
+`isFailsafe=false` y `isSafety=false` en otra fixture desechable, pero esa lectura no autoriza a
+combinarla con una sesión `tia-create` distinta. El 2026-09-25, `Assert-TiaFixtureManifest.ps1`
+dejó de validar la fixture habilitada: TIA regeneró archivos `IM/SearchIndex` y la copia de trabajo
+ya no coincide con el backup. Restaura/regenera y vuelve a validar la fixture antes de cualquier
+uso. Sigue la receta `10-kb/20-recetas/R17-aceptacion-plcsim.md` y el procedimiento Siemens
+documentado en `30-tools/plcsim/README.md`: Softbus `PLCSIM` es la ruta por defecto; usa una sola
+instancia activa; la descarga solo queda probada si el diálogo identifica `CPU-1500 Simulation` y
+el plan funcional da las expectativas definidas.
+
+**Actualización 2026-09-25:** una fixture nueva `retry-fixture-01` pasó manifiesto, preflight
+completo (`isFailsafe=false`, tags `isSafety=false`), compilación 0/0, guardado y readback; su hash
+quedó igual al backup. La exportación general omitió `FB_AgentDemo`, por lo que se exportó aparte;
+el fixture no se modificó funcionalmente. En esa sesión `GetDevices` falló con error genérico y no
+se obtuvo IP live por UI. No se creó instancia ni se descargó. Por tanto, R17 ya fija el método,
+pero la aceptación end-to-end de este host continúa pendiente.
+
+**Actualización del gate de descarga, 2026-09-25:** el bloqueo de metadatos anterior ya se resolvió
+en el build local V20 de `tia-create`. `GetBlocks.isFailsafe` y `GetTags.isSafety` se comprobaron
+en la misma sesión live adjuntada a `AgentDemo_V20`, y `DownloadToPlc` repite internamente una
+preflight fail-closed de todos los bloques/tags antes de operar. Evidencia:
+`70-runs/tia-capabilities/20260925-tia-create-safety-live-read-built.json`. Esto solo autoriza
+seguir con la preparación de aceptación. La descarga sigue bloqueada hasta regenerar y validar la
+fixture libre, confirmar CPU simulada en TIA y terminar el plan funcional de R17.
 
 ---
 
@@ -259,7 +337,7 @@ adaptador virtual de Siemens y el target debe ser una instancia virtual desechab
 |---|---|
 | TIA Portal | **V20** (V19 instalado pero no soportado — ADR-002; receta V21 preparada y sin verificar en esta máquina — ADR-014) |
 | PLCSIM | V19 |
-| PLCSIM Advanced | **V6.0.0.1**; API nativa V6 inicializada por probe de solo lectura; la conducta runtime sigue pendiente |
+| PLCSIM Advanced | **V7.0.0.0**; API 7.0 / interfaz `0x00070000` inicializada; adaptador compilado y ciclo desechable de registro/PowerOn/PowerOff/limpieza verificados. Aún no hay descarga de proyecto ni aceptación de comportamiento. |
 | `tia-inspect` | `30-tools/mcp/tia-inspect/bin/v20/TiaMcpServer.exe --tia-major-version 20` |
 | `tia-create` | **V20 2.7.2**, perfil `lite`, compilado y verificado localmente |
 
