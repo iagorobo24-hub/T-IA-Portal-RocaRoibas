@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 320" role="img" aria-labelledby="t d">
+  <title id="t">TIA-Claude: agentes de IA con freno para TIA Portal</title>
+  <desc id="d">Banner con el nombre del proyecto, un lema y un esquema de un agente conectado a TIA Portal a través de compuertas de seguridad.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0d1020"/><stop offset="1" stop-color="#16213a"/>
+    </linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#ffffff" stroke-opacity="0.04"/>
+    </pattern>
+    <clipPath id="clip"><rect width="1280" height="320" rx="24"/></clipPath>
+  </defs>
+  <g clip-path="url(#clip)">
+    <rect width="1280" height="320" fill="url(#bg)"/>
+    <rect width="1280" height="320" fill="url(#grid)"/>
+    <rect x="0" y="0" width="10" height="320" fill="#19c3a6"/>
+  </g>
+  <g font-family="Segoe UI, Helvetica, Arial, sans-serif">
+    <text x="70" y="125" font-size="76" font-weight="700" fill="#ffffff">TIA-Claude</text>
+    <text x="72" y="175" font-size="28" fill="#19c3a6">Agentes de IA con freno para Siemens TIA Portal</text>
+    <text x="72" y="222" font-size="20" fill="#b8c2d9">Conocimiento de dominio, estándares y compuertas de seguridad,</text>
+    <text x="72" y="250" font-size="20" fill="#b8c2d9">sobre servidores MCP y la API Openness (TIA Portal V20).</text>
+    <text x="70" y="292" font-size="15" fill="#7f8aa8">Proyecto personal en construcción · sin afiliación con Siemens</text>
+  </g>
+  <g font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="16" text-anchor="middle">
+    <rect x="800" y="95" width="140" height="64" rx="12" fill="#1d2a47" stroke="#19c3a6" stroke-width="2"/>
+    <text x="870" y="133" fill="#ffffff" font-size="18" font-weight="600">Agente IA</text>
+    <rect x="990" y="95" width="100" height="64" rx="12" fill="#2a2111" stroke="#f5a623" stroke-width="2"/>
+    <text x="1040" y="133" fill="#f5a623" font-size="18" font-weight="600">MCP</text>
+    <rect x="1140" y="95" width="100" height="64" rx="12" fill="#1d2a47" stroke="#19c3a6" stroke-width="2"/>
+    <text x="1190" y="133" fill="#ffffff" font-size="18" font-weight="600">TIA V20</text>
+    <path d="M940 127H990M1090 127H1140" stroke="#b8c2d9" stroke-width="3"/>
+    <path d="M982 119l8 8-8 8M1132 119l8 8-8 8" fill="none" stroke="#b8c2d9" stroke-width="3"/>
+    <rect x="800" y="200" width="440" height="50" rx="12" fill="#101a30" stroke="#f5a623" stroke-width="1.5" stroke-dasharray="6 5"/>
+    <text x="1020" y="232" fill="#f5a623" font-size="18">copia de seguridad · vista previa · compilar 0/0</text>
+    <path d="M1040 159V200" stroke="#f5a623" stroke-width="2" stroke-dasharray="4 4"/>
+  </g>
+</svg>
