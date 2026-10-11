@@ -167,3 +167,5 @@ que inventariar ahí.
 
 **Todos usan la `Default tag table`**, que es justo lo que
 [`estructura-proyecto.md`](../20-standards/estructura-proyecto.md) desaconseja.
+
+> **Aviso de licencias.** Los ejemplos `npatel-*` y `orsin-*` son proyectos de terceros cuyo repositorio original no incluye licencia. Aquí solo se versiona su `FICHA.md`; el código y los binarios no se republican y se recrean desde `_ref/` clonando el original (ver `TIA-Claude_Portable/docs/NOTICE-THIRD-PARTY.md`).

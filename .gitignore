@@ -56,3 +56,10 @@ TIA-Claude_Portable/manifests/sha256.json
 # Configuración local generada con rutas absolutas de cada ordenador.
 .mcp.json
 30-tools/mcp/servers.local.json
+
+# Ejemplos de terceros sin licencia clara (npatel221, RobertOrsin): solo se
+# versiona su FICHA.md. El resto se recrea desde _ref/ (ver NOTICE-THIRD-PARTY).
+50-examples/npatel-*/**
+!50-examples/npatel-*/FICHA.md
+50-examples/orsin-*/**
+!50-examples/orsin-*/FICHA.md
