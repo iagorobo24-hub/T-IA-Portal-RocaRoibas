@@ -19,6 +19,7 @@ param(
     [Parameter()]
     [array]$Calls,
     [string]$CallsJson,
+    [string]$CallsJsonPath,
     [string]$OutputPath,
     [switch]$CaptureStderr,
     [int]$TimeoutSeconds = 120,
@@ -29,7 +30,12 @@ param(
 $ErrorActionPreference = 'Stop'
 $ExecutablePath = [IO.Path]::GetFullPath($ExecutablePath)
 if (-not (Test-Path -LiteralPath $ExecutablePath -PathType Leaf)) { throw "Executable does not exist: $ExecutablePath" }
+# An isolated sequence owns the Openness session it opens: it is the only mode in which
+# the runner may close a project or a TIA Portal process on the way out. In attach mode the
+# visible TIA window belongs to the user and must never be closed by this script.
+$isIsolated = $false
 if ($Arguments -match '(?i)(?:^|\s)--isolated(?:\s|$)') {
+    $isIsolated = $true
     if ($Arguments -notmatch '(?i)(?:^|\s)--fixture-root\s+(?:"([^"]+)"|(\S+))') {
         throw 'An isolated MCP sequence requires --fixture-root with a valid disposable fixture manifest.'
     }
@@ -38,8 +44,33 @@ if ($Arguments -match '(?i)(?:^|\s)--isolated(?:\s|$)') {
     if (-not (Test-Path -LiteralPath $manifestValidator -PathType Leaf)) { throw "Fixture manifest validator is missing: $manifestValidator" }
     $null = & $manifestValidator -FixtureRoot $fixtureRoot
 }
-if ($CallsJson) { $Calls = @($CallsJson | ConvertFrom-Json) }
+# ConvertFrom-Json returns a JSON array as a single object, so wrapping the pipeline
+# inline would nest the whole call list as element 0. Flatten explicitly.
+$parsedCalls = $null
+if ($CallsJsonPath) {
+    if (-not (Test-Path -LiteralPath $CallsJsonPath -PathType Leaf)) { throw "Calls JSON file does not exist: $CallsJsonPath" }
+    $parsedCalls = Get-Content -Raw -LiteralPath $CallsJsonPath | ConvertFrom-Json
+} elseif ($CallsJson) { $parsedCalls = $CallsJson | ConvertFrom-Json }
+if ($null -ne $parsedCalls) { $Calls = @($parsedCalls | ForEach-Object { $_ }) }
 if (-not $Calls -or $Calls.Count -eq 0) { throw 'At least one MCP call is required.' }
+
+# tia-inspect marks a headless session with the --isolated flag; tia-create marks it with the
+# ConnectIsolated tool. Both open an Openness session that this script owns, so both are allowed
+# to close their project and their TIA Portal process on the way out. An attach session (the user
+# has TIA open) is detected by the absence of both and is never closed by this script.
+if (-not $isIsolated) {
+    foreach ($candidate in $Calls) {
+        $candidateName = $null
+        if ($candidate -is [System.Collections.IDictionary]) {
+            if ($candidate.Contains('name')) { $candidateName = [string]$candidate['name'] }
+        }
+        else {
+            $candidateProperty = $candidate.PSObject.Properties['name']
+            if ($candidateProperty) { $candidateName = [string]$candidateProperty.Value }
+        }
+        if ($candidateName -eq 'ConnectIsolated') { $isIsolated = $true; break }
+    }
+}
 
 $mutex = $null
 $leaseAcquired = $false
@@ -152,15 +183,21 @@ function Test-JsonAssertions([object]$Payload, [object]$Assertions) {
     return [pscustomobject]@{ passed = ($failures.Count -eq 0); failures = @($failures) }
 }
 
-function Read-Response([int]$Id) {
-    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
-    $stdoutReadTask = $process.StandardOutput.ReadLineAsync()
+function Read-Response([int]$Id, [int]$TimeoutOverride = 0) {
+    $effectiveTimeout = if ($TimeoutOverride -gt 0) { $TimeoutOverride } else { $TimeoutSeconds }
+    $deadline = (Get-Date).AddSeconds($effectiveTimeout)
+    $stdoutReadTask = $null
     while ((Get-Date) -lt $deadline) {
         Pump-Stderr
         $remaining = [int]((($deadline) - (Get-Date)).TotalMilliseconds)
         if ($remaining -le 0) { break }
-        if (-not $stdoutReadTask.Wait([Math]::Min(50, $remaining))) { continue }
+        # One pending read at a time: a line that is not our response (server noise,
+        # a stale id) must advance to the next line instead of being re-read for the
+        # whole timeout, which used to look like a hang.
+        if ($null -eq $stdoutReadTask) { $stdoutReadTask = $process.StandardOutput.ReadLineAsync() }
+        if (-not $stdoutReadTask.Wait([Math]::Min(50, [Math]::Max(1, $remaining)))) { continue }
         $line = $stdoutReadTask.Result
+        $stdoutReadTask = $null
         if ($null -eq $line) { break }
         if (-not $line.Trim()) { continue }
         try { $json = $line | ConvertFrom-Json } catch { continue }
@@ -171,6 +208,22 @@ function Read-Response([int]$Id) {
 
 $results = [System.Collections.Generic.List[object]]::new()
 $sequenceSuccess = $true
+$sequenceError = $null
+# Snapshot the TIA Portal processes that already exist. Anything that appears later and is
+# not in this set was started by this run (an isolated Openness session spawns its own headless
+# Portal) and may be closed on the way out. A TIA window the user opened before the run stays
+# untouched, which is what keeps attach mode safe.
+$tiaProcessesBefore = @()
+if ($isIsolated) {
+    $tiaProcessesBefore = @(Get-Process -Name 'Siemens.Automation.Portal' -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
+}
+$cleanup = [ordered]@{
+    attempted = $false
+    projectClosed = $false
+    sessionDisconnected = $false
+    closedTiaProcessIds = @()
+    notes = @()
+}
 try {
     $process = [Diagnostics.Process]::Start($psi)
     if ($CaptureStderr) {
@@ -252,7 +305,37 @@ try {
         if ($isError -or ($hasAssertions -and -not $assertionsPassed)) { $sequenceSuccess = $false; break }
     }
 }
+catch {
+    # Record the failure instead of aborting before the report: callers read a failed
+    # sequence's error/stderr for diagnostics, and losing it makes failures opaque.
+    $sequenceSuccess = $false
+    $sequenceError = $_.Exception.Message
+}
 finally {
+    if ($process -and -not $process.HasExited -and $isIsolated) {
+        # The sequence aborts on the first failed call, so the CloseProject/Disconnect entries
+        # queued after it never run and the Openness session stays open with the project
+        # loaded. The next session then fails with "already been opened ... 2 minute delay".
+        # Close the session over the still-alive channel before the server is killed.
+        $cleanup.attempted = $true
+        $cleanupId = 900
+        foreach ($cleanupTool in @('CloseProject', 'Disconnect')) {
+            try {
+                $cleanupId++
+                Send-Json ([ordered]@{
+                    jsonrpc = '2.0'; id = $cleanupId; method = 'tools/call'
+                    params = @{ name = $cleanupTool; arguments = @{} }
+                })
+                $cleanupResponse = Read-Response -Id $cleanupId -TimeoutOverride 20
+                $cleanupOk = ($null -eq $cleanupResponse.error)
+                if ($cleanupTool -eq 'CloseProject') { $cleanup.projectClosed = $cleanupOk }
+                else { $cleanup.sessionDisconnected = $cleanupOk }
+            }
+            catch {
+                $cleanup.notes += "$cleanupTool failed: $($_.Exception.Message)"
+            }
+        }
+    }
     if ($process) {
         try { $process.StandardInput.Close() } catch { }
         if (-not $process.WaitForExit(5000)) { try { $process.Kill() } catch { } }
@@ -271,6 +354,33 @@ finally {
         }
         $process.Dispose()
     }
+    if ($isIsolated) {
+        # Last resort: an isolated Openness session can leave a headless Portal process behind
+        # holding the project open. Close only the ones this run started.
+        try {
+            $orphans = @(Get-Process -Name 'Siemens.Automation.Portal' -ErrorAction SilentlyContinue |
+                Where-Object { $tiaProcessesBefore -notcontains $_.Id })
+            foreach ($orphan in $orphans) {
+                $closed = $false
+                try { $closed = $orphan.CloseMainWindow() } catch { $closed = $false }
+                if ($closed) {
+                    if (-not $orphan.WaitForExit(15000)) { try { $orphan.Kill() } catch { } }
+                }
+                else {
+                    try { $orphan.Kill() } catch { }
+                }
+                # A killed Portal can take a moment to disappear; wait so the report lists
+                # only processes that were really gone and the next session is not blocked.
+                $exited = $true
+                try { $exited = $orphan.WaitForExit(10000) } catch { $exited = $true }
+                if ($exited) { $cleanup.closedTiaProcessIds += [int]$orphan.Id }
+                else { $cleanup.notes += "TIA Portal process $($orphan.Id) did not exit after close/kill." }
+            }
+        }
+        catch {
+            $cleanup.notes += "closing orphaned TIA processes failed: $($_.Exception.Message)"
+        }
+    }
     if ($leaseAcquired) {
         try { $mutex.ReleaseMutex() } catch { }
     }
@@ -281,6 +391,7 @@ $report = [ordered]@{
     schemaVersion = 1
     generatedAt = [DateTimeOffset]::Now.ToString('o')
     success = $sequenceSuccess
+    error = $sequenceError
     executable = $ExecutablePath
     arguments = $Arguments
     leaseName = $LeaseName
@@ -288,6 +399,7 @@ $report = [ordered]@{
     leaseAcquired = $leaseAcquired
     initialize = $initialize.result
     calls = @($results)
+    cleanup = $cleanup
 }
 if ($CaptureStderr) {
     $report.stderr = $stderrText

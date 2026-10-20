@@ -206,6 +206,35 @@ Si el título menciona tu proyecto, ahí está la causa.
 ventana**: es el de la persona y puede tener cambios sin guardar. `Stop-TiaPortal.ps1` los respeta
 por defecto justo por esto.
 
+### `OpenProject` falla con *«has already been opened ... only be opened again after a 2 minute delay»*
+
+✅ **Verificado:** es la **fuga de sesión** del propio runner, no un conflicto con la persona. Una
+secuencia que **aborta en su primera llamada fallida** nunca llega a ejecutar las entradas
+`CloseProject` y `Disconnect` que tenía en cola. El `finally` del runner mataba el servidor MCP
+pero **no cerraba la sesión de Openness**: el proceso `Siemens.Automation.Portal` sobrevive **con el
+proyecto abierto**, y la siguiente sesión recibe ese mensaje y además espera 2 minutos.
+
+Síntoma: la segunda sesión falla al abrir el mismo `.ap20` con un mensaje que *menciona al usuario
+actual*, aunque no haya ninguna ventana de TIA abierta.
+
+**Cómo distinguirlo de un bloqueo real:** si no hay ninguna instancia con ventana pero el mensaje
+habla de *«already been opened»*, es una sesión huérfana de la anterior.
+
+```powershell
+Get-Process 'Siemens.Automation.Portal' | Select-Object Id, MainWindowTitle
+```
+
+**Arreglo:** el runner ya lo hace solo desde el 2026-10-20: en modo aislado (flag `--isolated` de
+`tia-inspect` o herramienta `ConnectIsolated` de `tia-create`) cierra la sesión con `CloseProject` y
+`Disconnect` sobre el canal todavía vivo y, si aun así queda un `Siemens.Automation.Portal` que no
+existía antes de la llamada, lo cierra. El informe incluye un bloque `cleanup` con
+`projectClosed`, `sessionDisconnected` y `closedTiaProcessIds`.
+
+**Ojo:** una sesión en modo *attach* pertenece a la persona y el runner **no** cierra su proyecto ni
+su ventana. Si ves este mensaje con la TIA de la persona abierta, aplica lo del apartado anterior.
+
+Ver `30-tools/tests/Test-McpToolSequenceCleanup.ps1`.
+
 ### Se acumulan instancias de TIA Portal comiendo RAM
 
 ✅ **Verificado:** `Disconnect` **no cierra TIA Portal**. Suelta la conexión y deja el proceso
