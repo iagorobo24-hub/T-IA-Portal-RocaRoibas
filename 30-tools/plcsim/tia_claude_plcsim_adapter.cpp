@@ -84,7 +84,11 @@ bool ParseIp(const std::wstring& text, UIP* output)
             {
                 return false;
             }
-            output->IPs[octet] = static_cast<BYTE>(value);
+            // The runtime stores the octets in reverse order: IPs[3] holds the first octet
+            // (see PrintIpv4, which prints IPs[3].IPs[2].IPs[1].IPs[0]). Filling them in text
+            // order hands the API a byte-reversed address: SetIPSuite accepts it and the CPU
+            // never answers on the wire.
+            output->IPs[3 - octet] = static_cast<BYTE>(value);
         }
         catch (...)
         {
@@ -833,7 +837,10 @@ int RunTcpIpDisposableProbe(ISimulationRuntimeManager* manager, int argc, wchar_
     return success ? 0 : 1;
 }
 
-int RunAcceptanceInstance(ISimulationRuntimeManager* manager, int argc, wchar_t* argv[])
+// Reference implementation of the TCP/IP acceptance flow. It is not reachable from wmain:
+// its mapping/binding/IP logic was ported into RunLocalAcceptanceInstance, which is the
+// path --register-acceptance actually takes.
+[[maybe_unused]] int RunAcceptanceInstance(ISimulationRuntimeManager* manager, int argc, wchar_t* argv[])
 {
     const std::wstring instanceName = ArgumentValue(argc, argv, L"--name", L"TIAClaudeAcceptance_1516F");
     const std::wstring interfaceNeedle = ArgumentValue(argc, argv, L"--interface", L"Siemens PLCSIM Virtual Ethernet Adapter");
@@ -983,11 +990,10 @@ int RunLocalAcceptanceInstance(ISimulationRuntimeManager* manager, int argc, wch
     const std::wstring maskText = ArgumentValue(argc, argv, L"--mask", L"255.255.255.0");
     const std::wstring gatewayText = ArgumentValue(argc, argv, L"--gateway", L"0.0.0.0");
     const UINT32 timeoutMs = static_cast<UINT32>(std::stoul(ArgumentValue(argc, argv, L"--timeout-ms", L"60000")));
-    if (HasArgument(argc, argv, L"--interface"))
-    {
-        std::wcout << L"{\"status\":\"failed\",\"stage\":\"unsupported-interface-argument\",\"message\":\"Softbus does not select a network adapter; TCP/IP adapter selection is not supported by this local acceptance path.\"}\n";
-        return 1;
-    }
+    // Softbus does not select a network adapter. TCP/IP does: the needle names the Windows
+    // adapter whose IE1 port the virtual CPU has to be bound to, otherwise the CPU never
+    // answers on the wire even though its IP suite is configured.
+    const std::wstring interfaceNeedle = ArgumentValue(argc, argv, L"--interface", L"Siemens PLCSIM Virtual Ethernet Adapter");
     ECPUType cpuType = SRCT_1500_Unspecified;
     if (cpuText == L"1511") cpuType = SRCT_1511;
     else if (cpuText == L"1513") cpuType = SRCT_1513;
@@ -1020,22 +1026,103 @@ int RunLocalAcceptanceInstance(ISimulationRuntimeManager* manager, int argc, wch
     if (registerCode != SREC_OK || instance == nullptr)
     { std::wcout << L"{\"status\":\"failed\",\"stage\":\"register-instance\","; PrintCode(L"registerCode", registerCode); std::wcout << L"}\n"; return 1; }
 
-    const ERuntimeErrorCode powerOnCode = instance->PowerOn(timeoutMs);
     ERuntimeErrorCode ipCode = SREC_OK;
-    if (powerOnCode == SREC_OK && !useSoftbus)
+    ERuntimeErrorCode mappingCode = SREC_OK;
+    ERuntimeErrorCode bindingCode = SREC_OK;
+    INT32 mappingReadback = -1;
+    std::wstring controllerIp;
+    std::wstring boundInterface;
+    UINT boundInterfaceIndex = 0;
+    // Order matters and is enforced by the runtime:
+    //   - the IE1 mapping and the runtime binding need the instance STOPPED
+    //     (SREC_INSTANCE_ALREADY_RUNNING, -72, if it is already running);
+    //   - the IP suite needs the instance RUNNING (SREC_INSTANCE_NOT_RUNNING, -14, otherwise).
+    if (!useSoftbus)
+    {
+        // The virtual CPU only answers on the wire when its IE1 port is mapped to a Windows
+        // adapter and the runtime is bound to that same adapter. Without both calls the CPU
+        // keeps its IP in the configuration but nothing ever reaches it.
+        UINT interfaceCount = 0;
+        manager->GetNetInterfaces(nullptr, &interfaceCount);
+        std::vector<SNetInterfaceInfo> interfaces(interfaceCount);
+        const ERuntimeErrorCode listCode = manager->GetNetInterfaces(interfaces.data(), &interfaceCount);
+        const SNetInterfaceInfo* selected = nullptr;
+        for (const SNetInterfaceInfo& candidate : interfaces)
+        {
+            if (ContainsInsensitive(candidate.interfaceDescription, interfaceNeedle) ||
+                ContainsInsensitive(candidate.interfaceName, interfaceNeedle))
+            {
+                selected = &candidate;
+                break;
+            }
+        }
+        if (listCode != SREC_OK || selected == nullptr)
+        {
+            std::wcout << L"{\"status\":\"failed\",\"stage\":\"select-interface\",\"requested\":";
+            PrintJsonString(interfaceNeedle);
+            std::wcout << L",\"interfaceCount\":" << interfaceCount << ",\"interfaces\":[";
+            for (UINT index = 0; index < interfaceCount; ++index)
+            {
+                if (index > 0) { std::wcout << L","; }
+                std::wcout << L"{\"name\":";
+                PrintJsonString(interfaces[index].interfaceName);
+                std::wcout << L",\"description\":";
+                PrintJsonString(interfaces[index].interfaceDescription);
+                std::wcout << L",\"index\":" << interfaces[index].interfaceIndex << "}";
+            }
+            std::wcout << L"]}\n";
+            std::wcout.flush();
+            instance->PowerOff(timeoutMs); instance->UnregisterInstance(); DestroyInterface(instance); return 1;
+        }
+        boundInterface = selected->interfaceName;
+        boundInterfaceIndex = selected->interfaceIndex;
+        // The index overload is the reliable one: the user-friendly-name overload rejects the
+        // OAM name because it carries the quotes and answers SREC_WRONG_COMMUNICATION_INTERFACE (-32).
+        mappingCode = instance->SetNetInterfaceMapping(EPLCInterface::IE1, static_cast<DWORD>(selected->interfaceIndex));
+        if (mappingCode == SREC_WRONG_COMMUNICATION_INTERFACE)
+        {
+            // In single-adapter mode an explicit PC interface is not accepted: the Control
+            // Panel communication channel decides it. Zero clears any explicit mapping.
+            mappingCode = instance->SetNetInterfaceMapping(EPLCInterface::IE1, static_cast<DWORD>(0));
+        }
+        mappingReadback = instance->GetNetInterfaceMapping(EPLCInterface::IE1);
+        // Zero selects local PC communication only, so the simulated CPU never becomes
+        // reachable from the LAN.
+        bindingCode = manager->SetNetInterfaceBindings(0);
+    }
+    const ERuntimeErrorCode powerOnCode = instance->PowerOn(timeoutMs);
+    if (!useSoftbus && powerOnCode == SREC_OK)
     {
         SIPSuite4 suite{}; suite.IPAddress = ip; suite.SubnetMask = mask; suite.DefaultGateway = gateway;
         ipCode = instance->SetIPSuite(0, suite, true);
+        const UINT32 controllerIpCount = instance->GetControllerIPCount();
+        if (controllerIpCount > 0)
+        {
+            const UIP actual = instance->GetControllerIP(0);
+            controllerIp = std::to_wstring(static_cast<unsigned int>(actual.IPs[3])) + L"." +
+                std::to_wstring(static_cast<unsigned int>(actual.IPs[2])) + L"." +
+                std::to_wstring(static_cast<unsigned int>(actual.IPs[1])) + L"." +
+                std::to_wstring(static_cast<unsigned int>(actual.IPs[0]));
+        }
     }
-    const bool ready = powerOnCode == SREC_OK && (useSoftbus || ipCode == SREC_OK);
+    const bool ready = powerOnCode == SREC_OK &&
+        (useSoftbus || (ipCode == SREC_OK && mappingCode == SREC_OK && bindingCode == SREC_OK));
     std::wcout << L"{\"status\":\"" << (ready ? L"ready" : L"failed") << L"\",\"stage\":\"" << (ready ? L"running" : L"configure") << L"\",\"instanceName\":";
     PrintJsonString(instanceName);
-    std::wcout << L",\"cpuType\":" << static_cast<int>(cpuType) << L",\"interfaceName\":\"" << (useSoftbus ? L"PLCSIM" : L"Siemens PLCSIM Virtual Ethernet Adapter") << L"\",\"interfaceDescription\":\"" << (useSoftbus ? L"Local Softbus; no network adapter" : L"Local TCP/IP via PLCSIM Control Panel <Local>") << L"\",\"interfaceIndex\":0,\"ip\":";
+    std::wcout << L",\"cpuType\":" << static_cast<int>(cpuType) << L",\"interfaceName\":\"";
+    if (useSoftbus) { std::wcout << L"PLCSIM"; } else { PrintJsonString(boundInterface); }
+    std::wcout << L"\",\"interfaceDescription\":\"" << (useSoftbus ? L"Local Softbus; no network adapter" : L"Local TCP/IP via PLCSIM Control Panel <Local>") << L"\",\"interfaceIndex\":" << boundInterfaceIndex << L",\"ip\":";
     if (useSoftbus) std::wcout << L"null"; else PrintJsonString(ipText);
-    std::wcout << L",\"networkMode\":\"" << (useSoftbus ? L"SOFTBUS" : L"TCPIP_SINGLE_ADAPTER") << L"\",\"binding\":\"local-only\",";
+    std::wcout << L",\"networkMode\":\"" << (useSoftbus ? L"SOFTBUS" : L"TCPIP_SINGLE_ADAPTER") << L"\",\"binding\":\""
+        << (useSoftbus ? L"local-only" : L"ie1-mapped") << L"\",";
     PrintCode(L"modeReadCode", modeReadCode); std::wcout << L","; PrintCode(L"modeSetCode", modeSetCode);
     std::wcout << L","; PrintCode(L"modeVerifyCode", modeVerifyCode); std::wcout << L","; PrintCode(L"registerCode", registerCode);
-    std::wcout << L","; PrintCode(L"powerOnCode", powerOnCode); std::wcout << L","; PrintCode(L"ipCode", ipCode); std::wcout << L"}\n";
+    std::wcout << L","; PrintCode(L"powerOnCode", powerOnCode); std::wcout << L","; PrintCode(L"ipCode", ipCode);
+    std::wcout << L","; PrintCode(L"mappingCode", mappingCode); std::wcout << L","; PrintCode(L"bindingCode", bindingCode);
+    std::wcout << L",\"mappingReadback\":" << static_cast<int>(mappingReadback);
+    std::wcout << L",\"controllerIp\":";
+    if (controllerIp.empty()) { std::wcout << L"null"; } else { PrintJsonString(controllerIp); }
+    std::wcout << L"}\n";
     std::wcout.flush();
     if (!ready) { instance->PowerOff(timeoutMs); instance->UnregisterInstance(); DestroyInterface(instance); return 1; }
 
