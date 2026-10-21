@@ -145,6 +145,6 @@ if ($TiaMajor -eq 21) {
     Write-Host ""
     Write-Host "Rama V21 sin verificar contra un proyecto real todavia. Antes de fiarte:" -ForegroundColor Yellow
     Write-Host "  1. Confirma que --doctor de arriba dio V21 Engineering/Portal OK." -ForegroundColor Yellow
-    Write-Host "  2. Corre un scaffold desechable (ver 30-tools/scripts/Invoke-AgentDemoScaffold.ps1)." -ForegroundColor Yellow
+    Write-Host "  2. Corre un scaffold desechable (ver 30-tools/scripts/Invoke-TiaProjectFromSpec.ps1)." -ForegroundColor Yellow
     Write-Host "  3. Actualiza 00-meta/decisiones/ADR-014-version-v21.md con la evidencia real." -ForegroundColor Yellow
 }

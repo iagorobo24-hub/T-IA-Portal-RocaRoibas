@@ -10,7 +10,7 @@ Herramientas de consola para operar TIA Portal por Openness sin depender de un c
 | [`Invoke-McpToolCall.ps1`](Invoke-McpToolCall.ps1) | Ejecuta una llamada MCP aislada para fixtures y pruebas |
 | [`Invoke-McpToolSequence.ps1`](Invoke-McpToolSequence.ps1) | Ejecuta una secuencia ordenada sobre una única sesión MCP |
 | [`Inspect-McpToolSchemas.ps1`](Inspect-McpToolSchemas.ps1) | Lee `tools/list` y guarda las firmas exactas del roster MCP sin conectar a un proyecto |
-| [`Invoke-AgentDemoScaffold.ps1`](Invoke-AgentDemoScaffold.ps1) | Dry-run y scaffold controlado del proyecto PLC de aceptación |
+| [`Invoke-TiaProjectFromSpec.ps1`](Invoke-TiaProjectFromSpec.ps1) | Dry-run y scaffold controlado del proyecto PLC de aceptación |
 | [`Export-HarnessAdapter.ps1`](Export-HarnessAdapter.ps1) | Exporta perfiles a Claude Code, Codex u OpenCode sin tocar sus configuraciones |
 | [`Migrate-Examples.ps1`](Migrate-Examples.ps1) | Migra, compila e inventaría los proyectos de `50-examples` |
 | [`Export-Sources.ps1`](Export-Sources.ps1) | Exporta el código a `.s7dcl` para git — receta [R03](../../10-kb/20-recetas/R03-exportar-a-git.md) |

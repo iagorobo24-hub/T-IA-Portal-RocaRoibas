@@ -95,6 +95,28 @@ salen del **export textual**, y `30-tools/scripts/Invoke-TiaTagUsage.ps1` las bu
 - **Que la HMI se haya visto en un runtime.** La pantalla está creada y enlazada en el proyecto,
   pero **WinCC Unified Runtime no se ha arrancado**. La simulación HMI sigue siendo el hueco de
   R13, R14 y R20.
-- **Que la cadena de creación de proyecto sea reproducible "desde una frase" sin intervención.**
-  El flujo está medido y automatizado (spec → scaffold → pantalla → export → docs), pero se ha
-  ejecutado **una vez**, con la máquina delante. Repetirlo en frío es el siguiente ensayo.
+- **Que la cadena se repita sola, sin nadie delante.** La cadena se ejecutó **en frío dos veces
+  seguidas** (234 s y 236 s, `exit 0`, árbol de software idéntico y los cinco entregables
+  verificados en las dos: [`50-examples/demo-cinta01/pa1-en-frio.json`](../../50-examples/demo-cinta01/pa1-en-frio.json)),
+  pero lo hizo este operador en este host. Lo que no está medido es que **otro agente**, desde
+  sesión fría, la ejecute sin ayuda.
+
+## Actualización posterior — la cadena completa, en frío y dos veces
+
+El runner `Invoke-TiaProjectFromSpec.ps1` (antes `Invoke-AgentDemoScaffold.ps1`) encadena ya
+**todo** el flujo, no solo el scaffold: proyecto y hardware → fuentes SCL → compilación → pantalla
+HMI con sus bindings → export al `src/` del proyecto → informe del compilador en `ops/` →
+`Check-TiaStandards` con **código de salida 0** → copia al espejo versionado → informe final.
+
+```powershell
+pwsh -File 30-tools/scripts/Invoke-TiaProjectFromSpec.ps1 `
+    -SpecPath 50-examples/demo-cinta01/specs/scaffold.json `
+    -HmiScreenPath 50-examples/demo-cinta01/hmi-screen.json `
+    -MirrorPath 50-examples/demo-cinta01 `
+    -ProjectReadmePath 50-examples/demo-cinta01/README.md `
+    -OutputRoot 70-runs/e2e/pa1-cold-runN -Recreate -Apply
+```
+
+`-Recreate` borra el proyecto anterior y lo rehace desde cero, que es lo que hace la cadena
+repetible. El runner sigue haciendo **dry-run primero** y comprobando con el session guard que
+no haya ninguna TIA visible con un proyecto abierto.
