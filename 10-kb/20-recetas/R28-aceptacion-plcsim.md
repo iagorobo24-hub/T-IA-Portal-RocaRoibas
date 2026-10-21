@@ -46,6 +46,83 @@ no la apaga, no la da de baja— y ejecuta los pasos del plan comprobando las ex
 cada uno. Debe correr **elevado**: la API de PLCSIM Advanced no inicializa sin privilegios
 (`InitializeCode = 0xFFFFFFFF` sin elevar).
 
+## Escribir en el proyecto abierto: `GoOffline` primero
+
+Con la sesión **adjunta** al TIA abierto, TIA rechaza las escrituras:
+
+```
+This function is not supported in online mode.
+```
+
+El motivo es que la vista live del proyecto abierto está en modo online. La solución es una
+llamada antes de escribir:
+
+```powershell
+AttachToOpenProject(projectName)   # engancha la vista live
+GoOffline(softwarePath)             # '<PLC_1>' is now offline
+# ... a partir de aqui se puede importar, generar bloques, compilar y guardar
+SaveProject()
+```
+
+Con `GoOffline`, `ImportPlcExternalSource`, `GenerateBlocksFromExternalSource`,
+`DeletePlcExternalSource` y `SaveProject` funcionan. `SaveProject` también exige estar offline
+(da *"The operation is not permitted in online mode"* si no).
+
+## Importar una fuente SCL y generar el bloque
+
+El camino que funciona, en tres llamadas:
+
+```powershell
+ImportPlcExternalSource(softwarePath, groupPath, filePath)   # groupPath = '' funciona
+GenerateBlocksFromExternalSource(softwarePath, externalSourceName)
+```
+
+- `groupPath` es el grupo de fuentes externas: **cadena vacía**. Los paths tipo
+  `PLC_1/Program blocks` dan `ExternalSourceGroup not found`.
+- `GenerateBlocksFromExternalSource` **actualiza** un bloque que ya existe: no falla por
+  duplicado, así que sirve para reemplazar un OB1.
+- Para rehacer una fuente: `DeletePlcExternalSource` y volver a importarla.
+
+## La forma que acepta el generador de fuentes de TIA V20
+
+**Un `FUNCTION` (FC) es más restrictivo que un `FUNCTION_BLOCK`:**
+
+| Elemento | FB | FC |
+|---|---|---|
+| `VERSION`, `AUTHOR`, `FAMILY` | admitidos | **rechazados** (`The specified value "X" is invalid`) |
+| Tipo de retorno | no hace falta | **obligatorio en la cabecera**: `FUNCTION "X" : Void` |
+| Resultado | `VAR_OUTPUT` | `VAR_OUTPUT` |
+
+Sin `: Void` en la cabecera, el parser se descuadra y el error salta en la línea siguiente
+(`The specified value "VAR_INPUT" is invalid`), que no dice nada de la causa real. Los
+comentarios de cabecera van **antes** de la línea `FUNCTION`, no después.
+
+## Crear una tabla de tags
+
+`BuildPlcTagTableXml` genera el XML desde JSON, sin tocar el proyecto:
+
+```json
+{ "tableName": "Agent_Escalado",
+  "tags": [ { "name": "RawValue", "dataTypeName": "Real", "logicalAddress": "%MD20" } ] }
+```
+
+El XML sale con `Engineering version="V21"` aunque el proyecto sea V20, y **el importador lo
+admite**: reescribe el documento a la versión del proyecto. `ImportPlcTagTable` con
+`folderPath = 'PLC data types'` crea la tabla.
+
+## El acceso simbólico es a `Real`, no a `Int`
+
+La API de PLCSIM Advanced resuelve y escribe símbolos `Bool`, `UInt8` y `Real`, pero **no
+`Int`**. Si el arnés necesita una entrada `Int`, la vía limpia es declarar la variable de
+prueba como `Real` y convertir en el OB1 con `REAL_TO_INT`, que trunca hacia cero:
+
+```scl
+"FC_Escalado"(iValorCrudo := REAL_TO_INT("RawValue"), ...);
+```
+
+El bloque conserva su interfaz `Int`; lo que cambia es el arnés. Y al comparar valores `Real`
+hay que usar **tolerancia**: el adaptador serializa con 6 dígitos significativos.
+
 ## Modo `--plan-existing` del adaptador
 
 `--plan-existing --name <instancia>` se engancha a una instancia ya registrada e informa, antes
