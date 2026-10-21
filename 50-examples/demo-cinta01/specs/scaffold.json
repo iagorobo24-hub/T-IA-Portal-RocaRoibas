@@ -1,0 +1,44 @@
+{
+  "_comment": "Spec de PA-1: DEMO-Cinta01. S7-1500 con un motor (M01), seta de emergencia (ES01) y HMI Unified con pantalla de operacion. Los tags siguen 20-standards/naming.md: prefijo por rol (DI_/DO_/M_), equipo ISA-5.1, identificadores en ingles.",
+  "projectName": "DEMO-Cinta01",
+  "directoryPath": "C:\\Users\\jose.mellid\\Desktop\\BIBLIOGRAFIA\\00. IA-go\\01.Repositorios\\TIA Portal\\TIA-Claude\\40-projects\\DEMO-Cinta01\\tia",
+  "plcName": "PLC_1",
+  "plcFamily": "S7-1500",
+  "plcMlfb": "6ES7 513-1AM03-0AB0",
+  "hmiName": "HMI_RT_1",
+  "hmiFamily": "WinCCUnifiedPC",
+  "hmiSoftwarePath": "HMI_RT_1",
+  "connectionName": "HMI_Connection_1",
+  "tagTable": [
+    {
+      "tableName": "Cinta_Signals",
+      "tags": [
+        { "name": "DI_ES01_Ok", "dataTypeName": "Bool", "logicalAddress": "%M0.0" },
+        { "name": "DI_M01_Start", "dataTypeName": "Bool", "logicalAddress": "%M0.1" },
+        { "name": "DI_M01_Stop", "dataTypeName": "Bool", "logicalAddress": "%M0.2" },
+        { "name": "DI_M01_Reset", "dataTypeName": "Bool", "logicalAddress": "%M0.3" },
+        { "name": "DI_M01_Feedback", "dataTypeName": "Bool", "logicalAddress": "%M0.4" },
+        { "name": "DO_M01_Run", "dataTypeName": "Bool", "logicalAddress": "%M1.0" },
+        { "name": "M_M01_Running", "dataTypeName": "Bool", "logicalAddress": "%M1.1" },
+        { "name": "M_M01_Interlock", "dataTypeName": "Bool", "logicalAddress": "%M1.2" },
+        { "name": "M_M01_Fault", "dataTypeName": "Bool", "logicalAddress": "%M1.3" },
+        { "name": "M_M01_FaultCode", "dataTypeName": "Int", "logicalAddress": "%MW4" }
+      ]
+    }
+  ],
+  "sclSourceFiles": [
+    "C:\\Users\\jose.mellid\\Desktop\\BIBLIOGRAFIA\\00. IA-go\\01.Repositorios\\TIA Portal\\TIA-Claude\\50-examples\\demo-cinta01\\sources\\FB_Motor.scl",
+    "C:\\Users\\jose.mellid\\Desktop\\BIBLIOGRAFIA\\00. IA-go\\01.Repositorios\\TIA Portal\\TIA-Claude\\50-examples\\demo-cinta01\\sources\\OB_Main.scl"
+  ],
+  "hmiTags": [
+    { "tagTableName": "HMI_Tags", "tagName": "StartPB", "plcTag": "DI_M01_Start", "address": "%M0.1" },
+    { "tagTableName": "HMI_Tags", "tagName": "StopPB", "plcTag": "DI_M01_Stop", "address": "%M0.2" },
+    { "tagTableName": "HMI_Tags", "tagName": "ResetPB", "plcTag": "DI_M01_Reset", "address": "%M0.3" },
+    { "tagTableName": "HMI_Tags", "tagName": "RunOut", "plcTag": "M_M01_Running", "address": "%M1.1" },
+    { "tagTableName": "HMI_Tags", "tagName": "FaultOut", "plcTag": "M_M01_Fault", "address": "%M1.3" },
+    { "tagTableName": "HMI_Tags", "tagName": "InterlockOut", "plcTag": "M_M01_Interlock", "address": "%M1.2" },
+    { "tagTableName": "HMI_Tags", "tagName": "EStopOut", "plcTag": "DI_ES01_Ok", "address": "%M0.0" }
+  ],
+  "compile": true,
+  "save": true
+}

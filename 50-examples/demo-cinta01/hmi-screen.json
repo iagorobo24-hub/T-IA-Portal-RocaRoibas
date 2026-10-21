@@ -1,0 +1,28 @@
+{
+  "_comment": "Pantalla de operacion de la cinta DEMO-Cinta01. El proyecto lo crea 50-examples/demo-cinta01/specs/scaffold.json; esta pantalla y sus bindings los aplica 30-tools/scripts/Invoke-TiaHmiScreenFromJson.ps1. Los tagName de aqui son tags HMI (tabla HMI_Tags) y cada uno esta ligado a su tag PLC en el spec.",
+  "hmiSoftwarePath": "HMI_RT_1",
+  "screenName": "Main",
+  "width": 1280,
+  "height": 720,
+  "items": [
+    { "name": "TXT_Title", "type": "Text", "left": 40, "top": 40, "width": 700, "height": 60, "text": "Cinta DEMO-Cinta01 - Motor M01" },
+    { "name": "BTN_Start", "type": "Button", "left": 40, "top": 200, "width": 160, "height": 70, "text": "Marcha" },
+    { "name": "BTN_Stop", "type": "Button", "left": 220, "top": 200, "width": 160, "height": 70, "text": "Paro" },
+    { "name": "BTN_Reset", "type": "Button", "left": 400, "top": 200, "width": 160, "height": 70, "text": "Reset" },
+    { "name": "LMP_Run", "type": "Rectangle", "left": 40, "top": 320, "width": 140, "height": 90 },
+    { "name": "LMP_Fault", "type": "Rectangle", "left": 200, "top": 320, "width": 140, "height": 90 },
+    { "name": "LMP_Interlock", "type": "Rectangle", "left": 360, "top": 320, "width": 140, "height": 90 },
+    { "name": "LMP_EStop", "type": "Rectangle", "left": 520, "top": 320, "width": 140, "height": 90 }
+  ],
+  "buttonActions": [
+    { "buttonName": "BTN_Start", "eventType": "Down", "actionKind": "set-bit", "targetTag": "StartPB" },
+    { "buttonName": "BTN_Stop", "eventType": "Down", "actionKind": "set-bit", "targetTag": "StopPB" },
+    { "buttonName": "BTN_Reset", "eventType": "Down", "actionKind": "set-bit", "targetTag": "ResetPB" }
+  ],
+  "tagDynamizations": [
+    { "itemName": "LMP_Run", "propertyName": "BackColor", "tagName": "RunOut", "dataType": "Bool" },
+    { "itemName": "LMP_Fault", "propertyName": "BackColor", "tagName": "FaultOut", "dataType": "Bool" },
+    { "itemName": "LMP_Interlock", "propertyName": "BackColor", "tagName": "InterlockOut", "dataType": "Bool" },
+    { "itemName": "LMP_EStop", "propertyName": "BackColor", "tagName": "EStopOut", "dataType": "Bool" }
+  ]
+}

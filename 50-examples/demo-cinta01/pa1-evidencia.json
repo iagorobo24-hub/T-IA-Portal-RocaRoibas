@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-21",
+  "goal": "PA-1: crear el proyecto DEMO-Cinta01 desde una frase y responder una pregunta de trazabilidad sobre un proyecto existente",
+  "environment": {
+    "engineering": "TIA Portal V20 build 2000.0.9501.1",
+    "plc": "S7-1510-1 PN, 6ES7 513-1AM03-0AB0 (creado por el scaffold con plcMlfb explicito)",
+    "hmi": "WinCC Unified PC Runtime, 6AV2123-3GB32-0AW0",
+    "harness": "TIA-Claude, tia-create MCP 2.7.2 perfil full, PowerShell 7.6.7"
+  },
+  "deliverables": [
+    {
+      "id": 1,
+      "requirement": "40-projects/DEMO-Cinta01/tia/DEMO-Cinta01.ap20 que abre en TIA V20",
+      "status": "verified",
+      "evidence": "El scaffold lo creo y se abrio y cerro con OpenProject y AttachToOpenProject en varias sesiones. TIA crea el proyecto en una subcarpeta con su nombre: la ruta real es 40-projects/DEMO-Cinta01/tia/DEMO-Cinta01/DEMO-Cinta01.ap20. Compilacion software 0/0 y hardware sin errores.",
+      "path": "40-projects/DEMO-Cinta01/tia/DEMO-Cinta01/DEMO-Cinta01.ap20"
+    },
+    {
+      "id": 2,
+      "requirement": "Compilacion con 0 errores, con el informe del compilador guardado en ops/",
+      "status": "verified",
+      "evidence": "CompileSoftware: state=Success, errorCount=0, warningCount=0. Informe real en 40-projects/DEMO-Cinta01/ops/compile-report.json y .txt, con los mensajes del compilador.",
+      "path": "40-projects/DEMO-Cinta01/ops/compile-report.json"
+    },
+    {
+      "id": 3,
+      "requirement": "Nomenclatura y estructura conformes a 20-standards/naming.md, verificable con check-standards.ps1 saliendo con codigo 0",
+      "status": "verified",
+      "evidence": "Check-TiaStandards.ps1 devolvio codigo de salida 0 (success=true, 0 hallazgos bloqueantes, 3 bloques, 8 ficheros de export). Los dos avisos no bloqueantes son BLOCK_COMMENT_UNVERIFIED del DB de instancia y del OB1, porque el verificador solo pudo verificar el comentario del FB desde su export a nivel de bloque.",
+      "path": "40-projects/DEMO-Cinta01/ops/standards.json"
+    },
+    {
+      "id": 4,
+      "requirement": "40-projects/DEMO-Cinta01/src/ con el export textual y git diff legible",
+      "status": "verified",
+      "evidence": "src/ contiene el export real del proyecto (Program blocks/FB_Motor.xml, iDB_M01.xml, Main.xml), la tabla de tags exportada (tags/Cinta_Signals.xml), las fuentes SCL que se importaron (sources/) y la definicion de la pantalla HMI. El espejo versionado esta en 50-examples/demo-cinta01/, que es lo que da el diff legible: 40-projects/ esta excluido de git por ADR-005 (frontera publica), asi que el proyecto NO se versiona.",
+      "path": "50-examples/demo-cinta01/src/"
+    },
+    {
+      "id": 5,
+      "requirement": "README.md del proyecto generado desde la plantilla, relleno",
+      "status": "verified",
+      "evidence": "40-projects/DEMO-Cinta01/README.md con la plantilla de 20-standards/estructura-proyecto.md: estado, TIA/CPU/HMI, que hace, arquitectura, senales, estado del trabajo, decisiones y cosas raras, pendiente y como se reproduce. Copia versionada en 50-examples/demo-cinta01/README.md.",
+      "path": "50-examples/demo-cinta01/README.md"
+    }
+  ],
+  "hmi": {
+    "status": "verified",
+    "hardware": "HMI_RT_1 (6AV2123-3GB32-0AW0) con conexion HMI_Connection_1 a PLC_1",
+    "tags": "7 tags en la tabla HMI_Tags con binding simbolico y direccion absoluta: StartPB, StopPB, ResetPB, RunOut, FaultOut, InterlockOut, EStopOut",
+    "screen": "Main 1280x720 con 8 controles (rotulo, 3 botones, 4 lamparas) y sus bindings",
+    "buttonActions": "HMIRuntime.Tags.SysFct.SetBitInTag(\"StartPB\", 0) y equivalentes para StopPB y ResetPB, con evento Down",
+    "tagDynamizations": "BackColor ligado a RunOut, FaultOut, InterlockOut y EStopOut"
+  },
+  "partB": {
+    "question": "Onde se usa la tag Motor_Marcha y que bloques la escriben?",
+    "answer": "La tag Motor_Marcha NO existe en el proyecto. El inventario real son 10 tags en la tabla Cinta_Signals, y ninguna se llama asi. Hay una razon de fondo: 20-standards/naming.md la cita expresamente como el CONTRAEJEMPLO de su propia regla ('identificadores en ingles: Motor_Start lo entiende cualquiera; Motor_Marcha obliga al siguiente a traducir'), cerrada en ADR-008. La tag equivalente es DI_M01_Start (Cinta_Signals/DI_M01_Start, %M0.1). Quien la escribe: ningun bloque del PLC; la escribe la HMI, el boton BTN_Start de la pantalla Main ejecuta SetBitInTag(\"StartPB\", 0) sobre el tag HMI StartPB, ligado por binding simbolico a DI_M01_Start. Quien la lee: el OB ciclico Main (OB1, SCL), en la llamada al DB de instancia iDB_M01 del FB_Motor: CmdStart := \"DI_M01_Start\".",
+    "verifiedBy": "30-tools/scripts/Invoke-TiaTagUsage.ps1 (answer with real cross references)",
+    "crossReferences": [
+      { "file": "Program blocks/Main.xml", "reference": "<Component Name=\"DI_M01_Start\" UId=\"34\">" },
+      { "file": "sources/OB_Main.scl", "reference": "\"iDB_M01\"(CmdStart := \"DI_M01_Start\"," },
+      { "file": "tags/Cinta_Signals.xml", "reference": "<Name>DI_M01_Start</Name>" }
+    ],
+    "toolLimit": "Las herramientas de analisis estatico de TIA NO resuelven esta referencia: TraceTagCause devuelve writeSites y readSites vacios para DI_M01_Start y para DO_M01_Run, DescribeBlockLogic no decodifica el SCL del OB1 con una llamada a un FB, y GetCrossReferences responde 'Cross reference service not available for tag'. Las referencias de arriba salen del export textual. Es un limite del analizador, no una ausencia de uso, y queda documentado en lugar de:callado."
+  },
+  "findings": [
+    "TIA no abre un proyecto cuya carpeta supere 143 caracteres: 'The specified path ... (156 character) is too long. A maximum of 143 characters is allowed'. En modo aislado el error se come y solo queda 'Failed to open project'. La copia de inspeccion va ahora a una ruta corta bajo %TEMP%.",
+    "El OB ciclico lo nombra TIA: una fuente externa con ORGANIZATION_BLOCK \"OB_Main\" falla con 'Type conflict: Object \"OB_Main\" cannot be overwritten'. El nombre correcto es \"Main\".",
+    "El DB de instancia se declara en la propia fuente SCL con DATA_BLOCK. Sin esa declaracion, la llamada se resuelve como un tag y la compilacion da 14 errores: 'Tag \"iDB_M01\" not defined' y 'The formal parameter ... is invalid' para cada entrada.",
+    "El modo aislado de tia-inspect no abre proyectos con WinCC Unified: se resuelve con tia-create en modo no aislado, sobre una copia desechable y con el session guard comprobando que no hay ninguna TIA visible con un proyecto abierto."
+  ],
+  "scope": "PA-1 pide el proyecto y la pregunta de trazabilidad. La descarga y el plan funcional en CPU virtual NO son parte de PA-1 y no se han hecho sobre este proyecto: los bloques si estan verificados en ejecucion, pero en otro proyecto (fb-alarm-latch y fc-escalado).",
+  "notClaimed": [
+    "Que el proyecto DEMO-Cinta01 se haya descargado o ejecutado en una CPU virtual.",
+    "Que la HMI se haya visto en un runtime: la pantalla esta creada y enlazada en el proyecto, pero no se ha arrancado WinCC Unified Runtime.",
+    "Que la simulacion HMI esté verificada en runtime: sigue siendo el hueco de R13, R14 y R20."
+  ]
+}
