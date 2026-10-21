@@ -35,26 +35,52 @@ Write-Output "adapter: $readyText"
 
 $results = @()
 $failed = $null
-for ($i = 0; $i -lt $steps.Count; $i++) {
-    $step = $steps[$i]
-    $proc.StandardInput.WriteLine([string]$step.command)
-    $proc.StandardInput.Flush()
-    $read = $proc.StandardOutput.ReadLineAsync()
-    if (-not $read.Wait(60000)) { $failed = "timeout step $i ($($step.command))"; break }
-    $text = $read.Result
-    $response = $null
-    try { $response = $text | ConvertFrom-Json } catch { $failed = "invalid json at step $i ($($step.command)): $text"; break }
-    if ([string]$response.status -ne 'ok') { $failed = "status!=ok step $i ($($step.command)): $text"; break }
-    foreach ($property in @($step.expect.PSObject.Properties)) {
-        $actual = $response.PSObject.Properties[$property.Name]
-        if ($null -eq $actual -or [string]$actual.Value -cne [string]$property.Value) {
-            $failed = "expect mismatch at step $i ($($step.command)): $($property.Name) expected '$($property.Value)' got '$(if($actual){$actual.Value}else{'<ausente>'})'"
-            break
+try {
+    for ($i = 0; $i -lt $steps.Count; $i++) {
+        $step = $steps[$i]
+        $proc.StandardInput.WriteLine([string]$step.command)
+        $proc.StandardInput.Flush()
+        $read = $proc.StandardOutput.ReadLineAsync()
+        if (-not $read.Wait(60000)) { $failed = "timeout step $i ($($step.command))"; break }
+        $text = $read.Result
+        $response = $null
+        try { $response = $text | ConvertFrom-Json } catch { $failed = "invalid json at step $i ($($step.command)): $text"; break }
+        if ([string]$response.status -ne 'ok') { $failed = "status!=ok step $i ($($step.command)): $text"; break }
+        # Un paso sin 'expect' no tiene nada que comparar. Sin esta guarda, el
+        # indexado con un nombre nulo revienta con 'el indice de la matriz esta
+        # elevado a NULL'.
+        $expectProperties = if ($null -eq $step.expect) { @() } else { @($step.expect.PSObject.Properties) }
+        foreach ($property in $expectProperties) {
+            # 'tolerance' es una instruccion para el comparador, no una propiedad de la respuesta.
+            if ($property.Name -eq 'tolerance') { continue }
+            $actual = $response.PSObject.Properties[$property.Name]
+            if ($null -eq $actual -or [string]$actual.Value -cne [string]$property.Value) {
+                # Los valores numericos se comparan con tolerancia: el adaptador serializa los
+                # REAL con 6 digitos significativos, asi que la igualdad textual no es fiable.
+                $expectedIsNumeric = $property.Value -is [double] -or $property.Value -is [int] -or $property.Value -is [long] -or $property.Value -is [decimal]
+                $actualIsNumeric = $null -ne $actual -and ($actual.Value -is [double] -or $actual.Value -is [int] -or $actual.Value -is [long] -or $actual.Value -is [decimal])
+                if (-not ($expectedIsNumeric -and $actualIsNumeric)) {
+                    $failed = "expect mismatch at step $i ($($step.command)): $($property.Name) expected '$($property.Value)' got '$(if($actual){$actual.Value}else{'<ausente>'})'"
+                    break
+                }
+                $tolerance = 0.0001
+                $toleranceProperty = $step.expect.PSObject.Properties['tolerance']
+                if ($toleranceProperty) { $tolerance = [double]$toleranceProperty.Value }
+                $difference = [Math]::Abs([double]$actual.Value - [double]$property.Value)
+                if ($difference -gt $tolerance) {
+                    $failed = "expect mismatch at step $i ($($step.command)): $($property.Name) expected '$($property.Value)' +/- $tolerance got '$($actual.Value)' (diff $difference)"
+                    break
+                }
+            }
         }
+        $results += [ordered]@{ index = $i; command = [string]$step.command; response = $response }
+        if ($failed) { break }
+        if ($step.delayMs) { Start-Sleep -Milliseconds ([int]$step.delayMs) }
     }
-    $results += [ordered]@{ index = $i; command = [string]$step.command; response = $response }
-    if ($failed) { break }
-    if ($step.delayMs) { Start-Sleep -Milliseconds ([int]$step.delayMs) }
+}
+catch {
+    $failed = "exception: " + $_.Exception.Message
+    Write-Output ("plan aborted: " + $failed)
 }
 
 try { $proc.StandardInput.WriteLine('stop'); $proc.StandardInput.Flush() } catch { }
