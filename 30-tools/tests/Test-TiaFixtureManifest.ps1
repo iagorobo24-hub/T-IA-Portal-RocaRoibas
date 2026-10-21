@@ -1,9 +1,14 @@
 [CmdletBinding()]
 param(
-    [string]$WorkspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+    [string]$WorkspaceRoot
 )
 
 $ErrorActionPreference = 'Stop'
+# El valor por defecto se resuelve en el cuerpo, no en el param: $PSScriptRoot no esta
+# disponible en el bloque param en Windows PowerShell 5.1.
+if ([string]::IsNullOrWhiteSpace($WorkspaceRoot)) {
+    $WorkspaceRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+}
 $workspace = [IO.Path]::GetFullPath($WorkspaceRoot)
 $script = Join-Path $workspace '30-tools\scripts\New-TiaFixtureManifest.ps1'
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('tia-fixture-manifest-test-' + [guid]::NewGuid().ToString('N'))
@@ -53,8 +58,10 @@ try {
     $invalidManifestPath = Join-Path $mismatchRoot '.tia-agent-fixture.json'
     [IO.File]::WriteAllText($invalidManifestPath, '{"schemaVersion":1,"disposable":true}')
     $sequenceScript = Join-Path $workspace '30-tools\scripts\Invoke-McpToolSequence.ps1'
-    $pwshPath = Join-Path $PSHOME 'pwsh.exe'
-    if (-not (Test-Path -LiteralPath $pwshPath -PathType Leaf)) { throw "PowerShell executable is missing: $pwshPath" }
+    # El ejecutable tiene que ser el PowerShell que esta ejecutando el test, no un pwsh.exe
+    # supuesto: asi el test funciona igual con PowerShell 7 y con Windows PowerShell 5.1.
+    $pwshPath = (Get-Process -Id $PID).Path
+    if ([string]::IsNullOrWhiteSpace($pwshPath) -or -not (Test-Path -LiteralPath $pwshPath -PathType Leaf)) { throw "PowerShell executable is missing: $pwshPath" }
     $sequenceBlocked = $false
     try {
         & $sequenceScript -ExecutablePath $pwshPath -Arguments "--isolated --fixture-root `"$mismatchRoot`"" -Calls @(@{ name='Doctor'; args=@{} }) -TimeoutSeconds 1 | Out-Null
