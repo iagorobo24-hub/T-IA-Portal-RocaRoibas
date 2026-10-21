@@ -597,6 +597,47 @@ int RunPlanOnRegisteredInstance(ISimulationRuntimeManager* manager, int argc, wc
     PrintJsonString(GetNameOfCommunicationInterface(instance->GetCommunicationInterface()));
     std::wcout << L",\"operatingState\":";
     PrintJsonString(GetNameOfOperatingState(instance->GetOperatingState()));
+
+    // The symbolic API resolves names against a shared-memory tag list. That list is filled by
+    // UpdateTagList() reading the VPLC, and it is stale right after a program download, which
+    // is why a symbolic read answers SREC_NOT_UP_TO_DATE (-47) even though the CPU runs the
+    // downloaded program. Refresh it before the first symbolic read.
+    ETagListDetails tagListDetails = SRTLD_NONE;
+    bool hmiVisibleOnly = false;
+    const ERuntimeErrorCode statusCode = instance->GetTagListStatus(&tagListDetails, &hmiVisibleOnly);
+    const ERuntimeErrorCode updateCode = instance->UpdateTagList();
+    std::wcout << L",\"tagListStatus\":";
+    PrintCode(L"statusCode", statusCode);
+    std::wcout << L",\"tagListUpdate\":";
+    PrintCode(L"updateCode", updateCode);
+    std::wcout << L",\"tagListNeedsUpdate\":";
+    std::wcout << (tagListDetails == SRTLD_NONE ? L"true" : L"false");
+
+    const UINT32 tagCount = instance->GetTagInfoCount();
+    std::wcout << L",\"tagCount\":" << tagCount;
+    if (tagCount > 0)
+    {
+        std::vector<STagInfo> tagInfos(tagCount);
+        UINT32 written = 0;
+        const ERuntimeErrorCode listCode = instance->GetTagInfos(tagCount, tagInfos.data(), &written);
+        std::wcout << L",\"tagListCode\":";
+        PrintCode(L"listCode", listCode);
+        std::wcout << L",\"tags\":[";
+        const UINT32 reportLimit = written < 12 ? written : 12;
+        for (UINT32 index = 0; index < reportLimit; ++index)
+        {
+            if (index > 0) { std::wcout << L","; }
+            std::wcout << L"\"";
+            for (const wchar_t character : tagInfos[index].Name)
+            {
+                if (character == L'\0') { break; }
+                if (character == L'"' || character == L'\\') { std::wcout << L'\\'; }
+                std::wcout << character;
+            }
+            std::wcout << L"\"";
+        }
+        std::wcout << L"]";
+    }
     std::wcout << L"}\n";
     std::wcout.flush();
 
