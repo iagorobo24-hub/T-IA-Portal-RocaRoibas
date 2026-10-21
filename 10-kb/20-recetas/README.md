@@ -1,103 +1,105 @@
-# Recetas — runbooks accionables
+﻿# Recetas â€” runbooks accionables
 
-> Cada receta responde a *"cómo hago X"* con la secuencia exacta de llamadas, qué verificar, y
-> qué hacer cuando falla. No son tutoriales: son procedimientos.
+> Cada receta responde a *"cÃ³mo hago X"* con la secuencia exacta de llamadas, quÃ© verificar, y
+> quÃ© hacer cuando falla. No son tutoriales: son procedimientos.
 
 ## Formato de una receta
 
 ```
 Objetivo        una frase
-Precondiciones  qué tiene que ser cierto antes
+Precondiciones  quÃ© tiene que ser cierto antes
 Servidor        tia-inspect | tia-create
-Secuencia       las llamadas, en orden, con los parámetros que importan
-Verificación    cómo sabes que salió bien
+Secuencia       las llamadas, en orden, con los parÃ¡metros que importan
+VerificaciÃ³n    cÃ³mo sabes que saliÃ³ bien
 Si falla        los modos de fallo conocidos y su arreglo
 ```
 
-## Índice
+## Ãndice
 
-### Tanda 1 — leer y entender ✅ *sirve desde el día 1, no depende de los estándares*
+### Tanda 1 â€” leer y entender âœ… *sirve desde el dÃ­a 1, no depende de los estÃ¡ndares*
 
 | # | Receta | Estado |
 |---|---|---|
-| [R01](R01-inventariar-proyecto.md) | Inventariar un proyecto que no conoces | ✅ |
-| [R02](R02-donde-se-usa.md) | Dónde se usa una tag, qué la escribe, qué la lee | ✅ |
-| [R03](R03-exportar-a-git.md) | Exportar un proyecto a texto y meterlo en git | ✅ |
-| [R04](R04-entender-un-bloque.md) | Entender qué hace un bloque | ✅ |
+| [R01](R01-inventariar-proyecto.md) | Inventariar un proyecto que no conoces | âœ… |
+| [R02](R02-donde-se-usa.md) | DÃ³nde se usa una tag, quÃ© la escribe, quÃ© la lee | âœ… |
+| [R03](R03-exportar-a-git.md) | Exportar un proyecto a texto y meterlo en git | âœ… |
+| [R04](R04-entender-un-bloque.md) | Entender quÃ© hace un bloque | âœ… |
 
-> ✅ **Las cuatro ejecutadas contra proyectos reales el 2026-09-14** (`npatel-basement-light`,
+> âœ… **Las cuatro ejecutadas contra proyectos reales el 2026-09-14** (`npatel-basement-light`,
 > `npatel-sorting-plant`, y los 7 en lote para R03).
 >
-> La pasada real corrigió **cuatro errores** de la versión escrita a partir del código:
+> La pasada real corrigiÃ³ **cuatro errores** de la versiÃ³n escrita a partir del cÃ³digo:
 >
-> | Decía | Es |
+> | DecÃ­a | Es |
 > |---|---|
 > | `OpenProject(projectPath:)` | **`path`** |
-> | "Openness no migra proyectos, hay que hacerlo a mano" | **Migra solo**, vía `OpenWithUpgrade` |
+> | "Openness no migra proyectos, hay que hacerlo a mano" | **Migra solo**, vÃ­a `OpenWithUpgrade` |
 > | "Empieza por `GetBlockInterface`" | Solo vale para **bloques de datos**; para FB/FC, `GetBlockSource` |
 > | "El LAD sale como XML ilegible" | El LAD en `.s7dcl` **se lee perfectamente** |
 >
-> Los parámetros verificados están en
+> Los parÃ¡metros verificados estÃ¡n en
 > [`90-referencia/parametros-tia-inspect.md`](../90-referencia/parametros-tia-inspect.md).
 
-### Tanda 2 — esqueleto y tags
+### Tanda 2 â€” esqueleto y tags
 
 | # | Receta | Estado |
 |---|---|---|
-| [R05](R05-proyecto-nuevo.md) | Proyecto nuevo desde cero | 📄 documentada; scaffold V20 verificado en fixture |
-| [R06](R06-tags-io.md) | De una lista de E/S a tablas de tags importadas | 📄 procedimiento documentado |
-| [R07](R07-udt-db.md) | UDTs y bloques de datos | 📄 procedimiento documentado |
+| [R05](R05-proyecto-nuevo.md) | Proyecto nuevo desde cero | ðŸ“„ documentada; scaffold V20 verificado en fixture |
+| [R06](R06-tags-io.md) | De una lista de E/S a tablas de tags importadas | ðŸ“„ procedimiento documentado |
+| [R07](R07-udt-db.md) | UDTs y bloques de datos | ðŸ“„ procedimiento documentado |
 
-### Tanda 3 — lógica ✅
+### Tanda 3 â€” lÃ³gica âœ…
 
 | # | Receta | Bloque | Estado |
 |---|---|---|---|
-| [R08](R08-bloque-motor.md) | Bloque de motor | [`FB_Motor`](../../60-library/blocks/FB_Motor.scl) | ✅ |
-| [R09](R09-bloque-valvula.md) | Bloque de válvula | [`FB_ValveOnOff`](../../60-library/blocks/FB_ValveOnOff.scl) | ✅ |
-| [R10](R10-secuencia.md) | Secuencia / máquina de estados | [`FB_SequenceTemplate`](../../60-library/blocks/FB_SequenceTemplate.scl) | ✅ |
-| [R11](R11-modos-manual-auto.md) | Modos manual / automático | [`FB_ModeManager`](../../60-library/blocks/FB_ModeManager.scl) | ✅ |
-| [R12](R12-alarmas.md) | Gestión de alarmas | [`FB_AlarmLatch`](../../60-library/blocks/FB_AlarmLatch.scl) | ✅ |
+| [R08](R08-bloque-motor.md) | Bloque de motor | [`FB_Motor`](../../60-library/blocks/FB_Motor.scl) | âœ… |
+| [R09](R09-bloque-valvula.md) | Bloque de vÃ¡lvula | [`FB_ValveOnOff`](../../60-library/blocks/FB_ValveOnOff.scl) | âœ… |
+| [R10](R10-secuencia.md) | Secuencia / mÃ¡quina de estados | [`FB_SequenceTemplate`](../../60-library/blocks/FB_SequenceTemplate.scl) | âœ… |
+| [R11](R11-modos-manual-auto.md) | Modos manual / automÃ¡tico | [`FB_ModeManager`](../../60-library/blocks/FB_ModeManager.scl) | âœ… |
+| [R12](R12-alarmas.md) | GestiÃ³n de alarmas | [`FB_AlarmLatch`](../../60-library/blocks/FB_AlarmLatch.scl) | âœ… |
 
-> ✅ **Los cinco bloques compilan en TIA V20 con 0 errores y 0 advertencias.** Se importaron de
-> verdad en un proyecto y se compilaron; el código publicado es el que pasó la prueba.
+> âœ… **Los cinco bloques compilan en TIA V20 con 0 errores y 0 advertencias.** Se importaron de
+> verdad en un proyecto y se compilaron; el cÃ³digo publicado es el que pasÃ³ la prueba.
 >
-> ⚠️ **Compilar no es funcionar.** Ninguno se ha ejecutado en PLCSIM todavía. Cada receta lleva
+> âš ï¸ **Compilar no es funcionar.** Ninguno se ha ejecutado en PLCSIM todavÃ­a. Cada receta lleva
 > su tabla de casos a probar, y esa parte no se delega
 > ([`definition-of-done.md`](../../20-standards/definition-of-done.md) nivel 4).
 
-### Tanda 4 — HMI y documentación
+### Tanda 4 â€” HMI y documentaciÃ³n
 
 | # | Receta | Estado |
 |---|---|---|
-| [R13](R13-pantalla-hmi.md) | Pantalla WinCC Unified | 📄 documentada, no verificada |
-| [R14](R14-binding-hmi-plc.md) | Binding de tags HMI ↔ PLC | 📄 documentada, no verificada |
-| [R15](R15-lista-es.md) | Generar la lista de E/S | ✅ herramienta verificada en fixture y contra exportación XML real V20; requiere tags detalladas |
-| [R16](R16-descripcion-funcional.md) | Generar la descripción funcional | ✅ generada contra ejemplo real; no sustituye validación funcional |
-| [R17](R17-aceptacion-plcsim.md) | Aceptación conductual en PLCSIM Advanced | 🟡 runner y protocolo verificados; comportamiento real pendiente |
+| [R13](R13-pantalla-hmi.md) | Pantalla WinCC Unified | ðŸ“„ documentada, no verificada |
+| [R14](R14-binding-hmi-plc.md) | Binding de tags HMI â†” PLC | ðŸ“„ documentada, no verificada |
+| [R15](R15-lista-es.md) | Generar la lista de E/S | âœ… herramienta verificada en fixture y contra exportaciÃ³n XML real V20; requiere tags detalladas |
+| [R16](R16-descripcion-funcional.md) | Generar la descripciÃ³n funcional | âœ… generada contra ejemplo real; no sustituye validaciÃ³n funcional |
+| [R17](R17-aceptacion-plcsim.md) | AceptaciÃ³n conductual en PLCSIM Advanced | ðŸŸ¡ runner y protocolo verificados; comportamiento real pendiente |
 
-### Tanda 5 — diagnóstico y aceptación por familia
-
-| # | Receta | Estado |
-|---|---|---|
-| [R18](R18-medidas-analogicas.md) | Medidas y señales analógicas | 📄 procedimiento documentado; requiere módulo/canal identificados y banco de prueba |
-| [R19](R19-diagnostico-comunicaciones.md) | Diagnóstico de comunicaciones | 📄 procedimiento documentado; handshake solo en endpoint aislado |
-| [R20](R20-aceptacion-hmi-por-modelo.md) | Aceptación HMI según modelo y Runtime | 📄 matriz documentada; Runtime/licencia local pendiente |
-| [R21](R21-preflight-offline-release.md) | Preflight de la suite offline de release | ✅ preflight ejecutable; paquete de golden fixtures externo aún bloqueado |
-
-### Tanda 6 — ciclos PLC offline aceptados
+### Tanda 5 â€” diagnÃ³stico y aceptaciÃ³n por familia
 
 | # | Receta | Estado |
 |---|---|---|
-| [R22](R22-tablas-watch.md) | Tabla Watch vacía: crear, exportar, compilar, guardar, borrar y leer | ✅ ciclo V20 verificado en fixture aislado; online/force excluidos |
-| [R23](R23-instance-db.md) | Instance DB de un FB estándar: crear, compilar, exportar, guardar, borrar y leer | ✅ ciclo V20 verificado con número explícito; `autoNumber=true`/DB0 bloqueado |
-| [R24](R24-tabla-tags-offline.md) | Tabla de tags PLC vacía: crear, exportar, compilar, guardar, borrar y leer | ✅ ciclo V20 verificado en fixture aislado; importación y tags Safety excluidos |
-| [R25](R25-grupo-bloques-offline.md) | Grupo vacío de bloques PLC: crear, borrar, compilar, guardar y leer | ✅ ciclo V20 verificado en fixture aislado; grupos con bloques excluidos |
-| [R26](R26-importar-tabla-tags.md) | Importar una tabla PLC vacía o con dos tags Bool estándar, compilar, guardar, leer y restaurar carpeta | ✅ `tia-create/full` V20; tabla vacía y dos tags no Safety verificados; Safety y hardware excluidos |
+| [R18](R18-medidas-analogicas.md) | Medidas y seÃ±ales analÃ³gicas | ðŸ“„ procedimiento documentado; requiere mÃ³dulo/canal identificados y banco de prueba |
+| [R19](R19-diagnostico-comunicaciones.md) | DiagnÃ³stico de comunicaciones | ðŸ“„ procedimiento documentado; handshake solo en endpoint aislado |
+| [R20](R20-aceptacion-hmi-por-modelo.md) | AceptaciÃ³n HMI segÃºn modelo y Runtime | ðŸ“„ matriz documentada; Runtime/licencia local pendiente |
+| [R21](R21-preflight-offline-release.md) | Preflight de la suite offline de release | âœ… preflight ejecutable; paquete de golden fixtures externo aÃºn bloqueado |
 
-El orden y su porqué están en [ADR-004](../../00-meta/decisiones/ADR-004-prioridades.md).
+### Tanda 6 â€” ciclos PLC offline aceptados
 
-## Dónde probar todo esto
+| # | Receta | Estado |
+|---|---|---|
+| [R22](R22-tablas-watch.md) | Tabla Watch vacÃ­a: crear, exportar, compilar, guardar, borrar y leer | âœ… ciclo V20 verificado en fixture aislado; online/force excluidos |
+| [R23](R23-instance-db.md) | Instance DB de un FB estÃ¡ndar: crear, compilar, exportar, guardar, borrar y leer | âœ… ciclo V20 verificado con nÃºmero explÃ­cito; `autoNumber=true`/DB0 bloqueado |
+| [R24](R24-tabla-tags-offline.md) | Tabla de tags PLC vacÃ­a: crear, exportar, compilar, guardar, borrar y leer | âœ… ciclo V20 verificado en fixture aislado; importaciÃ³n y tags Safety excluidos |
+| [R25](R25-grupo-bloques-offline.md) | Grupo vacÃ­o de bloques PLC: crear, borrar, compilar, guardar y leer | âœ… ciclo V20 verificado en fixture aislado; grupos con bloques excluidos |
+| [R26](R26-importar-tabla-tags.md) | Importar una tabla PLC vacÃ­a o con dos tags Bool estÃ¡ndar, compilar, guardar, leer y restaurar carpeta | âœ… `tia-create/full` V20; tabla vacÃ­a y dos tags no Safety verificados; Safety y hardware excluidos |
+| [R27](R27-automatizacion-ui-tia.md) | Automatizar la interfaz de TIA Portal: UIA donde TIA se expone, OCR de Windows donde no, entrada sintetica para el resto | ? motor 30-tools/tia-ui/Invoke-TiaUi.ps1 verificado abriendo un proyecto de principio a fin; el clic derecho sobre un item del arbol queda como clic humano |
+
+El orden y su porquÃ© estÃ¡n en [ADR-004](../../00-meta/decisiones/ADR-004-prioridades.md).
+
+## DÃ³nde probar todo esto
 
 En [`50-examples/`](../../50-examples/) hay **siete proyectos TIA reales** desempaquetados y
 listos. No son de nadie: si se rompen, no pasa nada. Empieza por
-`npatel-basement-light`, que es el más pequeño.
+`npatel-basement-light`, que es el mÃ¡s pequeÃ±o.
+
