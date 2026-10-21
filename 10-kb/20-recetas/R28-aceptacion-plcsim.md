@@ -68,6 +68,32 @@ Con `GoOffline`, `ImportPlcExternalSource`, `GenerateBlocksFromExternalSource`,
 `DeletePlcExternalSource` y `SaveProject` funcionan. `SaveProject` también exige estar offline
 (da *"The operation is not permitted in online mode"* si no).
 
+### Cerrar TIA: el diálogo de "cambios sin guardar" bloquea, y también bloquea la API
+
+Si TIA tiene cambios sin guardar, al cerrarlo aparece un diálogo de guardado. Mientras ese
+diálogo está abierto pasan dos cosas:
+
+- **`CloseMainWindow()` no sirve**: devuelve `True` y TIA no se cierra. Es el diálogo modal el
+  que retiene el cierre, no la ventana principal.
+- **La API tampoco puede adjuntarse**: `AttachToOpenProject` falla con
+  `Failed to attach to open project '<proyecto>'`, porque la sesión live no es accesible
+  mientras hay un modal.
+
+La forma correcta de cerrar sin intervención humana es dejar el proyecto guardado y cerrado
+por la API, en este orden:
+
+```powershell
+GoOffline(softwarePath)   # permite guardar
+SaveProject()             # 'Local project saved'
+CloseProject()            # libera el .ap20
+```
+
+Con eso, TIA vuelve a la pantalla de inicio sin diálogo y el `.ap20` queda libre para hashearlo.
+
+Si el diálogo aparece igualmente, hay que resolverlo por interfaz (botón *Guardar*): es el
+único punto de la cadena que hoy necesita una persona, y solo porque TIA lo pone en pantalla
+en vez de exponer la decisión por la API.
+
 ## Importar una fuente SCL y generar el bloque
 
 El camino que funciona, en tres llamadas:
