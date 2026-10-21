@@ -68,14 +68,14 @@ Un resumen honesto. La fuente más fiable es [`AGENTS.md`](AGENTS.md) y los info
 | `tia-inspect` V20: `Doctor`, perfil `read` y sesión aislada de lectura | ✅ | Verificado en la máquina del autor; 53 herramientas en la captura del 2026-09-24. |
 | `tia-create` V20 (perfil `lite`) | ✅ | Compilado y con prueba de humo MCP: 55 herramientas. |
 | Ciclos offline en fixture aislado (tablas Watch, Instance DB, tablas de tags, grupos de bloques, importar tabla de tags) | ✅ | Recetas [R22 a R26](10-kb/20-recetas/README.md). Solo ingeniería offline, sin CPU. |
-| Bloques SCL de `60-library/` | ✅ | Compilaron con 0 errores y 0 advertencias en TIA V20 (2026-09-14). |
+| Bloques SCL de `60-library/` | ✅ | Compilaron con 0 errores y 0 advertencias en TIA V20 (2026-09-14). `FC_Escalado` además se ha ejecutado en CPU virtual (2026-10-21). |
 | Los 7 ejemplos migrados a V20, inventariados y exportados a texto | ✅ | 5 de 7 exportados; hay hallazgos documentados. |
 | Análisis semántico de un snapshot y propuestas SCL | 🟡 | Hay preview y compuertas. La **aplicación** de propuestas está bloqueada por diseño mientras el perfil V20 no registre un importador acotado. |
-| Aceptación en PLCSIM Advanced | 🟡 | Runner y protocolo hechos (R17); **no hay descarga ni comportamiento aceptados**. |
+| Aceptación en PLCSIM Advanced | ✅ | **Verificada en ejecución** (2026-10-21): `FB_AlarmLatch` (65/65 pasos, 9 casos) y `FC_Escalado` (33/33, 9 casos), solo contra CPU virtual. Recetas [R28](10-kb/20-recetas/R28-aceptacion-plcsim.md) y [ADR-015](00-meta/decisiones/ADR-015-estado-real-2026-10-21.md). |
 | HMI (WinCC Unified/Comfort): recetas y aceptación | 🟡 | Documentado (R13, R14, R20), sin verificar en runtime. |
-| Aceptación global (`accepted`) | 🚧 | Sigue en `false`; la release offline está bloqueada a falta de un paquete de fixtures externo (R21). |
+| Aceptación global (`accepted`) | 🚧 | Sigue en `false`: PA-1 es más amplio que la aceptación de bloques (crear un proyecto completo con HMI y responder trazabilidad). Lo de bloques ya está: ver ADR-015. |
 | Compatibilidad con TIA Portal V21 | 🚧 | Receta de compilación escrita, sin verificar (ADR-014). |
-| CI en GitHub Actions | 🚧 | El último run conocido sobre `master` (2026-09-29) falló en 2 checks; revisa la pestaña Actions. |
+| CI en GitHub Actions | ✅ | En verde desde el 2026-10-21: 13 checks, 0 FAIL. Los dos tests que fallaban eran gates de seguridad que dejaron de ser comprobables. |
 
 ✅ probado · 🟡 implementado, pendiente de validar · 🚧 en construcción.
 
@@ -159,8 +159,8 @@ Detalle en [`capacidades-y-alcance-por-conexion.md`](10-kb/10-openness/capacidad
 
 ```
 AGENTS.md          contrato del agente (fuente de verdad); CLAUDE.md solo apunta a él
-00-meta/           análisis, arquitectura, plan, ADR 001-014 y evaluación del conocimiento
-10-kb/             base de conocimiento: Openness, recetas R01-R26, lenguajes, HMI, errores
+00-meta/           análisis, arquitectura, plan, ADR 001-015 y evaluación del conocimiento
+10-kb/             base de conocimiento: Openness, recetas R01-R29, lenguajes, HMI, errores
 20-standards/      nomenclatura, estilo SCL, estructura de proyecto, definición de terminado
 30-tools/          servidores MCP (build + parches), scripts PowerShell, PLCSIM, pruebas
 50-examples/       ejemplos de terceros con ficha (ver licencias más abajo)
@@ -172,7 +172,7 @@ docs/              planes y relevos de trabajo (docs/superpowers) y gráficos de
 ## Documentación
 
 - [`AGENTS.md`](AGENTS.md): contrato y reglas duras.
-- [`00-meta/decisiones/`](00-meta/decisiones/): decisiones de arquitectura (ADR-001 a ADR-014).
+- [`00-meta/decisiones/`](00-meta/decisiones/): decisiones de arquitectura (ADR-001 a ADR-015). El [ADR-015](00-meta/decisiones/ADR-015-estado-real-2026-10-21.md) es la foto real del workspace a 2026-10-21.
 - [`10-kb/20-recetas/`](10-kb/20-recetas/README.md): recetas con su estado.
 - [`SECURITY.md`](SECURITY.md): frontera pública; los proyectos de cliente, `.ap20`, contraseñas y material de seguridad funcional no van en este repositorio.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md).

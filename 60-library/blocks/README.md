@@ -3,6 +3,11 @@
 > ✅ **Los cinco compilan con 0 errores y 0 advertencias en TIA V20.**
 > Verificado el 2026-09-14 importándolos de verdad en un proyecto y compilando.
 > No son código "que debería funcionar".
+>
+> ✅ **`FC_Escalado` además se ha ejecutado en CPU virtual** (PLCSIM Advanced V7.0, 2026-10-21):
+> descarga 0/0 y 9 de 9 casos de escalado observados. Ver
+> [ADR-015](../../00-meta/decisiones/ADR-015-estado-real-2026-10-21.md) y
+> [R28](../../10-kb/20-recetas/R28-aceptacion-plcsim.md).
 
 | Bloque | Family | Qué hace | Receta |
 |---|---|---|---|
@@ -11,9 +16,15 @@
 | [`FB_SequenceTemplate`](FB_SequenceTemplate.scl) | `Sequence` | **Plantilla** de máquina de estados. Se copia y se rellena | [R10](../../10-kb/20-recetas/R10-secuencia.md) |
 | [`FB_ModeManager`](FB_ModeManager.scl) | `Modes` | Parado / Manual / Automático con precedencias | [R11](../../10-kb/20-recetas/R11-modos-manual-auto.md) |
 | [`FB_AlarmLatch`](FB_AlarmLatch.scl) | `Diag` | Una alarma: enclava, reconoce, distingue los 4 estados | [R12](../../10-kb/20-recetas/R12-alarmas.md) |
+| [`FC_Escalado`](FC_Escalado.scl) | `Scaling` | Escala lineal de un raw analógico (0-27648) a unidades de ingeniería | [R28](../../10-kb/20-recetas/R28-aceptacion-plcsim.md) |
 
 Todos en **`VERSION 0.1`**. Suben de versión cuando cambie su comportamiento
 ([N5 de `naming.md`](../../20-standards/naming.md)).
+
+> **Un `FUNCTION` (FC) de TIA V20 no admite `VERSION`, `AUTHOR` ni `FAMILY`**, y exige el tipo
+> de retorno en la cabecera (`FUNCTION "FC_Escalado" : Void`). El resultado sale por
+> `VAR_OUTPUT`. Sin ese tipo, el generador de fuentes falla en la línea siguiente y no dice por
+> qué.
 
 ---
 

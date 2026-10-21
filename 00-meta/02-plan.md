@@ -138,12 +138,24 @@ responde a *"¿dónde miro un ejemplo de comunicación OPC-UA?"* sin abrir TIA.
 
 ---
 
-### M6 — PA-1 `[PENDIENTE]`
+### M6 - PA-1 `[PENDIENTE — la parte de simulación ya está hecha]`
 
 Ejecutar la prueba de aceptación completa. Arreglar lo que salga. Documentar el resultado.
 
 **✅ Criterio de aceptación M6:** PA-1 pasa entera, en dos harnesses, dos veces seguidas desde
 sesión fría.
+
+**Lo que ya no bloquea (2026-10-21):** la descarga a CPU virtual y el plan funcional de
+comportamiento, que eran el muro. Verificados con `FB_AlarmLatch` (65/65 pasos, 9 casos) y
+`FC_Escalado` (33/33, 9 casos), solo contra CPU virtual. Receta
+[R28](../10-kb/20-recetas/R28-aceptacion-plcsim.md) y
+[ADR-015](decisiones/ADR-015-estado-real-2026-10-21.md).
+
+**Lo que le falta a PA-1:** crear el proyecto `DEMO-Cinta01` completo (S7-1500, control de
+motor con enclavamiento y seta, HMI Unified con pantalla de operación), compilarlo con 0 errores,
+exportarlo a `src/` y responder la pregunta de trazabilidad sobre el proyecto existente. La
+simulación HMI en runtime sigue sin verificar (R13, R14, R20), y la creación de proyecto con
+`ScaffoldProject` sigue sin ejecutarse de verdad.
 
 ---
 

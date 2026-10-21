@@ -23,7 +23,7 @@ industrial** y trabaje como lo haría el ingeniero responsable.
 
 ```
 1. Doctor              ← ¿entorno sano? Si no, para y dilo.
-2. Connect / Attach    ← usa Attach solo si el servidor lo expone y corresponde al proyecto objetivo. Si hay una ventana visible, identifica proyecto y versión con Computer Use nativo del harness antes de conectar. En Codex para Windows se usa el plugin `computer-use` (`node_repl` + `@oai/sky`); `mcp__cua_repl` es solo navegador y su `apps=[]` no mide aplicaciones Windows. Esta capacidad es propia del host/sesión, no se presupone en otros agentes. El `tia-inspect` instalado no expone Attach; no uses Connect a ciegas ni abras otra instancia.
+2. Connect / Attach    ← usa Attach solo si el servidor lo expone y corresponde al proyecto objetivo. El `tia-create --profile full` expone `AttachToOpenProject`, y es la vía verificada para descargar a PLCSIM y para trabajar sobre el proyecto abierto. Si hay una ventana visible, identifica proyecto y versión con Computer Use nativo del harness antes de conectar. En Codex para Windows se usa el plugin `computer-use` (`node_repl` + `@oai/sky`); `mcp__cua_repl` es solo navegador y su `apps=[]` no mide aplicaciones Windows. Esta capacidad es propia del host/sesión, no se presupone en otros agentes. El `tia-inspect` instalado no expone Attach; no uses Connect a ciegas ni abras otra instancia.
 3. GetProjectTree      ← de aquí salen las rutas REALES
 4. leer → cambio mínimo → compilar → guardar
 ```
@@ -121,7 +121,10 @@ para y pregunta.
 
 Si TIA Portal ya tiene abierto un proyecto que no es inequívocamente el objetivo, no lo cierres,
 no lo sustituyas y no lances una segunda instancia: intenta `Attach` únicamente si el servidor lo
-expone y corresponde al proyecto pedido. En el `tia-inspect` actual no existe `Attach`; usa una
+expone y corresponde al proyecto pedido. En el `tia-inspect` actual no existe `Attach`; **el
+`tia-create` con `--profile full` sí expone `AttachToOpenProject`**, y es la vía verificada
+para descargar a PLCSIM y para trabajar sobre el proyecto abierto. Si el servidor no lo expone,
+usa una
 interacción gráfica disponible para identificar la ventana o detente y pide al usuario que libere
 o confirme la instancia. Un `Connect` correcto sin proyecto no equivale a haber adjuntado la
 ventana visible. Un resultado de `dryRun` nunca se presenta como cambio aplicado.
@@ -238,16 +241,19 @@ tú incluido, dentro de tres meses — puede ver qué tocó el agente.
 
 Antes de simular, exige que TIA, PLCSIM Advanced y CPU/firmware estén en la matriz Siemens:
 Advanced V6.0 UPD1 cubre proyectos TIA V14–V19/FW V1.8–V3.1; TIA V20 requiere Advanced V7.0 o
-posterior con cobertura V20. En este host TIA V20 + Advanced V7.0.0.0/API 7.0 ya pasó la
-inicialización del API y el ciclo nativo desechable de registro/encendido/apagado, sin proyecto ni
-descarga. La compatibilidad general de versiones está cubierta; la aceptación de proyecto sigue
-bloqueada hasta validar una fixture limpia y obtener en una misma sesión las clasificaciones
-completas `GetBlocks.isFailsafe` y `GetTags.isSafety`, además del target simulado confirmado por TIA.
-No descargues por el mero hecho de que API, Softbus o `Go online` estén disponibles. La ruta
-predeterminada es Softbus local (`PLCSIM` en PG/PC) con una instancia virtual
-desechable administrada por el adaptador. El runtime debe confirmar `status=ready`, modelo
-estándar no F y `networkMode=SOFTBUS`; TIA debe identificar el destino como CPU simulada antes de
-la descarga, mostrando en la primera carga `CPU-1500 Simulation` y el aviso de CPU simulada. Antes
+posterior con cobertura V20. En este host TIA V20 + Advanced V7.0.0.0/API 7.0 tiene la
+compatibilidad de versiones **verificada en ejecución**: el 2026-10-21 se descargó y ejecutó
+sobre una CPU 1513-1 PN virtual (`6ES7 513-1AM03-0AB0`, FW V3.0) un bloque con 0 errores y 0
+avisos, y su comportamiento se comprobó con 9 casos observados. Ver
+[ADR-015](00-meta/decisiones/ADR-015-estado-real-2026-10-21.md). No descargues por el mero hecho
+de que API, Softbus o `Go online` estén disponibles. La ruta predeterminada sigue siendo Softbus
+local (`PLCSIM` en PG/PC) con una instancia virtual desechable administrada por el adaptador, y
+en este host se ha probado además la alternativa TCP/IP: el Control Panel estaba en *TCP/IP
+Single Adapter* y la descarga fue por `PN/IE / Siemens PLCSIM Virtual Ethernet Adapter`. El
+runtime debe confirmar `status=ready` y modelo estándar no F; el modo de red es el que tenga
+configurado el Control Panel (`SOFTBUS` o `TCPIP_SINGLE_ADAPTER`). TIA debe identificar el
+destino como CPU simulada antes de la descarga, mostrando en la primera carga
+`CPU-1500 Simulation` y el aviso de CPU simulada. Antes
 de compilar para PLCSIM Advanced, comprueba que la propiedad del proyecto **Support simulation
 during block compilation** está activada; V20 la deja desactivada por defecto. Si se activa,
 recompila y vuelve a verificar. Openness expone `Project.IsSimulationDuringBlockCompilationEnabled`,
@@ -302,6 +308,29 @@ preflight fail-closed de todos los bloques/tags antes de operar. Evidencia:
 seguir con la preparación de aceptación. La descarga sigue bloqueada hasta regenerar y validar la
 fixture libre, confirmar CPU simulada en TIA y terminar el plan funcional de R17.
 
+**Actualización 2026-10-21: la descarga y el plan funcional están hechos.** Los dos bloqueos que
+quedaban —la ruta PG/PC y la confirmación de CPU simulada— están resueltos y medidos. Ver
+[ADR-015](00-meta/decisiones/ADR-015-estado-real-2026-10-21.md) y
+[R28](10-kb/20-recetas/R28-aceptacion-plcsim.md). Lo que hay que saber para repetirlo:
+
+1. **La descarga solo funciona con la sesión adjunta al TIA abierto** (`AttachToOpenProject`).
+   En sesión headless aislada falla con `Connect to module PLC_1 failed` aunque la CPU virtual
+   esté viva y respondiendo por S7.
+2. **El Control Panel de PLCSIM Advanced necesita ~100 s** tras arrancarse: la primera descarga
+   falla y la segunda, ya asentada la OAM, funciona.
+3. **Antes de leer tags hay que llamar a `IInstance::UpdateTagList()`**; si no, la lectura
+   simbólica devuelve `-47` (`SREC_NOT_UP_TO_DATE`).
+4. **Los tags se nombran sin el prefijo de tabla** (`Active`, no `Agent_Signals.Active`); con el
+   nombre cualificado devuelven `-4` (`SREC_DOES_NOT_EXIST`).
+5. **Para escribir en el proyecto abierto, `GoOffline` primero**: con la vista live en modo
+   online, TIA rechaza la importación con *This function is not supported in online mode*.
+6. **Un `FUNCTION` (FC) de TIA V20** no admite `VERSION`, `AUTHOR` ni `FAMILY`, y exige el tipo
+   de retorno en la cabecera (`FUNCTION "X" : Void`). Sin él, el error salta en la línea
+   siguiente y no señala la causa.
+
+Verificado: `FB_AlarmLatch` (65/65 pasos, 9 casos) y `FC_Escalado` (33/33 pasos, 9 casos), ambos
+solo contra CPU virtual, con la respuesta real de `DownloadToPlc` guardada.
+
 ---
 
 ## 7. Cómo comunicarte con el usuario
@@ -335,11 +364,12 @@ fixture libre, confirmar CPU simulada en TIA y terminar el plan funcional de R17
 
 | | |
 |---|---|
-| TIA Portal | **V20** (V19 instalado pero no soportado — ADR-002; receta V21 preparada y sin verificar en esta máquina — ADR-014) |
-| PLCSIM | V19 |
-| PLCSIM Advanced | **V7.0.0.0**; API 7.0 / interfaz `0x00070000` inicializada; adaptador compilado y ciclo desechable de registro/PowerOn/PowerOff/limpieza verificados. Aún no hay descarga de proyecto ni aceptación de comportamiento. |
+| TIA Portal | **V20** build `2000.0.9501.1` (V19 instalado pero no soportado — ADR-002; receta V21 preparada y sin verificar en esta máquina — ADR-014) |
+| PLCSIM | V19 y V20 (clásico; **no es la causa** del bloqueo de descarga — H-19 refutada) |
+| PLCSIM Advanced | **V7.0.0.0**; API 7.0 / interfaz `0x00070000` inicializada; adaptador compilado y ciclo desechable de registro/PowerOn/PowerOff/limpieza verificados. **Desde el 2026-10-21 hay descarga y aceptación de comportamiento**: `FB_AlarmLatch` (65/65) y `FC_Escalado` (33/33), solo contra CPU virtual. Ver ADR-015. |
+| PowerShell | **7.6.7** instalado (winget). Antes solo había Windows PowerShell 5.1, y varios scripts y tests no eran ejecutables en este host; ver R29. |
 | `tia-inspect` | `30-tools/mcp/tia-inspect/bin/v20/TiaMcpServer.exe --tia-major-version 20` |
-| `tia-create` | **V20 2.7.2**, perfil `lite`, compilado y verificado localmente |
+| `tia-create` | **V20 2.7.2**, perfil `lite`, compilado y verificado localmente. El perfil `full` expone `AttachToOpenProject`, `ImportPlcExternalSource`, `GenerateBlocksFromExternalSource` y `GoOffline`, que son la vía verificada para descargar y para escribir en un proyecto abierto. |
 
 Si `Doctor` dice `User in 'Siemens TIA Openness' user group: False`, **nada va a funcionar**.
 Manda al usuario al README: hay que añadirse al grupo como administrador y cerrar sesión.
