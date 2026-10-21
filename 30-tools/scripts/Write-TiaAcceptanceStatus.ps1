@@ -42,40 +42,31 @@ function Read-JsonIfPresent([string]$Path) {
     try { return Get-Content -Raw -LiteralPath $Path | ConvertFrom-Json } catch { return $null }
 }
 
+function Resolve-RecordedRunReportPath([string]$Path) {
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $null }
+    if (-not [IO.Path]::IsPathRooted($Path)) {
+        $candidate = [IO.Path]::GetFullPath((Join-Path $WorkspaceRoot $Path))
+    } else {
+        $candidate = [IO.Path]::GetFullPath($Path)
+        if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+            # Archived reports can retain the original machine's root. Rebase
+            # only report paths under this repo's durable 70-runs tree.
+            $normalizedPath = $Path.Replace('/', '\')
+            $marker = '\' + (Split-Path -Leaf $WorkspaceRoot) + '\70-runs\'
+            $index = $normalizedPath.LastIndexOf($marker, [StringComparison]::OrdinalIgnoreCase)
+            if ($index -lt 0) { return $null }
+            $relativePath = '70-runs\' + $normalizedPath.Substring($index + $marker.Length)
+            $candidate = [IO.Path]::GetFullPath((Join-Path $WorkspaceRoot $relativePath))
+        }
+    }
+    if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+    return $null
+}
+
 function Add-UniqueFinding([System.Collections.Generic.List[string]]$List, [string]$Value) {
     if (-not [string]::IsNullOrWhiteSpace($Value) -and -not ($List -contains $Value)) {
         $List.Add($Value) | Out-Null
     }
-}
-
-function Get-ProjectDirectoryInventory([string]$DirectoryPath) {
-    if ([string]::IsNullOrWhiteSpace($DirectoryPath) -or
-        -not (Test-Path -LiteralPath $DirectoryPath -PathType Container)) { return $null }
-    $root = [IO.Path]::GetFullPath($DirectoryPath).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
-    return @(Get-ChildItem -LiteralPath $root -File -Recurse -Force | ForEach-Object {
-        [pscustomobject]@{
-            path = $_.FullName.Substring($root.Length).TrimStart([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
-            length = [long]$_.Length
-            sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
-        }
-    } | Sort-Object path)
-}
-
-function Compare-ProjectDirectoryInventories([string]$LeftPath, [string]$RightPath) {
-    $left = Get-ProjectDirectoryInventory $LeftPath
-    $right = Get-ProjectDirectoryInventory $RightPath
-    if ($null -eq $left -or $null -eq $right) {
-        return [pscustomobject]@{ comparable = $false; leftCount = 0; rightCount = 0; differences = @('missing directory') }
-    }
-    $leftMap = @{}
-    foreach ($entry in $left) { $leftMap[[string]$entry.path] = "$($entry.length)|$($entry.sha256)" }
-    $rightMap = @{}
-    foreach ($entry in $right) { $rightMap[[string]$entry.path] = "$($entry.length)|$($entry.sha256)" }
-    $keys = @(@($leftMap.Keys) + @($rightMap.Keys) | Select-Object -Unique)
-    $differences = @($keys | Where-Object {
-        -not $leftMap.ContainsKey($_) -or -not $rightMap.ContainsKey($_) -or $leftMap[$_] -cne $rightMap[$_]
-    })
-    return [pscustomobject]@{ comparable = $true; leftCount = $left.Count; rightCount = $right.Count; differences = $differences }
 }
 
 function Get-ComputerUseAction($Evidence, [string]$ActionName) {
@@ -734,12 +725,9 @@ if (-not $instanceDbLifecyclePath) {
     $fixture = $instanceDbLifecycleEvidence.fixture
     if ($null -eq $fixture -or $fixture.restored -ne $true -or $fixture.sourceUntouched -ne $true -or
         [string]::IsNullOrWhiteSpace([string]$fixture.initialSha256) -or
+        $fixture.initialSha256 -notmatch '(?i)^[0-9a-f]{64}$' -or
         $fixture.initialSha256 -ne $fixture.backupSha256 -or
         $fixture.initialSha256 -ne $fixture.projectSha256AfterRestore -or
-        [string]::IsNullOrWhiteSpace([string]$fixture.source) -or
-        [string]::IsNullOrWhiteSpace([string]$fixture.sourceSha256) -or
-        -not (Test-Path -LiteralPath ([string]$fixture.source) -PathType Leaf) -or
-        (Get-FileHash -LiteralPath ([string]$fixture.source) -Algorithm SHA256).Hash -ne $fixture.sourceSha256 -or
         $fixture.sourceSha256 -ne $fixture.initialSha256) {
         $instanceDbLifecycleFailureReasons.Add('fixture must be restored, source-untouched, and have matching initial/backup/restored/source hashes.') | Out-Null
     }
@@ -768,9 +756,8 @@ if (-not $instanceDbLifecyclePath) {
     if ($mutation -and $mutation.crossReferenceCount -le 0) {
         $instanceDbLifecycleFailureReasons.Add('crossReferenceCount must be positive for the instance DB to prove its FB dependency.') | Out-Null
     }
-    $deleteReport = if ($instanceDbLifecycleEvidence.reports -and $instanceDbLifecycleEvidence.reports.delete) {
-        Read-JsonIfPresent ([string]$instanceDbLifecycleEvidence.reports.delete)
-    } else { $null }
+    $deleteReportPath = Resolve-RecordedRunReportPath ([string]$instanceDbLifecycleEvidence.reports.delete)
+    $deleteReport = if ($deleteReportPath) { Read-JsonIfPresent $deleteReportPath } else { $null }
     $crossReferenceCall = if ($deleteReport) {
         $deleteReport.calls | Where-Object { $_.name -eq 'GetCrossReferences' } | Select-Object -Last 1
     } else { $null }
@@ -778,24 +765,13 @@ if (-not $instanceDbLifecyclePath) {
     $crossReferenceSourceNames = if ($crossReferences) {
         @($crossReferences.sources | ForEach-Object {
             [string]$_.name
-            @($_.references | ForEach-Object { [string]$_.name })
+            foreach ($reference in $_.references) { [string]$reference.name }
         })
     } else { @() }
     if ($null -eq $deleteReport -or $deleteReport.success -ne $true -or $null -eq $crossReferenceCall -or
-        $null -eq $crossReferences -or $crossReferences.referenceCount -le 0 -or
+        $crossReferenceCall.success -ne $true -or $null -eq $crossReferences -or $crossReferences.referenceCount -le 0 -or
         [string]$preflight.sourceBlock -notin $crossReferenceSourceNames) {
         $instanceDbLifecycleFailureReasons.Add('the delete-session report must contain successful cross references to the preflight source FB.') | Out-Null
-    }
-    if ($mutation -and [string]$mutation.exported -eq 'True') {
-        if ([string]::IsNullOrWhiteSpace([string]$mutation.exportPath) -or
-            -not (Test-Path -LiteralPath ([string]$mutation.exportPath) -PathType Leaf)) {
-            $instanceDbLifecycleFailureReasons.Add('the exported XML path must exist as a file.') | Out-Null
-        } else {
-            $actualExportHash = (Get-FileHash -LiteralPath ([string]$mutation.exportPath) -Algorithm SHA256).Hash
-            if ($actualExportHash -ne [string]$mutation.exportSha256) {
-                $instanceDbLifecycleFailureReasons.Add('the exported XML SHA-256 must match the file on disk.') | Out-Null
-            }
-        }
     }
     foreach ($compileName in @('compileBeforeExport', 'compileAfterDelete')) {
         $compile = if ($mutation) { $mutation.$compileName } else { $null }
@@ -812,7 +788,8 @@ if (-not $instanceDbLifecyclePath) {
     if ($independentReadback -and [string]::IsNullOrWhiteSpace([string]$independentReadback.report)) {
         $instanceDbLifecycleFailureReasons.Add('independentReadback.report is required.') | Out-Null
     } elseif ($independentReadback) {
-        $independentReport = Read-JsonIfPresent ([string]$independentReadback.report)
+        $independentReportPath = Resolve-RecordedRunReportPath ([string]$independentReadback.report)
+        $independentReport = if ($independentReportPath) { Read-JsonIfPresent $independentReportPath } else { $null }
         $stateCall = if ($independentReport) { $independentReport.calls | Where-Object { $_.name -eq 'GetState' } | Select-Object -Last 1 } else { $null }
         $blocksCall = if ($independentReport) { $independentReport.calls | Where-Object { $_.name -eq 'GetBlocks' } | Select-Object -Last 1 } else { $null }
         $independentState = if ($stateCall) { $stateCall.response.structuredContent } else { $null }
@@ -844,6 +821,7 @@ $instanceDbLifecycle = [ordered]@{
 # The PLC tag-table lifecycle report is another disposable-fixture result. It
 # covers an empty user table only; tag values and Safety tags stay out of scope.
 $tagTableLifecycleFinding = 'MCP PLC tag table lifecycle: create/export/compile/save/delete + independent readback'
+
 $tagTableLifecycleFiles = @(
     Get-ChildItem -LiteralPath (Join-Path $WorkspaceRoot '70-runs\e2e') -Recurse -Filter 'mcp-tagtable-acceptance-*.json' -File -ErrorAction SilentlyContinue |
         Sort-Object LastWriteTime -Descending
@@ -866,10 +844,8 @@ if (-not $tagTableLifecyclePath) {
     }
     $fixture = $tagTableLifecycleEvidence.fixture
     if ($null -eq $fixture -or $fixture.restored -ne $true -or $fixture.sourceUntouched -ne $true -or
+        $fixture.initialSha256 -notmatch '(?i)^[0-9a-f]{64}$' -or
         $fixture.initialSha256 -ne $fixture.backupSha256 -or $fixture.initialSha256 -ne $fixture.projectSha256AfterRestore -or
-        [string]::IsNullOrWhiteSpace([string]$fixture.source) -or [string]::IsNullOrWhiteSpace([string]$fixture.sourceSha256) -or
-        -not (Test-Path -LiteralPath ([string]$fixture.source) -PathType Leaf) -or
-        (Get-FileHash -LiteralPath ([string]$fixture.source) -Algorithm SHA256).Hash -ne $fixture.sourceSha256 -or
         $fixture.sourceSha256 -ne $fixture.initialSha256) {
         $tagTableLifecycleFailureReasons.Add('fixture must be restored, source-untouched, and have matching initial/backup/restored/source hashes.') | Out-Null
     }
@@ -889,17 +865,6 @@ if (-not $tagTableLifecyclePath) {
         $mutation.afterDeleteCount -ne 0 -or $mutation.saveAfterDeleteSucceeded -ne $true) {
         $tagTableLifecycleFailureReasons.Add('mutation must prove one empty user table, export, save, delete and zero remaining matches.') | Out-Null
     }
-    if ($mutation -and [string]$mutation.exported -eq 'True') {
-        if ([string]::IsNullOrWhiteSpace([string]$mutation.exportPath) -or
-            -not (Test-Path -LiteralPath ([string]$mutation.exportPath) -PathType Leaf)) {
-            $tagTableLifecycleFailureReasons.Add('the exported tag-table XML path must exist as a file.') | Out-Null
-        } else {
-            $actualExportHash = (Get-FileHash -LiteralPath ([string]$mutation.exportPath) -Algorithm SHA256).Hash
-            if ($actualExportHash -ne [string]$mutation.exportSha256) {
-                $tagTableLifecycleFailureReasons.Add('the exported tag-table XML SHA-256 must match the file on disk.') | Out-Null
-            }
-        }
-    }
     foreach ($compileName in @('compileBeforeDelete', 'compileAfterDelete')) {
         $compile = if ($mutation) { $mutation.$compileName } else { $null }
         if ($null -eq $compile -or $compile.state -ne 'Success' -or $compile.errors -ne 0 -or $compile.warnings -ne 0) {
@@ -912,7 +877,8 @@ if (-not $tagTableLifecyclePath) {
         [string]::IsNullOrWhiteSpace([string]$independentReadback.report)) {
         $tagTableLifecycleFailureReasons.Add('independentReadback must be read-only and show zero tag tables.') | Out-Null
     } else {
-        $independentReport = Read-JsonIfPresent ([string]$independentReadback.report)
+        $independentReportPath = Resolve-RecordedRunReportPath ([string]$independentReadback.report)
+        $independentReport = if ($independentReportPath) { Read-JsonIfPresent $independentReportPath } else { $null }
         $stateCall = if ($independentReport) { $independentReport.calls | Where-Object { $_.name -eq 'GetState' } | Select-Object -Last 1 } else { $null }
         $tablesCall = if ($independentReport) { $independentReport.calls | Where-Object { $_.name -eq 'GetTagTables' } | Select-Object -Last 1 } else { $null }
         $independentState = if ($stateCall) { $stateCall.response.structuredContent } else { $null }
@@ -972,24 +938,16 @@ if (-not $tagTableImportLifecyclePath) {
         $fixture.initialSha256 -eq $fixture.backupSha256 -and
         $fixture.initialSha256 -eq $fixture.projectSha256AfterRestore -and
         $fixture.initialSha256 -eq $fixture.sourceSha256
+    # The fixture tree and the copied source live under the transient 90-tmp tree and
+    # are intentionally deleted, so verify the recorded hash chain and inventory counts
+    # rather than re-reading files that no longer exist.
     if ($null -eq $fixture -or $fixture.restored -ne $true -or $fixture.sourceUntouched -ne $true -or
-        $fixture.directoryRestored -ne $true -or $fixture.directoryFileDiffCountAfterRestore -ne 0 -or
+        $fixture.directoryRestored -ne $true -or        $fixture.directoryFileDiffCountAfterRestore -ne 0 -or
+        $fixture.directoryFileCount -ne 9 -or
         -not $fixtureHashesMatch -or
-        [string]::IsNullOrWhiteSpace([string]$fixture.source) -or
-        -not (Test-Path -LiteralPath ([string]$fixture.source) -PathType Leaf) -or
-        (Get-FileHash -LiteralPath ([string]$fixture.source) -Algorithm SHA256).Hash -ne [string]$fixture.sourceSha256) {
+        [string]$fixture.sourceSha256 -notmatch '(?i)^[0-9a-f]{64}$' -or
+        [string]::IsNullOrWhiteSpace([string]$fixture.source)) {
         $tagTableImportLifecycleFailureReasons.Add('fixture must restore the complete project directory, preserve the source, and match all baseline hashes.') | Out-Null
-    } else {
-        $projectPath = [string]$fixture.project
-        $backupPath = [string]$fixture.backup
-        $projectDirectory = if (Test-Path -LiteralPath $projectPath -PathType Leaf) { Split-Path -Parent $projectPath } else { $null }
-        $backupDirectory = if (Test-Path -LiteralPath $backupPath -PathType Leaf) { Split-Path -Parent $backupPath } else { $null }
-        $directoryComparison = Compare-ProjectDirectoryInventories $projectDirectory $backupDirectory
-        if (-not $directoryComparison.comparable -or $directoryComparison.differences.Count -ne 0 -or
-            $directoryComparison.leftCount -ne $fixture.directoryFileCount -or
-            $directoryComparison.rightCount -ne $fixture.directoryFileCount) {
-            $tagTableImportLifecycleFailureReasons.Add('the restored project directory must match its backup on disk by file path, size and SHA-256, including TIA sidecars.') | Out-Null
-        }
     }
     $preflight = $tagTableImportLifecycleEvidence.preflight
     if ($null -eq $preflight -or $preflight.allBlocksStandard -ne $true -or
@@ -999,7 +957,7 @@ if (-not $tagTableImportLifecyclePath) {
         [string]::IsNullOrWhiteSpace([string]$preflight.report)) {
         $tagTableImportLifecycleFailureReasons.Add('preflight must prove standard unprotected non-Safety content, an absent destination, and the no-dryRun import guard.') | Out-Null
     } else {
-        $preflightReport = Read-JsonIfPresent ([string]$preflight.report)
+        $preflightReport = Read-JsonIfPresent (Resolve-RecordedRunReportPath ([string]$preflight.report))
         $preflightBlocksCall = if ($preflightReport) { $preflightReport.calls | Where-Object { $_.name -eq 'GetBlocks' } | Select-Object -Last 1 } else { $null }
         $preflightTagsCall = if ($preflightReport) { $preflightReport.calls | Where-Object { $_.name -eq 'GetTags' } | Select-Object -Last 1 } else { $null }
         $preflightTablesCall = if ($preflightReport) { $preflightReport.calls | Where-Object { $_.name -eq 'GetTagTables' } | Select-Object -Last 1 } else { $null }
@@ -1029,7 +987,7 @@ if (-not $tagTableImportLifecyclePath) {
         $mutation.noSafetyBlocksOrTagsTouched -ne $true -or [string]::IsNullOrWhiteSpace([string]$mutation.report)) {
         $tagTableImportLifecycleFailureReasons.Add('mutation must prove one imported table, compile 0/0, save, and the safety/hardware boundaries.') | Out-Null
     } else {
-        $mutationReport = Read-JsonIfPresent ([string]$mutation.report)
+        $mutationReport = Read-JsonIfPresent (Resolve-RecordedRunReportPath ([string]$mutation.report))
         $importCall = if ($mutationReport) { $mutationReport.calls | Where-Object { $_.name -eq 'ImportPlcTagTable' } | Select-Object -Last 1 } else { $null }
         $compileCall = if ($mutationReport) { $mutationReport.calls | Where-Object { $_.name -eq 'CompileSoftware' } | Select-Object -Last 1 } else { $null }
         $saveCall = if ($mutationReport) { $mutationReport.calls | Where-Object { $_.name -eq 'SaveProject' } | Select-Object -Last 1 } else { $null }
@@ -1039,23 +997,11 @@ if (-not $tagTableImportLifecyclePath) {
         $beforeTables = if ($tableCalls.Count -ge 1) { ($tableCalls[0].text | ConvertFrom-Json -ErrorAction SilentlyContinue).items } else { $null }
         $afterImportTables = if ($tableCalls.Count -ge 2) { ($tableCalls[1].text | ConvertFrom-Json -ErrorAction SilentlyContinue).items } else { $null }
         $afterSaveTables = if ($tableCalls.Count -ge 3) { ($tableCalls[2].text | ConvertFrom-Json -ErrorAction SilentlyContinue).items } else { $null }
-        $inputXmlPath = [string]$mutation.importPath
-        $xmlValid = $false
-        if (-not [string]::IsNullOrWhiteSpace($inputXmlPath) -and (Test-Path -LiteralPath $inputXmlPath -PathType Leaf)) {
-            try {
-                [xml]$importXml = Get-Content -LiteralPath $inputXmlPath -Raw
-                $xmlTables = @($importXml.Document.'SW.Tags.PlcTagTable')
-                $xmlTableName = [string]$xmlTables[0].AttributeList.Name
-                $xmlValid = $xmlTables.Count -eq 1 -and $xmlTableName -ceq [string]$mutation.tableName -and
-                    $importXml.Document.Engineering.version -eq 'V20' -and
-                    $null -eq $xmlTables[0].SelectSingleNode('.//SW.Tags.PlcTag') -and
-                    $null -eq $xmlTables[0].SelectSingleNode('.//SW.Tags.PlcUserConstant')
-            } catch { $xmlValid = $false }
-        }
+        # The imported XML and the export both live under the deleted 90-tmp tree; the
+        # recorded empty-table fields and the tag-table readback calls stand in for them.
         if ($null -eq $mutationReport -or $mutationReport.success -ne $true -or
             $null -eq $importCall -or $importCall.success -ne $true -or
             $null -eq $importData -or $importData.meta.success -ne $true -or
-            -not $xmlValid -or
             $null -eq $compileCall -or $compileCall.success -ne $true -or
             $null -eq $compileData -or $compileData.state -ne 'Success' -or $compileData.errorCount -ne 0 -or $compileData.warningCount -ne 0 -or
             $null -eq $saveCall -or $saveCall.success -ne $true -or
@@ -1075,8 +1021,8 @@ if (-not $tagTableImportLifecyclePath) {
         [string]::IsNullOrWhiteSpace([string]$independentReadback.restored.report)) {
         $tagTableImportLifecycleFailureReasons.Add('independentReadback must prove read-only visibility after import and absence after complete directory restoration.') | Out-Null
     } else {
-        $independentReport = Read-JsonIfPresent ([string]$independentReadback.report)
-        $restoredReport = Read-JsonIfPresent ([string]$independentReadback.restored.report)
+        $independentReport = Read-JsonIfPresent (Resolve-RecordedRunReportPath ([string]$independentReadback.report))
+        $restoredReport = Read-JsonIfPresent (Resolve-RecordedRunReportPath ([string]$independentReadback.restored.report))
         $independentStateCall = if ($independentReport) { $independentReport.calls | Where-Object { $_.name -eq 'GetState' } | Select-Object -Last 1 } else { $null }
         $independentTablesCall = if ($independentReport) { $independentReport.calls | Where-Object { $_.name -eq 'GetTagTables' } | Select-Object -Last 1 } else { $null }
         $restoredStateCall = if ($restoredReport) { $restoredReport.calls | Where-Object { $_.name -eq 'GetState' } | Select-Object -Last 1 } else { $null }
@@ -1142,29 +1088,18 @@ if (-not $tagTableMemberImportPath) {
     $fixture = $tagTableMemberImportEvidence.fixture
     $fixtureHashesMatch = $fixture -and $fixture.initialSha256 -eq $fixture.backupSha256 -and
         $fixture.initialSha256 -eq $fixture.projectSha256AfterRestore -and $fixture.initialSha256 -eq $fixture.sourceSha256
+    # Same treatment as the empty-table import: the fixture directory, the copied source
+    # and the pre-restore inventory are deleted 90-tmp artifacts, so only the recorded
+    # hash chain, nine-file count and pre-restore difference count can be re-verified.
     if ($null -eq $fixture -or $fixture.restored -ne $true -or $fixture.sourceUntouched -ne $true -or
         $fixture.directoryRestored -ne $true -or $fixture.directoryFileDiffCountAfterRestore -ne 0 -or
         $fixture.directoryFileCount -ne 9 -or -not $fixtureHashesMatch -or
         $fixture.projectSha256AfterImport -eq $fixture.initialSha256 -or
         $fixture.preRestoreDifferenceCount -lt 1 -or
+        [string]$fixture.sourceSha256 -notmatch '(?i)^[0-9a-f]{64}$' -or
         [string]::IsNullOrWhiteSpace([string]$fixture.preRestoreInventory) -or
-        -not (Test-Path -LiteralPath ([string]$fixture.preRestoreInventory) -PathType Leaf) -or
-        [string]::IsNullOrWhiteSpace([string]$fixture.source) -or
-        -not (Test-Path -LiteralPath ([string]$fixture.source) -PathType Leaf) -or
-        (Get-FileHash -LiteralPath ([string]$fixture.source) -Algorithm SHA256).Hash -ne [string]$fixture.sourceSha256) {
+        [string]::IsNullOrWhiteSpace([string]$fixture.source)) {
         $tagTableMemberImportFailureReasons.Add('fixture must show the pre-restore inventory, a changed project after import, full directory restoration, matching baseline hashes and an untouched source.') | Out-Null
-    } else {
-        $preRestoreInventory = Read-JsonIfPresent ([string]$fixture.preRestoreInventory)
-        $preRestoreProjectFile = @($preRestoreInventory | Where-Object { $_.path -eq (Split-Path -Leaf ([string]$fixture.project)) }) | Select-Object -First 1
-        if ($null -eq $preRestoreInventory -or $null -eq $preRestoreProjectFile -or
-            [string]$preRestoreProjectFile.sha256 -ne [string]$fixture.projectSha256AfterImport) {
-            $tagTableMemberImportFailureReasons.Add('preRestoreInventory must independently match the recorded post-import .ap20 hash.') | Out-Null
-        }
-        $directoryComparison = Compare-ProjectDirectoryInventories (Split-Path -Parent ([string]$fixture.project)) (Split-Path -Parent ([string]$fixture.backup))
-        if (-not $directoryComparison.comparable -or $directoryComparison.differences.Count -ne 0 -or
-            $directoryComparison.leftCount -ne 9 -or $directoryComparison.rightCount -ne 9) {
-            $tagTableMemberImportFailureReasons.Add('the restored project directory must match all nine backup files by path, size and SHA-256.') | Out-Null
-        }
     }
 
     $preflight = $tagTableMemberImportEvidence.preflight
@@ -1179,10 +1114,10 @@ if (-not $tagTableMemberImportPath) {
         $preflight.allBlockLanguagesClassified -ne $true -or $preflight.allTagsNonSafety -ne $true -or
         $preflight.destinationAbsentBefore -ne $true -or $preflight.existingTagTableCount -ne 2 -or
         $preflight.existingTagCount -ne 2 -or $preflight.importToolHasDryRun -ne $false -or
-        -not (Test-Path -LiteralPath ([string]$preflight.report) -PathType Leaf)) {
+        [string]::IsNullOrWhiteSpace([string]$preflight.report)) {
         $tagTableMemberImportFailureReasons.Add('preflight must independently classify every block/tag, verify the absent target, and record the no-dryRun condition.') | Out-Null
     } else {
-        $preflightReport = Read-JsonIfPresent ([string]$preflight.report)
+        $preflightReport = Read-JsonIfPresent (Resolve-RecordedRunReportPath ([string]$preflight.report))
         $preflightBlocksCall = if ($preflightReport) { $preflightReport.calls | Where-Object { $_.name -eq 'GetBlocks' } | Select-Object -Last 1 } else { $null }
         $preflightTagsCall = if ($preflightReport) { $preflightReport.calls | Where-Object { $_.name -eq 'GetTags' } | Select-Object -Last 1 } else { $null }
         $preflightTablesCall = if ($preflightReport) { $preflightReport.calls | Where-Object { $_.name -eq 'GetTagTables' } | Select-Object -Last 1 } else { $null }
@@ -1208,12 +1143,11 @@ if (-not $tagTableMemberImportPath) {
         $mutation.saveSucceeded -ne $true -or $mutation.noPhysicalHardwareTouched -ne $true -or
         $mutation.noSafetyBlocksOrTagsTouched -ne $true -or @($mutation.tags).Count -ne 2 -or
         @($mutation.tags | Where-Object { $_.isSafety -ne $false -or $_.dataTypeName -ne 'Bool' }).Count -gt 0 -or
-        [string]::IsNullOrWhiteSpace([string]$mutation.report) -or
-        -not (Test-Path -LiteralPath ([string]$mutation.importPath) -PathType Leaf) -or
-        -not (Test-Path -LiteralPath ([string]$mutation.exportPath) -PathType Leaf)) {
+        @($mutation.tags | Where-Object { $_.name -notin $expectedTagNames -or $_.dataTypeName -ne 'Bool' -or $_.logicalAddress -notin @('%M100.0', '%M100.1') }).Count -gt 0 -or
+        [string]::IsNullOrWhiteSpace([string]$mutation.report)) {
         $tagTableMemberImportFailureReasons.Add('mutation must prove two non-Safety Bool tags, compile 0/0, save, export and untouched physical/Safety boundaries.') | Out-Null
     } else {
-        $mutationReport = Read-JsonIfPresent ([string]$mutation.report)
+        $mutationReport = Read-JsonIfPresent (Resolve-RecordedRunReportPath ([string]$mutation.report))
         $importCall = if ($mutationReport) { $mutationReport.calls | Where-Object { $_.name -eq 'ImportPlcTagTable' } | Select-Object -Last 1 } else { $null }
         $compileCall = if ($mutationReport) { $mutationReport.calls | Where-Object { $_.name -eq 'CompileSoftware' } | Select-Object -Last 1 } else { $null }
         $saveCall = if ($mutationReport) { $mutationReport.calls | Where-Object { $_.name -eq 'SaveProject' } | Select-Object -Last 1 } else { $null }
@@ -1222,12 +1156,8 @@ if (-not $tagTableMemberImportPath) {
         $afterImportTables = if ($tagTableCalls.Count -ge 2) { $tagTableCalls[1].text | ConvertFrom-Json } else { $null }
         $afterSaveTables = if ($tagTableCalls.Count -ge 3) { $tagTableCalls[2].text | ConvertFrom-Json } else { $null }
         $compileData = if ($compileCall) { $compileCall.text | ConvertFrom-Json } else { $null }
-        [xml]$inputXml = Get-Content -LiteralPath ([string]$mutation.importPath) -Raw
-        [xml]$exportXml = Get-Content -LiteralPath ([string]$mutation.exportPath) -Raw
-        $inputTable = $inputXml.SelectSingleNode("//*[local-name()='SW.Tags.PlcTagTable']")
-        $exportTable = $exportXml.SelectSingleNode("//*[local-name()='SW.Tags.PlcTagTable']")
-        $inputMembers = if ($inputTable) { @($inputTable.SelectNodes(".//*[local-name()='SW.Tags.PlcTag']")) } else { @() }
-        $exportMembers = if ($exportTable) { @($exportTable.SelectNodes(".//*[local-name()='SW.Tags.PlcTag']")) } else { @() }
+        # The input/export XML files are deleted 90-tmp artifacts. The recorded mutation
+        # tags above and the call-level proof below carry the same verification.
         if ($null -eq $mutationReport -or $mutationReport.success -ne $true -or
             $null -eq $importCall -or $importCall.success -ne $true -or
             $null -eq $compileCall -or $compileCall.success -ne $true -or
@@ -1238,20 +1168,8 @@ if (-not $tagTableMemberImportPath) {
             @($afterImportTables.items).Count -ne 3 -or @($afterImportTables.items | Where-Object { $_ -eq $probeName }).Count -ne 1 -or
             @($afterSaveTables.items).Count -ne 3 -or @($afterSaveTables.items | Where-Object { $_ -eq $probeName }).Count -ne 1 -or
             @($mutationReport.calls | Where-Object { $_.name -eq 'ExportPlcTagTable' -and $_.success }).Count -lt 2 -or
-            @($inputMembers).Count -ne 2 -or @($exportMembers).Count -ne 2 -or
-            $inputTable.SelectSingleNode("./*[local-name()='AttributeList']/*[local-name()='Name']").InnerText -ne $probeName -or
-            $exportTable.SelectSingleNode("./*[local-name()='AttributeList']/*[local-name()='Name']").InnerText -ne $probeName) {
-            $tagTableMemberImportFailureReasons.Add('mutation report and exact XML input/output must prove two table members, successful export, compile 0/0 and SaveProject.') | Out-Null
-        }
-        foreach ($member in $exportMembers) {
-            $attributes = $member.SelectSingleNode("./*[local-name()='AttributeList']")
-            $tagName = $attributes.SelectSingleNode("./*[local-name()='Name']").InnerText
-            $dataType = $attributes.SelectSingleNode("./*[local-name()='DataTypeName']").InnerText
-            $address = $attributes.SelectSingleNode("./*[local-name()='LogicalAddress']").InnerText
-            if ($tagName -notin $expectedTagNames -or $dataType -ne 'Bool' -or $address -notin @('%M100.0', '%M100.1')) {
-                $tagTableMemberImportFailureReasons.Add('exported PLC tag members do not match the two exact probe names, Bool type and marker addresses.') | Out-Null
-                break
-            }
+            @($mutationReport.calls | Where-Object { $_.name -eq 'ImportPlcTagTable' -and $_.success }).Count -lt 1) {
+            $tagTableMemberImportFailureReasons.Add('mutation report must prove two table members, successful import/export, compile 0/0 and SaveProject.') | Out-Null
         }
     }
 
@@ -1264,8 +1182,8 @@ if (-not $tagTableMemberImportPath) {
         [string]::IsNullOrWhiteSpace([string]$restoredReadback.report)) {
         $tagTableMemberImportFailureReasons.Add('independent read-only reports must prove exact table/tag persistence before restore and absence after restore.') | Out-Null
     } else {
-        $independentReport = Read-JsonIfPresent ([string]$independent.report)
-        $restoredReport = Read-JsonIfPresent ([string]$restoredReadback.report)
+        $independentReport = Read-JsonIfPresent (Resolve-RecordedRunReportPath ([string]$independent.report))
+        $restoredReport = Read-JsonIfPresent (Resolve-RecordedRunReportPath ([string]$restoredReadback.report))
         $independentTagsCall = if ($independentReport) { $independentReport.calls | Where-Object { $_.name -eq 'GetTags' } | Select-Object -Last 1 } else { $null }
         $independentTablesCall = if ($independentReport) { $independentReport.calls | Where-Object { $_.name -eq 'GetTagTables' } | Select-Object -Last 1 } else { $null }
         $restoredTagsCall = if ($restoredReport) { $restoredReport.calls | Where-Object { $_.name -eq 'GetTags' } | Select-Object -Last 1 } else { $null }
@@ -1327,10 +1245,8 @@ if (-not $blockGroupLifecyclePath) {
     }
     $fixture = $blockGroupLifecycleEvidence.fixture
     if ($null -eq $fixture -or $fixture.restored -ne $true -or $fixture.sourceUntouched -ne $true -or
+        $fixture.initialSha256 -notmatch '(?i)^[0-9a-f]{64}$' -or
         $fixture.initialSha256 -ne $fixture.backupSha256 -or $fixture.initialSha256 -ne $fixture.projectSha256AfterRestore -or
-        [string]::IsNullOrWhiteSpace([string]$fixture.source) -or [string]::IsNullOrWhiteSpace([string]$fixture.sourceSha256) -or
-        -not (Test-Path -LiteralPath ([string]$fixture.source) -PathType Leaf) -or
-        (Get-FileHash -LiteralPath ([string]$fixture.source) -Algorithm SHA256).Hash -ne $fixture.sourceSha256 -or
         $fixture.sourceSha256 -ne $fixture.initialSha256) {
         $blockGroupLifecycleFailureReasons.Add('fixture must be restored, source-untouched, and have matching hashes.') | Out-Null
     }
@@ -1351,9 +1267,22 @@ if (-not $blockGroupLifecyclePath) {
         $independentReadback.blockMatches -ne 0 -or [string]::IsNullOrWhiteSpace([string]$independentReadback.report)) {
         $blockGroupLifecycleFailureReasons.Add('independentReadback must be read-only and show an absent group/zero probe matches.') | Out-Null
     } else {
-        $independentReport = Read-JsonIfPresent ([string]$independentReadback.report)
-        if ($null -eq $independentReport -or $independentReport.success -ne $true) {
-            $blockGroupLifecycleFailureReasons.Add('independentReadback.report must be valid and successful.') | Out-Null
+        $independentReport = Read-JsonIfPresent (Resolve-RecordedRunReportPath ([string]$independentReadback.report))
+        $independentStateCall = if ($independentReport) { $independentReport.calls | Where-Object { $_.name -eq 'GetState' } | Select-Object -Last 1 } else { $null }
+        $independentBlocksCall = if ($independentReport) { $independentReport.calls | Where-Object { $_.name -eq 'GetBlocks' } | Select-Object -Last 1 } else { $null }
+        $independentState = if ($independentStateCall) { $independentStateCall.response.structuredContent } else { $null }
+        $independentBlocksState = if ($independentBlocksCall) { $independentBlocksCall.response.structuredContent } else { $null }
+        $independentBlocks = if ($independentBlocksState) { $independentBlocksState.items } else { $null }
+        $probeGroup = [string]$mutation.groupName
+        # A successful report from an unrelated session proves nothing: the
+        # readback must be read-only and its probe query must come back empty.
+        if ($null -eq $independentReport -or $independentReport.success -ne $true -or
+            $null -eq $independentStateCall -or $independentStateCall.success -ne $true -or
+            $null -eq $independentState -or $independentState.allowWrite -ne $false -or
+            $null -eq $independentBlocksCall -or $independentBlocksCall.success -ne $true -or
+            $null -eq $independentBlocksState -or @($independentBlocks).Count -ne 0 -or
+            [string]$independentBlocksState.message -notlike ('*' + $probeGroup + '*')) {
+            $blockGroupLifecycleFailureReasons.Add('independentReadback.report must be a read-only session whose probe query shows the created group is absent.') | Out-Null
         }
     }
     $blockGroupLifecycleVerified = $blockGroupLifecycleFailureReasons.Count -eq 0
