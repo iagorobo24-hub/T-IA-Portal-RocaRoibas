@@ -23,7 +23,7 @@
 | [`20-recetas/`](20-recetas/) | **Runbooks**: R01-R04 ✅ · R05-R07 📄/fixture · R08-R12 ✅ · R13-R14 📄 no verificadas · R15-R16 ✅ · R17 🟡 runner verificado, runtime pendiente · R18-R20 📄 documentadas · R21 ✅ preflight offline · R22 ✅ Watch offline · R23 ✅ Instance DB offline (número explícito) · R24 ✅ tabla de tags offline · R25 ✅ grupo de bloques offline · R26 ✅ importación offline de tabla vacía y dos tags estándar | 🟡 |
 | [`30-lenguajes/`](30-lenguajes/) | [SCL](30-lenguajes/scl.md) ✅ · [Patrones por bloque](30-lenguajes/patrones-por-bloque.md) ✅ · [LAD](30-lenguajes/lad/README.md) 🟡 · FBD/STL/GRAPH ⬜ decisión documentada | 🟢 núcleo listo |
 | `40-hmi/` | WinCC Unified y Comfort/Advanced | 📄 documentado; runtime V20 pendiente |
-| [`50-errores/`](50-errores/) | [Catálogo](50-errores/README.md) síntoma → causa → arreglo ✅ | 🟢 v1 |
+| [`50-errores/`](50-errores/) | [Catálogo](50-errores/README.md) síntoma → causa → arreglo ✅ | 🟢 v2 (incluye los errores de PLCSIM y de la aceptación, 2026-10-21) |
 | [`90-referencia/`](90-referencia/) | [Parámetros reales de `tia-inspect`](90-referencia/parametros-tia-inspect.md) ✅ · tipos, CPUs, memoria ⬜ | 🟡 |
 
 > ✅ **Openness operativo desde el 2026-09-14.** Las cuatro recetas de la tanda "entender" se han
