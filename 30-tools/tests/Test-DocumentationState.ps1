@@ -59,7 +59,7 @@ foreach ($recipe in @(
     }
 }
 
-if ($analogText -notmatch '(?is)aplicaci[oó]n SCL.{0,200}bloquead[ao] actualmente' -or
+if ($analogText -notmatch '(?is)aplicaci.{0,10} SCL.{0,200}bloquead.{0,15}actualmente' -or
     $analogText -notmatch 'ImportSources' -or
     $analogText -notmatch 'ImportFromDocuments') {
     throw 'R18 must report that existing SCL application is currently blocked because the import tools are not registered.'

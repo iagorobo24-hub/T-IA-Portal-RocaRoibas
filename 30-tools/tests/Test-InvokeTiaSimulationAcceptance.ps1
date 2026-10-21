@@ -1,15 +1,27 @@
 [CmdletBinding()]
 param()
 
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Continue'
+$PSNativeCommandArgumentPassing = 'Legacy'
+$PSDefaultParameterValues['*:PSNativeCommandArgumentPassing'] = 'Legacy'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $script = Join-Path $root '30-tools\scripts\Invoke-TiaSimulationAcceptance.ps1'
-$temp = Join-Path ([IO.Path]::GetTempPath()) ('tia-claude-simulation-acceptance-test-' + [guid]::NewGuid().ToString('N'))
+$temp = Join-Path (Join-Path (Join-Path $root '90-tmp') 'runs') ('tia-simulation-acceptance-test-' + [guid]::NewGuid().ToString('N'))
+$processFixtures = Join-Path $env:TEMP ('tia-simulation-process-fixtures-' + [guid]::NewGuid().ToString('N'))
+function Get-PowerShellScriptArguments([string]$Path) {
+    $command = "& '" + $Path.Replace("'", "''") + "'"
+    $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+    return " -NoProfile -NonInteractive -EncodedCommand $encodedCommand"
+}
 $readinessPath = Join-Path $temp 'readiness.json'
 $reportPath = Join-Path $temp 'acceptance.json'
+# Keep the whole suite hang-proof: the runner defaults to a 900 s per-response MCP
+# timeout, which would turn any silent child into a 15 minute stall here.
+$runnerTimeout = 60
 
 try {
     New-Item -ItemType Directory -Path $temp -Force | Out-Null
+    New-Item -ItemType Directory -Path $processFixtures -Force | Out-Null
     [ordered]@{
         schemaVersion = 1
         status = 'READY_WITH_BLOCKERS'
@@ -28,7 +40,8 @@ try {
 
     $pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
     if (-not $pwsh) { $pwsh = (Get-Command powershell -ErrorAction Stop).Source }
-    & $pwsh -NoProfile -NonInteractive -File $script -ReadinessPath $readinessPath -OutputPath $reportPath -Run 2>&1 | Out-Null
+    $runnerRoot = $root
+    & $pwsh -NoProfile -NonInteractive -File $script -WorkspaceRoot $runnerRoot -ReadinessPath $readinessPath -OutputPath $reportPath -Run 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 2) { throw "Blocked preflight must exit 2, got $LASTEXITCODE." }
     if (-not (Test-Path -LiteralPath $reportPath -PathType Leaf)) { throw 'Acceptance report was not created.' }
 
@@ -53,7 +66,7 @@ try {
         blockers = @()
         nextActions = @()
     } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $mismatchedReadinessPath -Encoding UTF8
-    & $pwsh -NoProfile -NonInteractive -File $script -ReadinessPath $mismatchedReadinessPath -OutputPath $mismatchedReportPath -Run 2>&1 | Out-Null
+    & $pwsh -NoProfile -NonInteractive -File $script -WorkspaceRoot $runnerRoot -ReadinessPath $mismatchedReadinessPath -OutputPath $mismatchedReportPath -Run 2>&1 | Out-Null
     if ($LASTEXITCODE -ne 2) { throw "Mismatched TIA/PLCSIM versions must be blocked before starting the simulator; exit=$LASTEXITCODE." }
     $mismatchReport = Get-Content -Raw -LiteralPath $mismatchedReportPath | ConvertFrom-Json
     if ($mismatchReport.status -ne 'BLOCKED' -or $mismatchReport.mutationAttempted -ne $false -or @($mismatchReport.blockers | Where-Object { $_ -match 'no está en la matriz local admitida' }).Count -ne 1) {
@@ -62,7 +75,8 @@ try {
     $global:LASTEXITCODE = 0
     Write-Output 'PASS: simulation acceptance independently blocks an unsupported TIA/PLCSIM pairing'
 
-    $fixtureServer = Join-Path $temp 'mcp-fixture.ps1'
+    $fixtureServer = Join-Path $processFixtures 'mcp-fixture.ps1'
+    $fixtureServerArgsBase64Path = Join-Path $processFixtures 'mcp-fixture-arguments-base64.txt'
     @'
 $ErrorActionPreference = 'Stop'
 while ($line = [Console]::In.ReadLine()) {
@@ -75,10 +89,10 @@ while ($line = [Console]::In.ReadLine()) {
     elseif ($request.method -eq 'tools/call') {
         $name = [string]$request.params.name
         switch ($name) {
-            'GetProjectTree' { $payload = [ordered]@{ tree = "Fixture Project`n└── Fixture PLC [PLC Program]"; message = 'Project tree retrieved' } }
+            'GetProjectTree' { $payload = [ordered]@{ tree = "Fixture Project`n+-- Fixture PLC [PLC Program]"; message = 'Project tree retrieved' } }
             'AttachToOpenProject' { $payload = [ordered]@{ message = "Attached to open project 'Fixture Project'"; meta = @{ success = $true } } }
             'OpenProject' { $payload = [ordered]@{ message = "Opened project 'Fixture Project'"; meta = @{ success = $true } } }
-            'GetSoftwareTree' { $payload = [ordered]@{ tree = "Fixture PLC`n└── Main [OB]"; message = 'Software tree retrieved' } }
+            'GetSoftwareTree' { $payload = [ordered]@{ tree = "Fixture PLC`n+-- Main [OB]"; message = 'Software tree retrieved' } }
             'GetDeviceIpAddress' { $payload = [ordered]@{ message = (@{ Ok = $true; Data = @{ found = $true; device = 'Fixture PLC'; ipAddress = '192.168.0.1'; nodeCount = 1; nodes = @(@{ nodeName = 'X1'; address = '192.168.0.1'; nodeType = 'Ethernet'; isIndustrialEthernet = $true }) }; Errors = $null; Warnings = $null; Message = 'PLC IP: 192.168.0.1' } | ConvertTo-Json -Depth 20 -Compress) } }
             'CompileSoftware' { $payload = [ordered]@{ state = 'Success'; errorCount = 0; warningCount = 0; message = 'Compiling finished (errors: 0; warnings: 0)' } }
             'GetBlocks' {
@@ -119,6 +133,9 @@ while ($line = [Console]::In.ReadLine()) {
     [ordered]@{ jsonrpc = '2.0'; id = $request.id; result = $result } | ConvertTo-Json -Depth 30 -Compress
 }
 '@ | Set-Content -LiteralPath $fixtureServer -Encoding UTF8
+    $fixtureServerArguments = Get-PowerShellScriptArguments $fixtureServer
+    $fixtureServerArgumentsBase64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($fixtureServerArguments))
+    $fixtureServerArgumentsBase64 | Set-Content -LiteralPath $fixtureServerArgsBase64Path -Encoding ASCII
 
     $readyPath = Join-Path $temp 'ready.json'
     [ordered]@{
@@ -138,7 +155,7 @@ while ($line = [Console]::In.ReadLine()) {
     } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $readyPath -Encoding UTF8
     $projectFile = Join-Path $temp 'Fixture.ap20'
     'fixture project' | Set-Content -LiteralPath $projectFile -Encoding UTF8
-    $relativeProjectFile = [IO.Path]::GetRelativePath($root, $projectFile)
+    $relativeProjectFile = $projectFile.Substring($runnerRoot.TrimEnd([IO.Path]::DirectorySeparatorChar).Length + 1)
     $targetEvidencePath = Join-Path $temp 'target-confirmation.json'
     [ordered]@{
         schemaVersion = 1
@@ -163,9 +180,9 @@ while ($line = [Console]::In.ReadLine()) {
         name = 'fixture-io-plan'
         steps = @([ordered]@{ command = 'read-bit output 0 0'; expect = [ordered]@{ status = 'ok'; op = 'read-bit'; value = $false } })
     } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $ioPlanPath -Encoding UTF8
-    $fixtureArguments = ' -NoProfile -NonInteractive -File "' + $fixtureServer + '"'
+    $fixtureArguments = [Text.Encoding]::ASCII.GetString([Convert]::FromBase64String((Get-Content -Raw -LiteralPath $fixtureServerArgsBase64Path).Trim()))
     $fixtureOutput = & $pwsh -NoProfile -NonInteractive -File $script `
-        -ReadinessPath $readyPath -OutputPath $positiveReportPath -ProjectFile $projectFile `
+        -WorkspaceRoot $runnerRoot -ReadinessPath $readyPath -OutputPath $positiveReportPath -ProjectFile $projectFile `
         -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -DevicePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
         -McpExecutablePath $pwsh -McpArguments $fixtureArguments -AcknowledgeVirtualTarget -Run 2>&1 | Out-String
     if ($LASTEXITCODE -ne 2) { throw "Run without a managed virtual PLC and I/O plan must block, got exit code $LASTEXITCODE. Output: $fixtureOutput" }
@@ -180,10 +197,10 @@ while ($line = [Console]::In.ReadLine()) {
     $wrongTargetEvidence | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $wrongTargetEvidencePath -Encoding UTF8
     $wrongTargetReportPath = Join-Path $temp 'wrong-target.json'
     $wrongTargetOutput = & $pwsh -NoProfile -NonInteractive -File $script `
-        -ReadinessPath $readyPath -OutputPath $wrongTargetReportPath -ProjectFile $projectFile `
+        -WorkspaceRoot $runnerRoot -ReadinessPath $readyPath -OutputPath $wrongTargetReportPath -ProjectFile $projectFile `
         -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -DevicePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
         -SimulationTargetEvidencePath $wrongTargetEvidencePath -McpExecutablePath $pwsh -McpArguments $fixtureArguments `
-        -PlcSimAdapterPath $pwsh -IoPlanPath $ioPlanPath -StartVirtualPlc -AcknowledgeVirtualTarget -Run 2>&1 | Out-String
+        -PlcSimAdapterPath $pwsh -IoPlanPath $ioPlanPath -PlcSimTransport tcpip-local -StartVirtualPlc -AcknowledgeVirtualTarget -TimeoutSeconds $runnerTimeout -Run 2>&1 | Out-String
     if ($LASTEXITCODE -ne 2) { throw "Evidence for a different project must block before starting PLCSIM. Output: $wrongTargetOutput" }
     $wrongTarget = Get-Content -Raw -LiteralPath $wrongTargetReportPath | ConvertFrom-Json
     if ($wrongTarget.status -ne 'BLOCKED' -or $wrongTarget.mutationAttempted -ne $false -or @($wrongTarget.calls).Count -ne 0) {
@@ -198,11 +215,11 @@ while ($line = [Console]::In.ReadLine()) {
     $wrongRouteEvidence | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $wrongRouteEvidencePath -Encoding UTF8
     $wrongRouteReportPath = Join-Path $temp 'wrong-route.json'
     $wrongRouteOutput = & $pwsh -NoProfile -NonInteractive -File $script `
-        -ReadinessPath $readyPath -OutputPath $wrongRouteReportPath -ProjectFile $projectFile `
+        -WorkspaceRoot $runnerRoot -ReadinessPath $readyPath -OutputPath $wrongRouteReportPath -ProjectFile $projectFile `
         -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -DevicePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
         -SimulationTargetEvidencePath $wrongRouteEvidencePath -McpExecutablePath $pwsh -McpArguments $fixtureArguments `
         -PlcSimAdapterPath $pwsh -PlcSimTransport softbus -IoPlanPath $ioPlanPath `
-        -StartVirtualPlc -AcknowledgeVirtualTarget -Run 2>&1 | Out-String
+        -StartVirtualPlc -AcknowledgeVirtualTarget -TimeoutSeconds $runnerTimeout -Run 2>&1 | Out-String
     if ($LASTEXITCODE -ne 2) { throw "A TCP/IP UI confirmation must not authorize Softbus. Output: $wrongRouteOutput" }
     $wrongRoute = Get-Content -Raw -LiteralPath $wrongRouteReportPath | ConvertFrom-Json
     if ($wrongRoute.status -ne 'BLOCKED' -or $wrongRoute.mutationAttempted -ne $false -or @($wrongRoute.calls).Count -ne 0) {
@@ -211,7 +228,7 @@ while ($line = [Console]::In.ReadLine()) {
     $global:LASTEXITCODE = 0
     Write-Output 'PASS: simulation acceptance does not reuse TCP/IP visual confirmation for Softbus'
 
-    $notReadyAdapter = Join-Path $temp 'not-ready-adapter.ps1'
+    $notReadyAdapter = Join-Path $processFixtures 'not-ready-adapter.ps1'
     $notReadyPidPath = Join-Path $temp 'not-ready.pid'
     $escapedPidPath = $notReadyPidPath.Replace("'", "''")
     $notReadyScript = @'
@@ -224,15 +241,15 @@ while ($line = [Console]::In.ReadLine()) {
 '@ -replace '__PID_PATH__', $escapedPidPath
     $notReadyScript | Set-Content -LiteralPath $notReadyAdapter -Encoding UTF8
     $notReadyReportPath = Join-Path $temp 'not-ready.json'
-    $notReadyArguments = ' -NoProfile -NonInteractive -File "' + $notReadyAdapter + '"'
+    $notReadyArguments = Get-PowerShellScriptArguments $notReadyAdapter
     $notReadyOutput = & $pwsh -NoProfile -NonInteractive -File $script `
-        -ReadinessPath $readyPath -OutputPath $notReadyReportPath -ProjectFile $projectFile `
+        -WorkspaceRoot $runnerRoot -ReadinessPath $readyPath -OutputPath $notReadyReportPath -ProjectFile $projectFile `
         -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -DevicePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
         -SimulationTargetEvidencePath $targetEvidencePath -McpExecutablePath $pwsh -McpArguments $fixtureArguments `
         -PlcSimAdapterPath $pwsh -PlcSimTransport tcpip-local -IoPlanPath $ioPlanPath `
-        -PlcSimAdapterArguments $notReadyArguments -StartVirtualPlc -AcknowledgeVirtualTarget -Run 2>&1 | Out-String
+        -PlcSimAdapterArguments $notReadyArguments -StartVirtualPlc -AcknowledgeVirtualTarget -TimeoutSeconds $runnerTimeout -Run 2>&1 | Out-String
     if ($LASTEXITCODE -ne 1) { throw "Non-ready adapter must fail with exit code 1. Output: $notReadyOutput" }
-    if (-not (Test-Path -LiteralPath $notReadyPidPath -PathType Leaf)) { throw 'Non-ready adapter did not publish its PID.' }
+    if (-not (Test-Path -LiteralPath $notReadyPidPath -PathType Leaf)) { throw "Non-ready adapter did not publish its PID. Output: $notReadyOutput" }
     $notReadyPid = [int](Get-Content -Raw -LiteralPath $notReadyPidPath)
     $orphan = Get-Process -Id $notReadyPid -ErrorAction SilentlyContinue
     if ($orphan) {
@@ -246,14 +263,24 @@ while ($line = [Console]::In.ReadLine()) {
     $global:LASTEXITCODE = 0
     Write-Output 'PASS: simulation acceptance cleans up a virtual PLC that fails readiness'
 
-    $adapterFixture = Join-Path $temp 'adapter-fixture.ps1'
+    $adapterFixture = Join-Path $processFixtures 'adapter-fixture.ps1'
+    $managedCallsLog = Join-Path $processFixtures 'managed-calls.json'
+    $escapedManagedCallsLog = $managedCallsLog.Replace("'", "''")
+    $fixtureServerContent = Get-Content -Raw -LiteralPath $fixtureServer
+    # The `$request...` references must stay literal: unescaped they expand to an
+    # empty string, the search never matches, and the calls log is never written.
+    $fixtureServerContent = $fixtureServerContent.Replace("    if (`$request.method -eq 'notifications/initialized') { continue }", "    if (`$request.method -eq 'notifications/initialized') { continue }`r`n    if (`$request.method -eq 'tools/call') { Add-Content -LiteralPath '__CALLS_LOG__' -Value ([string]`$request.params.name) -Encoding UTF8 }")
+    $fixtureServerContent = $fixtureServerContent.Replace('__CALLS_LOG__', $escapedManagedCallsLog)
+    $fixtureServerContent | Set-Content -LiteralPath $fixtureServer -Encoding UTF8
     @'
 [Console]::Out.WriteLine('{"status":"ready","instanceName":"FixtureVirtualPlc","interfaceName":"Siemens PLCSIM Virtual Ethernet Adapter","interfaceDescription":"Siemens PLCSIM Virtual Ethernet Adapter","ip":"192.168.0.1","networkMode":"TCPIP_SINGLE_ADAPTER"}')
 [Console]::Out.Flush()
 while ($line = [Console]::In.ReadLine()) {
     if ($line -eq 'stop' -or $line -eq 'quit') {
-        [Console]::Out.WriteLine('{"status":"stopped","powerOffCode":"0x0","unregisterCode":"0x0","destroyCode":"0x0"}')
-        [Console]::Out.Flush()
+        if ($env:TIA_SIM_FIXTURE_CLEANUP_MODE -ne 'missing') {
+            [Console]::Out.WriteLine('{"status":"stopped","powerOffCode":"0x0","unregisterCode":"0x0","destroyCode":"0x0"}')
+            [Console]::Out.Flush()
+        }
         break
     }
     $operation = ($line -split '\s+')[0]
@@ -262,15 +289,18 @@ while ($line = [Console]::In.ReadLine()) {
 }
 '@ | Set-Content -LiteralPath $adapterFixture -Encoding UTF8
     $managedReportPath = Join-Path $temp 'managed.json'
-    $managedAdapterArguments = ' -NoProfile -NonInteractive -File "' + $adapterFixture + '"'
+    $managedAdapterArguments = Get-PowerShellScriptArguments $adapterFixture
     $managedOutput = & $pwsh -NoProfile -NonInteractive -File $script `
-        -ReadinessPath $readyPath -OutputPath $managedReportPath -ProjectFile $relativeProjectFile `
+        -WorkspaceRoot $runnerRoot -ReadinessPath $readyPath -OutputPath $managedReportPath -ProjectFile $relativeProjectFile `
         -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -DevicePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
         -SimulationTargetEvidencePath $targetEvidencePath -McpExecutablePath $pwsh -McpArguments $fixtureArguments `
         -PlcSimAdapterPath $pwsh -PlcSimTransport tcpip-local -IoPlanPath $ioPlanPath `
-        -PlcSimAdapterArguments $managedAdapterArguments -StartVirtualPlc -AcknowledgeVirtualTarget -Run 2>&1 | Out-String
+        -PlcSimAdapterArguments $managedAdapterArguments -StartVirtualPlc -AcknowledgeVirtualTarget -TimeoutSeconds $runnerTimeout -Run 2>&1 | Out-String
     if ($LASTEXITCODE -ne 0) { throw "Managed virtual PLC fixture failed with exit code $LASTEXITCODE. Output: $managedOutput" }
     $managed = Get-Content -Raw -LiteralPath $managedReportPath | ConvertFrom-Json
+    $managedCalls = @(Get-Content -LiteralPath $managedCallsLog)
+    $expectedPreflightOrder = @('Bootstrap', 'Connect', 'AttachToOpenProject', 'GetProjectTree', 'GetSoftwareTree', 'GetDeviceIpAddress', 'CompileSoftware', 'GetBlocks', 'GetTags', 'CheckDownloadReadiness', 'Disconnect')
+    if (($managedCalls[0..($expectedPreflightOrder.Count - 1)] -join ',') -cne ($expectedPreflightOrder -join ',')) { throw 'MCP preflight calls did not stay in their required order.' }
     if ($managed.status -ne 'VERIFIED' -or $managed.virtualPlc.started -ne $true -or $managed.virtualPlc.cleanup.status -ne 'stopped') {
         throw 'Managed virtual PLC lifecycle did not start and clean up deterministically.'
     }
@@ -284,14 +314,31 @@ while ($line = [Console]::In.ReadLine()) {
     $global:LASTEXITCODE = 0
     Write-Output 'PASS: simulation acceptance owns virtual PLC startup and cleanup'
 
+    $cleanupFailureReportPath = Join-Path $temp 'cleanup-unconfirmed.json'
+    $env:TIA_SIM_FIXTURE_CLEANUP_MODE = 'missing'
+    $cleanupFailureOutput = & $pwsh -NoProfile -NonInteractive -File $script `
+        -WorkspaceRoot $runnerRoot -ReadinessPath $readyPath -OutputPath $cleanupFailureReportPath -ProjectFile $projectFile `
+        -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -DevicePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
+        -SimulationTargetEvidencePath $targetEvidencePath -McpExecutablePath $pwsh -McpArguments $fixtureArguments `
+        -PlcSimAdapterPath $pwsh -PlcSimTransport tcpip-local -IoPlanPath $ioPlanPath `
+        -PlcSimAdapterArguments $managedAdapterArguments -StartVirtualPlc -AcknowledgeVirtualTarget -TimeoutSeconds $runnerTimeout -Run 2>&1 | Out-String
+    $env:TIA_SIM_FIXTURE_CLEANUP_MODE = $null
+    if ($LASTEXITCODE -ne 1) { throw "Missing cleanup confirmation must fail acceptance. Output: $cleanupFailureOutput" }
+    $cleanupFailure = Get-Content -Raw -LiteralPath $cleanupFailureReportPath | ConvertFrom-Json
+    if ($cleanupFailure.status -ne 'FAILED' -or $cleanupFailure.phase -ne 'VIRTUAL_PLC_CLEANUP') {
+        throw 'Acceptance passed without explicit confirmation that the managed virtual PLC was cleaned up.'
+    }
+    $global:LASTEXITCODE = 0
+    Write-Output 'PASS: simulation acceptance fails when virtual PLC cleanup is unconfirmed'
+
     $behaviorReportPath = Join-Path $temp 'behavior.json'
     $behaviorOutput = & $pwsh -NoProfile -NonInteractive -File $script `
-        -ReadinessPath $readyPath -OutputPath $behaviorReportPath -ProjectFile $projectFile `
+        -WorkspaceRoot $runnerRoot -ReadinessPath $readyPath -OutputPath $behaviorReportPath -ProjectFile $projectFile `
         -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -DevicePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
         -SimulationTargetEvidencePath $targetEvidencePath -McpExecutablePath $pwsh -McpArguments $fixtureArguments `
         -PlcSimAdapterPath $pwsh -PlcSimTransport tcpip-local `
         -PlcSimAdapterArguments $managedAdapterArguments -IoPlanPath $ioPlanPath `
-        -StartVirtualPlc -AcknowledgeVirtualTarget -Run 2>&1 | Out-String
+        -StartVirtualPlc -AcknowledgeVirtualTarget -TimeoutSeconds $runnerTimeout -Run 2>&1 | Out-String
     if ($LASTEXITCODE -ne 0) { throw "Behavior fixture failed with exit code $LASTEXITCODE. Output: $behaviorOutput" }
     $behavior = Get-Content -Raw -LiteralPath $behaviorReportPath | ConvertFrom-Json
     if ($behavior.status -ne 'VERIFIED' -or $behavior.behavior.verified -ne $true -or @($behavior.behavior.steps).Count -ne 1) {
@@ -304,12 +351,12 @@ while ($line = [Console]::In.ReadLine()) {
         $unsafeReportPath = Join-Path $temp ("unsafe-$unsafeMode.json")
         $env:TIA_SIM_FIXTURE_BLOCK_MODE = $unsafeMode
         $unsafeOutput = & $pwsh -NoProfile -NonInteractive -File $script `
-            -ReadinessPath $readyPath -OutputPath $unsafeReportPath -ProjectFile $projectFile `
+            -WorkspaceRoot $runnerRoot -ReadinessPath $readyPath -OutputPath $unsafeReportPath -ProjectFile $projectFile `
             -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -DevicePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
             -SimulationTargetEvidencePath $targetEvidencePath -McpExecutablePath $pwsh -McpArguments $fixtureArguments `
             -PlcSimAdapterPath $pwsh -PlcSimTransport tcpip-local `
             -PlcSimAdapterArguments $managedAdapterArguments -IoPlanPath $ioPlanPath `
-            -StartVirtualPlc -AcknowledgeVirtualTarget -Run 2>&1 | Out-String
+            -StartVirtualPlc -AcknowledgeVirtualTarget -TimeoutSeconds $runnerTimeout -Run 2>&1 | Out-String
         $env:TIA_SIM_FIXTURE_BLOCK_MODE = $null
         if ($LASTEXITCODE -ne 1) { throw "Unsafe simulation inventory '$unsafeMode' must fail before download. Output: $unsafeOutput" }
         $unsafe = Get-Content -Raw -LiteralPath $unsafeReportPath | ConvertFrom-Json
@@ -324,12 +371,12 @@ while ($line = [Console]::In.ReadLine()) {
         $downloadCheckReportPath = Join-Path $temp ("download-check-$downloadMode.json")
         $env:TIA_SIM_FIXTURE_DOWNLOAD_MODE = $downloadMode
         $downloadCheckOutput = & $pwsh -NoProfile -NonInteractive -File $script `
-            -ReadinessPath $readyPath -OutputPath $downloadCheckReportPath -ProjectFile $projectFile `
+            -WorkspaceRoot $runnerRoot -ReadinessPath $readyPath -OutputPath $downloadCheckReportPath -ProjectFile $projectFile `
             -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -DevicePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
             -SimulationTargetEvidencePath $targetEvidencePath -McpExecutablePath $pwsh -McpArguments $fixtureArguments `
             -PlcSimAdapterPath $pwsh -PlcSimTransport tcpip-local `
             -PlcSimAdapterArguments $managedAdapterArguments -IoPlanPath $ioPlanPath `
-            -StartVirtualPlc -AcknowledgeVirtualTarget -Run 2>&1 | Out-String
+            -StartVirtualPlc -AcknowledgeVirtualTarget -TimeoutSeconds $runnerTimeout -Run 2>&1 | Out-String
         $env:TIA_SIM_FIXTURE_DOWNLOAD_MODE = $null
         if ($LASTEXITCODE -ne 1) { throw "Download result '$downloadMode' must fail acceptance. Output: $downloadCheckOutput" }
         $downloadCheck = Get-Content -Raw -LiteralPath $downloadCheckReportPath | ConvertFrom-Json
@@ -346,12 +393,12 @@ while ($line = [Console]::In.ReadLine()) {
         ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $weakPlanPath -Encoding UTF8
     $weakReportPath = Join-Path $temp 'weak-plan-report.json'
     $weakOutput = & $pwsh -NoProfile -NonInteractive -File $script `
-        -ReadinessPath $readyPath -OutputPath $weakReportPath -ProjectFile $projectFile `
+        -WorkspaceRoot $runnerRoot -ReadinessPath $readyPath -OutputPath $weakReportPath -ProjectFile $projectFile `
         -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -DevicePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
         -SimulationTargetEvidencePath $targetEvidencePath -McpExecutablePath $pwsh -McpArguments $fixtureArguments `
         -PlcSimAdapterPath $pwsh `
         -PlcSimAdapterArguments $managedAdapterArguments -PlcSimTransport tcpip-local -IoPlanPath $weakPlanPath `
-        -StartVirtualPlc -AcknowledgeVirtualTarget -Run 2>&1 | Out-String
+        -StartVirtualPlc -AcknowledgeVirtualTarget -TimeoutSeconds $runnerTimeout -Run 2>&1 | Out-String
     if ($LASTEXITCODE -ne 2) { throw "Weak behavior plan must block with exit code 2. Output: $weakOutput" }
     $weak = Get-Content -Raw -LiteralPath $weakReportPath | ConvertFrom-Json
     if ($weak.status -ne 'BLOCKED' -or $weak.phase -ne 'PREFLIGHT' -or $weak.mutationAttempted -ne $false) { throw 'Weak behavior plan was not rejected before mutation.' }
@@ -361,11 +408,11 @@ while ($line = [Console]::In.ReadLine()) {
     $adapterFailureReportPath = Join-Path $temp 'adapter-failure.json'
     $missingAdapter = Join-Path $temp 'missing-tia-claude-plcsim-adapter.exe'
     $adapterOutput = & $pwsh -NoProfile -NonInteractive -File $script `
-        -ReadinessPath $readyPath -OutputPath $adapterFailureReportPath -ProjectFile $projectFile `
+        -WorkspaceRoot $runnerRoot -ReadinessPath $readyPath -OutputPath $adapterFailureReportPath -ProjectFile $projectFile `
         -ProjectName 'Fixture Project' -SoftwarePath 'Fixture PLC' -DevicePath 'Fixture PLC' -TargetIpAddress '192.168.0.1' `
         -SimulationTargetEvidencePath $targetEvidencePath -McpExecutablePath $pwsh -McpArguments $fixtureArguments `
         -PlcSimAdapterPath $missingAdapter -PlcSimTransport tcpip-local -IoPlanPath $ioPlanPath `
-        -StartVirtualPlc -AcknowledgeVirtualTarget -Run 2>&1 | Out-String
+        -StartVirtualPlc -AcknowledgeVirtualTarget -TimeoutSeconds $runnerTimeout -Run 2>&1 | Out-String
     if ($LASTEXITCODE -ne 1) { throw "Missing adapter must fail with exit code 1. Output: $adapterOutput" }
     $adapterFailure = Get-Content -Raw -LiteralPath $adapterFailureReportPath | ConvertFrom-Json
     if ($adapterFailure.status -ne 'FAILED' -or $adapterFailure.phase -ne 'VIRTUAL_PLC_START') {
@@ -376,5 +423,8 @@ while ($line = [Console]::In.ReadLine()) {
     Write-Output 'PASS: simulation acceptance refuses before MCP when the native virtual PLC adapter is missing'
 }
 finally {
+    $env:TIA_SIM_FIXTURE_CLEANUP_MODE = $null
+    $env:TIA_SIM_FIXTURE_CALLS_LOG = $null
     if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Recurse -Force }
+    if (Test-Path -LiteralPath $processFixtures) { Remove-Item -LiteralPath $processFixtures -Recurse -Force }
 }

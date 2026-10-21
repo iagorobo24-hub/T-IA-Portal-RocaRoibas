@@ -337,7 +337,7 @@ $null = $md.AppendLine()
 $null = $md.AppendLine('| PLC | Ruta | Tipo | Lenguaje | Consistente | Fuente |')
 $null = $md.AppendLine('|---|---|---|---|---:|---|')
 foreach ($block in $blockRows) {
-    $source = if ($block.source) { $block.source } else { '—' }
+    $source = if ($block.source) { $block.source } else { '-' }
     $null = $md.AppendLine("| $($block.plc) | ``$($block.path)`` | $($block.type) | $($block.language) | $($block.consistent) | ``$source`` |")
 }
 $null = $md.AppendLine()
@@ -349,7 +349,7 @@ if ($findings.Count -eq 0) {
 else {
     foreach ($finding in $findings) {
         $target = if ($finding.block) { " [$($finding.block)]" } else { '' }
-        $null = $md.AppendLine("- **$($finding.severity)** ``$($finding.code)``$target — $($finding.message)")
+        $null = $md.AppendLine("- **$($finding.severity)** ``$($finding.code)``$target - $($finding.message)")
     }
 }
 $null = $md.AppendLine()

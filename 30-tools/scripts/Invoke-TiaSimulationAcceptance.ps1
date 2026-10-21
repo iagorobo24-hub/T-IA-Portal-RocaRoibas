@@ -18,9 +18,9 @@
 #>
 [CmdletBinding()]
 param(
-    [string]$WorkspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path,
-    [string]$ReadinessPath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path '70-runs\simulation\readiness-latest.json'),
-    [string]$OutputPath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path '70-runs\simulation\acceptance-latest.json'),
+    [string]$WorkspaceRoot,
+    [string]$ReadinessPath,
+    [string]$OutputPath,
     [string]$ProjectFile,
     [string]$ProjectName,
     [string]$DevicePath,
@@ -35,7 +35,7 @@ param(
     [string]$PlcSimInterface = 'Siemens PLCSIM Virtual Ethernet Adapter',
     [string]$VirtualPlcName = 'TIAClaudeAcceptance_1513',
     [int]$PlcSimTimeoutMs = 60000,
-    [string]$McpExecutablePath = (Join-Path (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path '30-tools\mcp\tia-create\bin\v20\TiaMcpServer.exe'),
+    [string]$McpExecutablePath,
     [string]$McpArguments = '--tia-major-version 20 --profile full --allow-write',
     [string]$IoPlanPath,
     [int]$TimeoutSeconds = 900,
@@ -46,7 +46,11 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+if ([string]::IsNullOrWhiteSpace($WorkspaceRoot)) { $WorkspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path }
 $WorkspaceRoot = [IO.Path]::GetFullPath($WorkspaceRoot)
+if ([string]::IsNullOrWhiteSpace($ReadinessPath)) { $ReadinessPath = Join-Path $WorkspaceRoot '70-runs\simulation\readiness-latest.json' }
+if ([string]::IsNullOrWhiteSpace($OutputPath)) { $OutputPath = Join-Path $WorkspaceRoot '70-runs\simulation\acceptance-latest.json' }
+if ([string]::IsNullOrWhiteSpace($McpExecutablePath)) { $McpExecutablePath = Join-Path $WorkspaceRoot '30-tools\mcp\tia-create\bin\v20\TiaMcpServer.exe' }
 $ReadinessPath = [IO.Path]::GetFullPath($ReadinessPath)
 $OutputPath = [IO.Path]::GetFullPath($OutputPath)
 if (-not [string]::IsNullOrWhiteSpace($ProjectFile)) {
@@ -89,6 +93,15 @@ function Save-ReportSnapshot([object]$Report) {
     $temporaryPath = $OutputPath + '.pending'
     ($Report | ConvertTo-Json -Depth 30) | Set-Content -LiteralPath $temporaryPath -Encoding UTF8
     Move-Item -LiteralPath $temporaryPath -Destination $OutputPath -Force
+}
+
+function Get-StderrHint([object]$Sequence) {
+    # A failed MCP sequence is otherwise opaque: the child's stderr carries the real
+    # reason (missing fixture, parse error, execution policy). Keep the tail bounded.
+    if (-not $Sequence -or [string]::IsNullOrWhiteSpace([string]$Sequence.stderr)) { return '' }
+    $stderrText = ([string]$Sequence.stderr).Trim()
+    if ($stderrText.Length -gt 1200) { $stderrText = '...' + $stderrText.Substring($stderrText.Length - 1200) }
+    return " | stderr: $stderrText"
 }
 
 function Get-ToolPayload([object]$Call) {
@@ -145,18 +158,27 @@ function Start-VirtualPlcProcess {
     $psi.StandardOutputEncoding = [Text.Encoding]::UTF8
     $process = [Diagnostics.Process]::Start($psi)
     $stderrTask = $process.StandardError.ReadToEndAsync()
-    $read = $process.StandardOutput.ReadLineAsync()
-    if (-not $read.Wait($PlcSimTimeoutMs)) {
-        try { $process.Kill() } catch { }
-        throw "Timeout esperando el estado ready del adaptador PLCSIM ($PlcSimTimeoutMs ms)."
+    try {
+        $read = $process.StandardOutput.ReadLineAsync()
+        if (-not $read.Wait($PlcSimTimeoutMs)) {
+            throw "Timeout esperando el estado ready del adaptador PLCSIM ($PlcSimTimeoutMs ms)."
+        }
+        $line = $read.Result
+        if ([string]::IsNullOrWhiteSpace($line)) { throw 'El adaptador PLCSIM terminó sin emitir estado inicial.' }
+        try { $ready = $line | ConvertFrom-Json } catch { throw "El adaptador PLCSIM emitió JSON inválido: $line" }
+        if ([string]$ready.status -ne 'ready') {
+            throw "El adaptador PLCSIM no está listo: $line"
+        }
+        [pscustomobject]@{ process = $process; ready = $ready; stderrTask = $stderrTask }
     }
-    $line = $read.Result
-    if ([string]::IsNullOrWhiteSpace($line)) { throw 'El adaptador PLCSIM terminó sin emitir estado inicial.' }
-    try { $ready = $line | ConvertFrom-Json } catch { throw "El adaptador PLCSIM emitió JSON inválido: $line" }
-    if ([string]$ready.status -ne 'ready') {
-        throw "El adaptador PLCSIM no está listo: $line"
+    catch {
+        if ($process -and -not $process.HasExited) {
+            try { $process.StandardInput.WriteLine('stop'); $process.StandardInput.Close() } catch { }
+            if (-not $process.WaitForExit(5000)) { try { $process.Kill() } catch { } }
+        }
+        if ($process) { try { $process.Dispose() } catch { } }
+        throw
     }
-    [pscustomobject]@{ process = $process; ready = $ready; stderrTask = $stderrTask }
 }
 
 function Invoke-IoPlan([Diagnostics.Process]$Process, [string]$Path, [object]$Plan, [string]$Sha256) {
@@ -546,18 +568,19 @@ try {
         @{ name = 'CheckDownloadReadiness'; args = @{ softwarePath = $SoftwarePath } },
         @{ name = 'Disconnect'; args = @{} }
     )
-    $callsJson = $preflightCalls | ConvertTo-Json -Depth 20 -Compress
+    $callsJsonPath = $preflightSequencePath + '.calls.json'
+    ($preflightCalls | ConvertTo-Json -Depth 20 -Compress) | Set-Content -LiteralPath $callsJsonPath -Encoding UTF8
     $report.status = 'RUNNING'
     $report.activeSequence = [ordered]@{ kind = 'preflight'; outputPath = $preflightSequencePath; startedAt = [DateTimeOffset]::Now.ToString('o') }
     Save-ReportSnapshot $report
-    & $pwsh -NoProfile -NonInteractive -File $sequenceScript -ExecutablePath $McpExecutablePath -Arguments $McpArguments -CallsJson $callsJson -OutputPath $preflightSequencePath -TimeoutSeconds $TimeoutSeconds | Out-Null
+    & $pwsh -NoProfile -NonInteractive -File $sequenceScript -ExecutablePath $McpExecutablePath -Arguments $McpArguments -CallsJsonPath $callsJsonPath -OutputPath $preflightSequencePath -TimeoutSeconds $TimeoutSeconds -CaptureStderr | Out-Null
     $preflight = if (Test-Path -LiteralPath $preflightSequencePath) { Read-Json $preflightSequencePath } else { $null }
     $report.activeSequence = $null
     if ($preflight) { $report.calls = @($preflight.calls) }
     Save-ReportSnapshot $report
     if (-not $preflight -or -not (Test-StrictTrue $preflight.success)) {
         $sequenceFailure = if ($preflight.error) { [string]$preflight.error } else { 'no sequence result file was produced' }
-        throw "The MCP preflight sequence did not complete successfully: $sequenceFailure"
+        throw "The MCP preflight sequence did not complete successfully: $sequenceFailure$(Get-StderrHint $preflight)"
     }
     $openCallName = if ($AllowOpenProjectFallback) { 'OpenProject' } else { 'AttachToOpenProject' }
     $attachCall = @($preflight.calls | Where-Object name -eq $openCallName | Select-Object -Last 1)
@@ -682,13 +705,19 @@ try {
     $report.mutationAttempted = $true
     $report.activeSequence = [ordered]@{ kind = 'download'; outputPath = $downloadSequencePath; startedAt = [DateTimeOffset]::Now.ToString('o'); outcome = 'not yet recorded' }
     Save-ReportSnapshot $report
-    $downloadJson = $downloadCalls | ConvertTo-Json -Depth 20 -Compress
-    & $pwsh -NoProfile -NonInteractive -File $sequenceScript -ExecutablePath $McpExecutablePath -Arguments $McpArguments -CallsJson $downloadJson -OutputPath $downloadSequencePath -TimeoutSeconds $TimeoutSeconds | Out-Null
+    $downloadCallsPath = $downloadSequencePath + '.calls.json'
+    ($downloadCalls | ConvertTo-Json -Depth 20 -Compress) | Set-Content -LiteralPath $downloadCallsPath -Encoding UTF8
+    & $pwsh -NoProfile -NonInteractive -File $sequenceScript -ExecutablePath $McpExecutablePath -Arguments $McpArguments -CallsJsonPath $downloadCallsPath -OutputPath $downloadSequencePath -TimeoutSeconds $TimeoutSeconds -CaptureStderr | Out-Null
+
+
     $download = if (Test-Path -LiteralPath $downloadSequencePath) { Read-Json $downloadSequencePath } else { $null }
     $report.activeSequence = $null
     if ($download) { $report.calls += @($download.calls) }
     Save-ReportSnapshot $report
-    if (-not $download.success) { throw "Download sequence failed; inspect calls in the report." }
+    if (-not $download.success) {
+        $downloadFailure = if ($download.error) { [string]$download.error } else { 'inspect calls in the report' }
+        throw "Download sequence failed: $downloadFailure$(Get-StderrHint $download)"
+    }
     $downloadOpenCall = @($download.calls | Where-Object name -eq $openCallName | Select-Object -Last 1)
     if ($downloadOpenCall.Count -ne 1 -or -not (Test-StrictTrue $downloadOpenCall[0].success)) { throw "Download session did not bind the exact project via $openCallName; refusing to download." }
     $downloadCall = @($download.calls | Where-Object name -eq 'DownloadToPlc' | Select-Object -Last 1)
@@ -742,7 +771,7 @@ finally {
         }
         if (-not $report.virtualPlc) { $report.virtualPlc = [ordered]@{} }
         $report.virtualPlc.cleanup = $cleanup
-        if ($cleanup -and $cleanup.status -eq 'cleanup-failed') {
+        if (-not $cleanup -or $cleanup.status -ne 'stopped') {
             $report.status = 'FAILED'
             $report.phase = 'VIRTUAL_PLC_CLEANUP'
             $report.blockers = @('El adaptador PLCSIM no confirmó la limpieza completa.')
@@ -750,7 +779,8 @@ finally {
         }
         try { $virtualProcess.Dispose() } catch { }
     }
-    foreach ($path in @($preflightSequencePath, $downloadSequencePath)) {
+    Save-ReportSnapshot $report
+    foreach ($path in @($preflightSequencePath, $preflightSequencePath + '.calls.json', $downloadSequencePath, $downloadSequencePath + '.calls.json')) {
         if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
     }
 }
