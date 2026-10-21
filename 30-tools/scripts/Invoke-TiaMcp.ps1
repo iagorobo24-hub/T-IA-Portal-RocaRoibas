@@ -77,12 +77,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-$exe = Join-Path $PSScriptRoot "..\mcp\tia-inspect\bin\v$TiaMajor\TiaMcpServer.exe"
-$exe = [System.IO.Path]::GetFullPath($exe)
-if (-not (Test-Path $exe)) {
-    throw "No existe $exe. Compilalo con 30-tools\mcp\tia-inspect\build.ps1 -TiaMajor $TiaMajor"
-}
-
+# El manifiesto de la fixture se valida ANTES de comprobar el ejecutable. Un fixture
+# malformado tiene que rechazarse con su propio error aunque el binario no este compilado,
+# y siempre antes de lanzar nada: si el orden es el contrario, el error del toolchain
+# enmascara el del fixture y el gate de seguridad deja de ser comprobable.
 if ($Isolated -and [string]::IsNullOrWhiteSpace($FixtureRoot)) {
     throw '-Isolated requires -FixtureRoot pointing to a disposable fixture run directory.'
 }
@@ -96,6 +94,12 @@ if ($AllowWrite -and -not $Isolated) {
 }
 if ($FixtureRoot -and -not $Isolated) {
     throw '-FixtureRoot can only be used with -Isolated.'
+}
+
+$exe = Join-Path $PSScriptRoot "..\mcp\tia-inspect\bin\v$TiaMajor\TiaMcpServer.exe"
+$exe = [System.IO.Path]::GetFullPath($exe)
+if (-not (Test-Path $exe)) {
+    throw "No existe $exe. Compilalo con 30-tools\mcp\tia-inspect\build.ps1 -TiaMajor $TiaMajor"
 }
 
 $serverArgs = "--tia-major-version $TiaMajor"

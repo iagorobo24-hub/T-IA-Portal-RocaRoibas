@@ -8,9 +8,38 @@ $pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
 if (-not $pwsh) { $pwsh = (Get-Command powershell -ErrorAction Stop).Source }
 $temp = Join-Path ([IO.Path]::GetTempPath()) ('tia-claude-simulation-safety-test-' + [guid]::NewGuid().ToString('N'))
 
+# El runner exige evidencia de que el destino es una CPU simulada antes de descargar
+# (puerta anadida en d25e399). Aqui el destino es un fixture MCP simulado, asi que la
+# evidencia tambien es de fixture, pero con las mismas claves y la misma caducidad que
+# exige el runner: proyecto y dispositivo exactos, TIA V20, la ruta PG/PC de este
+# transporte, "CPU-1500 Simulation", ventana maximizada, aviso de CPU simulada y menos
+# de 30 minutos de antiguedad.
+function New-SimulationTargetEvidence([string]$Name, [string]$Transport) {
+    $path = Join-Path $temp ($Name + '-target-evidence.json')
+    $pgPcInterface = if ($Transport -eq 'softbus') { 'PLCSIM' } else { 'Siemens PLCSIM Virtual Ethernet Adapter' }
+    [ordered]@{
+        schemaVersion = 1
+        source = 'native-computer-use'
+        confirmed = $true
+        observedAt = [DateTimeOffset]::Now.ToString('o')
+        projectFile = [IO.Path]::GetFullPath($projectFile)
+        projectName = 'Fixture Project'
+        devicePath = 'Fixture PLC'
+        tiaMajorVersion = 20
+        pgPcInterface = $pgPcInterface
+        targetDisplayName = 'CPU-1500 Simulation'
+        windowState = 'maximized'
+        stage = 'before-download'
+        downloadNotice = 'The downloads are performed on a simulated CPU. No real PLC is affected.'
+        targetIpAddress = '192.168.0.1'
+    } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $path -Encoding UTF8
+    return $path
+}
+
 function Invoke-Runner([string]$Name, [string]$RouteMode, [string]$PlanPath, [switch]$StartVirtualPlc, [string]$AdapterIp = '192.168.0.1', [string]$ReadinessPathOverride, [string]$Transport = 'tcpip-local', [switch]$Fallback) {
     $reportPath = Join-Path $temp ($Name + '-report.json')
     $capturePath = Join-Path $temp ($Name + '-download.json')
+    $targetEvidencePath = New-SimulationTargetEvidence -Name $Name -Transport $Transport
     $deviceIp = if ($RouteMode -eq 'project-ip-mismatch') { '192.168.0.99' } else { '192.168.0.1' }
     $fixtureArguments = ' -NoProfile -NonInteractive -File "' + $fixtureServer + '" -RouteMode ' + $RouteMode + ' -DeviceIp ' + $deviceIp + ' -CapturePath "' + $capturePath + '"'
     $adapterRunArguments = ' -NoProfile -NonInteractive -File "' + $adapterPath + '" -Ip ' + $AdapterIp + ' -Transport ' + $Transport
@@ -23,6 +52,7 @@ function Invoke-Runner([string]$Name, [string]$RouteMode, [string]$PlanPath, [sw
         '-PlcSimInterface', 'Siemens PLCSIM Virtual Ethernet Adapter', '-PlcSimTransport', $Transport,
         '-McpExecutablePath', $pwsh, '-McpArguments', $fixtureArguments,
         '-PlcSimAdapterPath', $pwsh, '-PlcSimAdapterArguments', $adapterRunArguments,
+        '-SimulationTargetEvidencePath', $targetEvidencePath,
         '-AcknowledgeVirtualTarget', '-Run'
     )
     if (-not [string]::IsNullOrWhiteSpace($PlanPath)) { $arguments += @('-IoPlanPath', $PlanPath) }
@@ -75,10 +105,10 @@ while ($line = [Console]::In.ReadLine()) {
         $name = [string]$request.params.name
         $argsObject = $request.params.arguments
         switch ($name) {
-            'GetProjectTree' { $payload = [ordered]@{ tree = "Fixture Project`n└── Fixture PLC [PLC Program]"; message = 'Project tree retrieved' } }
+            'GetProjectTree' { $payload = [ordered]@{ tree = "Fixture Project`n|-- Fixture PLC [PLC Program]"; message = 'Project tree retrieved' } }
             'AttachToOpenProject' { $payload = [ordered]@{ message = "Attached to open project 'Fixture Project'"; meta = @{ success = $true } } }
             'OpenProject' { $payload = [ordered]@{ message = "Opened project 'Fixture Project'"; meta = @{ success = $true } } }
-            'GetSoftwareTree' { $payload = [ordered]@{ tree = "Fixture PLC`n└── Main [OB]"; message = 'Software tree retrieved' } }
+            'GetSoftwareTree' { $payload = [ordered]@{ tree = "Fixture PLC`n|-- Main [OB]"; message = 'Software tree retrieved' } }
             'GetDeviceIpAddress' { $payload = [ordered]@{ message = (@{ Ok = $true; Data = @{ found = $true; device = 'Fixture PLC'; ipAddress = $DeviceIp; nodeCount = 1; nodes = @(@{ nodeName = 'X1'; address = $DeviceIp; nodeType = 'Ethernet'; isIndustrialEthernet = $true }) }; Errors = $null; Warnings = $null; Message = "PLC IP: $DeviceIp" } | ConvertTo-Json -Depth 20 -Compress) } }
             'GetBlocks' { $payload = [ordered]@{ meta = @{ success = $true }; items = @(@{ name = 'Main'; path = 'Main'; programmingLanguage = 'LAD'; isFailsafe = $false; isKnowHowProtected = $false; isConsistent = $true; attributes = @(@{ name = 'PLCSimAdvancedSupport'; value = $true }) }) } }
             'GetTags' { $payload = [ordered]@{ meta = @{ success = $true; complete = $true; count = 1 }; items = @(@{ name = 'Cmd_Enable'; path = 'Agent_Signals/Cmd_Enable'; isSafety = $false }) } }
@@ -180,8 +210,10 @@ while ($line = [Console]::In.ReadLine()) {
     )
     foreach ($gateCase in $gateCases) {
         $caseReadinessPath = Join-Path $temp ($gateCase.name + '.json')
-        $caseReadiness = Get-Content -Raw -LiteralPath $readinessPath | ConvertFrom-Json -AsHashtable
-        if ($gateCase.kind -eq 'missing') { $caseReadiness.gates.Remove('tiaInstanceSafeForApply') | Out-Null }
+        # Sin -AsHashtable: el fallback a Windows PowerShell 5.1 que este propio test declara
+        # en las lineas 7-8 no soporta ese parametro, y el JSON resultante es identico.
+        $caseReadiness = Get-Content -Raw -LiteralPath $readinessPath | ConvertFrom-Json
+        if ($gateCase.kind -eq 'missing') { $caseReadiness.gates.PSObject.Properties.Remove('tiaInstanceSafeForApply') }
         else { $caseReadiness.gates.tiaInstanceSafeForApply = $gateCase.value }
         $caseReadiness | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $caseReadinessPath -Encoding UTF8
         $gateResult = Invoke-Runner -Name $gateCase.name -RouteMode 'unique' -PlanPath $validPlanPath -StartVirtualPlc -ReadinessPathOverride $caseReadinessPath
