@@ -86,6 +86,6 @@ FB en SCL. Las referencias salen del export textual.
 
 ## Estado de la máquina al terminar
 
-- TIA Portal: cerrado, sin proyectos abiertos.
+- TIA Portal: cerrado (no queda ningun proceso abierto).
 - Sin instancias de PLCSIM ni Control Panel.
 - `Ethernet 2` en APIPA, como estaba.
