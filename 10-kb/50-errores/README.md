@@ -390,6 +390,57 @@ acepta como delimitadores de cadena.
 
 **Arreglo:** usar el objeto plano y `PSObject.Properties.Remove(...)` para quitar una propiedad.
 
+### `Failed to open project '<ruta>'` sin más detalle
+
+**Causa:** una de dos, y el mensaje no dice cuál:
+
+1. **La carpeta del proyecto supera los 143 caracteres.** TIA responde *The specified path '…'
+   (156 character) is too long. A maximum of 143 characters is allowed*, pero en modo aislado la
+   excepción se come y solo queda `Failed to open project`.
+2. **El proyecto tiene WinCC Unified**, y el modo aislado de `tia-inspect` (instancia de Openness
+   privada sin interfaz) no lo abre.
+
+**Arreglo:** medir la longitud de la carpeta del proyecto (límite 143) y poner la copia de
+inspección en una ruta corta bajo `%TEMP%`. Si el proyecto tiene HMI, inspeccionarlo con
+`tia-create` en modo no aislado, sobre una copia desechable y con el session guard comprobando
+que no hay ninguna TIA visible con un proyecto abierto. Detalle en
+[R30](../20-recetas/R30-crear-proyecto-desde-spec.md).
+
+### `Type conflict: Object "OB_Main" cannot be overwritten`
+
+**Causa:** una fuente externa con `ORGANIZATION_BLOCK "OB_Main"`. TIA nombra el OB cíclico del
+sistema y no admite otro nombre para él.
+
+**Arreglo:** declarar el OB cíclico como `ORGANIZATION_BLOCK "Main"`. El patrón `OB_<Función>` del
+estándar aplica a los OB de arranque y de error, no al OB1 del sistema.
+
+### `Tag "iDB_M01" not defined` y `The formal parameter 'CmdStart' is invalid` (×13)
+
+**Causa:** el DB de instancia no existe, así que la llamada `"iDB_M01"(...)` se resuelve como un
+**tag** y todos los parámetros formales quedan inválidos. En SCL, el DB de instancia se declara
+en la propia fuente.
+
+**Arreglo:** declarar el DB en la fuente, antes del OB:
+
+```scl
+DATA_BLOCK "iDB_M01"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   "FB_Motor"
+END_DATA_BLOCK
+```
+
+### `No block writes 'X'` cuando sí se usa (y `readSites` vacío)
+
+**Causa:** límite del analizador estático. `TraceTagCause`, `DescribeBlockLogic` y
+`GetCrossReferences` **no resuelven un tag global pasado como parámetro formal de una llamada a
+un FB en SCL**: salen `writeSites` y `readSites` vacíos, `DescribeBlockLogic` no decodifica el SCL
+del OB, y `GetCrossReferences` responde *Cross reference service not available for tag*.
+
+**Arreglo:** la referencia cruzada se saca del **export textual** (el `.scl` que se importó y el
+XML del bloque, donde aparece como `<Component Name="…" UId="…">`). `Invoke-TiaTagUsage.ps1` lo
+hace así y lo dice en su salida.
+
 ---
 
 ## Cuando el error no está aquí
