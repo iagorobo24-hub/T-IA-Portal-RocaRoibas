@@ -94,6 +94,7 @@ Si falla        los modos de fallo conocidos y su arreglo
 | [R25](R25-grupo-bloques-offline.md) | Grupo vacÃ­o de bloques PLC: crear, borrar, compilar, guardar y leer | âœ… ciclo V20 verificado en fixture aislado; grupos con bloques excluidos |
 | [R26](R26-importar-tabla-tags.md) | Importar una tabla PLC vacÃ­a o con dos tags Bool estÃ¡ndar, compilar, guardar, leer y restaurar carpeta | âœ… `tia-create/full` V20; tabla vacÃ­a y dos tags no Safety verificados; Safety y hardware excluidos |
 | [R27](R27-automatizacion-ui-tia.md) | Automatizar la interfaz de TIA Portal: UIA donde TIA se expone, OCR de Windows donde no, entrada sintetica para el resto | ? motor 30-tools/tia-ui/Invoke-TiaUi.ps1 verificado abriendo un proyecto de principio a fin; el clic derecho sobre un item del arbol queda como clic humano |
+| [R28](R28-aceptacion-plcsim.md) | Aceptacion de comportamiento en PLCSIM sin humano en el bucle: sesion adjunta, margen del Control Panel, UpdateTagList() y nombres de tag sin prefijo | ? verificado 2026-10-21 con FB_AlarmLatch: descarga 0/0 y plan de 65 pasos 65/65 |
 
 El orden y su porquÃ© estÃ¡n en [ADR-004](../../00-meta/decisiones/ADR-004-prioridades.md).
 
@@ -102,4 +103,5 @@ El orden y su porquÃ© estÃ¡n en [ADR-004](../../00-meta/decisiones/ADR-004-p
 En [`50-examples/`](../../50-examples/) hay **siete proyectos TIA reales** desempaquetados y
 listos. No son de nadie: si se rompen, no pasa nada. Empieza por
 `npatel-basement-light`, que es el mÃ¡s pequeÃ±o.
+
 
