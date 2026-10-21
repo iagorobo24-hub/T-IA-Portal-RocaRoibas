@@ -64,17 +64,29 @@ Probado de principio a fin:
 
 ## Lo que NO se ha podido automatizar
 
-El **clic derecho sobre un ítem del árbol** no abre el menú contextual de forma fiable desde la
-automatización: el clic sí llega a TIA (verificable con `WindowFromPoint`, que devuelve el PID de
-TIA) pero el menú no aparece. Se ha probado con `mouse_event` y con `SendInput`, con y sin
-`topmost`, con y sin repintado forzado, y con la ventana en el monitor principal y en el
-secundario. El menú **sí** se ").documentó" cuando se consiguió: expone
-`...LoadCommandsUI:MenuItemDownload`.
+El **menú contextual de un ítem del árbol** no es fiable desde la automatización:
 
-**Alternativa recomendada**: pedir **un único clic humano** en el ítem del árbol (el
-clic derecho y elegir *Descargar a dispositivo*) y **seguir a partir de ahí**: el diálogo
+- el **clic derecho** a veces abre el menú (se llegó a ver con 24 `MenuItem` de TIA, con los
+  nombres internos de Siemens, incluido `...LoadService.LoadCommandsUI:MenuItemDownload`) y otras
+  veces no abre nada;
+- **Shift+F10** (tecla de menú contextual) sí abre un popup, pero en las condiciones de este
+  host es uno **pequeño (76×60)** en lugar del menú real de 232×709, y sus ítems no quedan
+  expuestos a UIA.
+
+Se ha probado con `mouse_event` y con `SendInput`, con y sin `topmost`, con y sin repintado
+forzado, en el monitor principal y en el secundario, y con el foco forzado por
+`AttachThreadInput`. El hit-test (`WindowFromPoint`) confirma que el clic **sí llega a TIA**
+(devuelve el PID de TIA), así que el problema está en que TIA no muestra el menú, no en que el
+evento no llegue.
+
+**Alternativa recomendada**: pedir **un único clic humano** en el ítem del árbol (el clic derecho y
+elegir *Descargar a dispositivo*) y **seguir a partir de ahí**: el diálogo
 *Extended download to device* sí está expuesto a UIA (botones, combo de interfaz PG/PC, lista de
 destinos), de modo que a partir de ahí la cadena se puede automatizar entera.
+
+**Pista para el siguiente intento**: el ítem `PLC_1` está en la fila inmediatamente **anterior** a
+*Ungrouped devices* del árbol, es decir, en la fila y≈244 de la ventana (en pantalla, y≈246). Ese
+punto se puede usar como ancla estable aunque el OCR del rótulo falle.
 
 ## Relación con la descarga a PLCSIM
 
