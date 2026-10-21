@@ -276,6 +276,122 @@ precisamente por esto.
 
 ---
 
+## Errores de PLCSIM y de la aceptación (2026-10-21)
+
+Recogidos al cerrar la aceptación de bloques en CPU virtual. Todos están explicados con detalle
+en [R28](../20-recetas/R28-aceptacion-plcsim.md) y en
+[ADR-015](../../00-meta/decisiones/ADR-015-estado-real-2026-10-21.md).
+
+### `Connect to module PLC_1 failed` / `NotReachable` en la descarga
+
+**Causa:** la sesión Openness no va **adjunta** al TIA abierto. Con `ConnectIsolated` (headless)
+el mismo proyecto falla aunque la CPU virtual esté viva y respondiendo por S7.
+
+**Arreglo:** `AttachToOpenProject(projectName)` y descargar desde esa sesión. Es la diferencia
+entre `DownloadToPlc` con `state=Success` y `Connect to module ... failed`.
+
+### `This function is not supported in online mode`
+
+**Causa:** la vista live del proyecto abierto está en modo online, y TIA no permite escribir
+(importar fuentes, generar bloques) en ese estado.
+
+**Arreglo:** `GoOffline(softwarePath)` antes de escribir, y `SaveProject` después.
+
+### `The operation is not permitted in online mode` (al guardar)
+
+**Causa:** la misma. `SaveProject` también exige estar offline.
+
+**Arreglo:** `GoOffline` → escribir → `SaveProject`.
+
+### `Failed to attach to open project '<proyecto>'`
+
+**Causa:** **no** es un problema de adjuntar. Suele haber un **diálogo modal abierto en TIA**
+—típicamente el de "el proyecto se ha modificado, ¿guardar?"— y con un modal la sesión live no es
+accesible.
+
+**Arreglo:** primero observar la ventana de TIA y resolver el diálogo; después adjuntar.
+
+### `CloseMainWindow()` devuelve `True` pero TIA no se cierra
+
+**Causa:** hay un modal de cambios sin guardar. El diálogo es el que retiene el cierre, no la
+ventana principal.
+
+**Arreglo:** `GoOffline` → `SaveProject` → `CloseProject`, que deja TIA en la pantalla de inicio
+sin diálogo y libera el `.ap20`.
+
+### `The specified value "VAR_INPUT" is invalid` al generar un FC
+
+**Causa:** **no** es la interfaz. Un `FUNCTION` de TIA V20 exige el **tipo de retorno en la
+cabecera** (`FUNCTION "X" : Void`). Sin él el parser se descuadra y señala la línea siguiente.
+
+**Arreglo:** `FUNCTION "X" : Void` y el resultado por `VAR_OUTPUT`.
+
+### `The specified value "VERSION" is invalid` (o `AUTHOR`, o `FAMILY`)
+
+**Causa:** un `FUNCTION` de TIA V20 **no admite** `VERSION`, `AUTHOR` ni `FAMILY`. Solo en bloques
+con memoria.
+
+**Arreglo:** quitarlos. En un `FUNCTION_BLOCK` sí valen.
+
+### `ExternalSourceGroup not found`
+
+**Causa:** el `groupPath` de `ImportPlcExternalSource` no es el path del árbol de bloques.
+
+**Arreglo:** `groupPath` es la **cadena vacía**. Los paths tipo `PLC_1/Program blocks` fallan.
+
+### `-47` / `0xffffffd1` (`SREC_NOT_UP_TO_DATE`) al leer un tag
+
+**Causa:** la lista de etiquetas vive en memoria compartida y la puebla
+`IInstance::UpdateTagList()`, que lee los tags del VPLC. Sin esa llamada, la resolución simbólica
+no funciona **aunque la CPU ejecute el programa descargado**.
+
+**Arreglo:** llamar a `UpdateTagList()` tras adjuntarse a la instancia, antes de la primera
+lectura simbólica.
+
+### `-4` / `0xfffffffc` (`SREC_DOES_NOT_EXIST`) al leer un tag
+
+**Causa:** la API resuelve por el **nombre simple** del tag (`Active`, `Latched`), no por el
+nombre cualificado que muestra TIA (`Agent_Signals.Active`).
+
+**Arreglo:** usar el nombre simple. El prefijo de tabla no existe para la API.
+
+### `initialization-failed` con `initializeCode: 0xFFFFFFFF`
+
+**Causa:** la API de PLCSIM Advanced **no inicializa sin privilegios**.
+
+**Arreglo:** correr el adaptador y el runner del plan **elevados** (administrador).
+
+### `el índice de la matriz está elevado a NULL` en el runner del plan
+
+**Causa:** un paso del plan **sin `expect`**. La colección de propiedades de un `expect` nulo no es
+una colección vacía, e indexarla con un nombre nulo revienta.
+
+**Arreglo:** el runner ahora trata un paso sin `expect` como "nada que comparar". Si te pasa con
+otro runner, mira primero si el plan tiene todos los pasos con `expect`.
+
+### Error de sintaxis en un `.ps1` que no señala la causa
+
+**Causa:** en **Windows PowerShell 5.1**, un `.ps1` sin BOM se lee como ANSI. Los glifos de caja
+(`└──`) se convierten en `â””â”€â”€`, que contiene **comillas tipográficas U+201D**, y el parser las
+acepta como delimitadores de cadena.
+
+**Arreglo:** en scripts que se escriben a disco y luego se ejecutan, usar **ASCII puro**
+(`|--` en vez de `└──`). O ejecutar con pwsh 7, que lee UTF-8 siempre.
+
+### `Join-Path: ... porque es una cadena vacía` en la línea 3 de un script
+
+**Causa:** `$PSScriptRoot` **no está disponible en el bloque `param`** en 5.1.
+
+**Arreglo:** resolver el valor por defecto en el cuerpo del script, no en el `param`.
+
+### `No se encuentra ningún parámetro que coincida con el nombre del parámetro 'AsHashtable'`
+
+**Causa:** `ConvertFrom-Json -AsHashtable` es **PowerShell 6+**.
+
+**Arreglo:** usar el objeto plano y `PSObject.Properties.Remove(...)` para quitar una propiedad.
+
+---
+
 ## Cuando el error no está aquí
 
 1. Lee el mensaje entero, incluido el `InnerException` si lo trae
