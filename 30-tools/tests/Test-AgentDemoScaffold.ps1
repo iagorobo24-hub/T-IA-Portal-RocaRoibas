@@ -5,7 +5,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $callScript = Join-Path $WorkspaceRoot '30-tools\scripts\Invoke-McpToolCall.ps1'
-$runner = Join-Path $WorkspaceRoot '30-tools\scripts\Invoke-AgentDemoScaffold.ps1'
+$runner = Join-Path $WorkspaceRoot '30-tools\scripts\Invoke-TiaProjectFromSpec.ps1'
 $specPath = Join-Path $WorkspaceRoot '50-examples\agent-demo\specs\scaffold.json'
 $sourcePath = Join-Path $WorkspaceRoot '50-examples\agent-demo\sources\FB_AgentDemo.scl'
 foreach ($path in @($callScript, $runner, $specPath, $sourcePath)) {

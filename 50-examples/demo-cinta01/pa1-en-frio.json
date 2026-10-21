@@ -1,0 +1,43 @@
+﻿{
+    "schemaVersion":  1,
+    "date":  "2026-10-21",
+    "what":  "La cadena de PA-1 ejecutada en frio, dos veces seguidas, sin intervencion.",
+    "command":  "pwsh -File 30-tools/scripts/Invoke-TiaProjectFromSpec.ps1 -SpecPath 50-examples/demo-cinta01/specs/scaffold.json -HmiScreenPath 50-examples/demo-cinta01/hmi-screen.json -MirrorPath 50-examples/demo-cinta01 -ProjectReadmePath 50-examples/demo-cinta01/README.md -OutputRoot 70-runs/e2e/pa1-cold-runN -Recreate -Apply",
+    "cold":  "TIA cerrado, sin procesos de PLCSIM y con el proyecto anterior presente (se rehace con -Recreate).",
+    "runs":  [
+                 {
+                     "run":  1,
+                     "exitCode":  0,
+                     "seconds":  234,
+                     "success":  true,
+                     "blocks":  3,
+                     "compileErrors":  0,
+                     "compileWarnings":  0,
+                     "standardsExitCode":  0,
+                     "hmi":  true,
+                     "ops":  true,
+                     "src":  true,
+                     "mirror":  true,
+                     "readme":  true,
+                     "report":  "70-runs/e2e/pa1-cold-run1/scaffold-report.json"
+                 },
+                 {
+                     "run":  2,
+                     "exitCode":  0,
+                     "seconds":  236,
+                     "success":  true,
+                     "blocks":  3,
+                     "compileErrors":  0,
+                     "compileWarnings":  0,
+                     "standardsExitCode":  0,
+                     "hmi":  true,
+                     "ops":  true,
+                     "src":  true,
+                     "mirror":  true,
+                     "readme":  true,
+                     "report":  "70-runs/e2e/pa1-cold-run2/scaffold-report.json"
+                 }
+             ],
+    "identical":  "El arbol de software de los dos runs es identico y los cinco entregables se verifican en los dos.",
+    "caveat":  "Se ejecuto en este host y con este operador delante: la repeticion automatica por el agente, sin sesion de por medio, sigue sin medirse."
+}

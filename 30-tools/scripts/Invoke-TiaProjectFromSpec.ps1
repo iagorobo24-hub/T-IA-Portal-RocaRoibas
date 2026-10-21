@@ -13,6 +13,10 @@ param(
     [string]$ProjectDirectory,
     [string]$OutputRoot,
     [string]$SpecPath,
+    [string]$HmiScreenPath,
+    [string]$MirrorPath,
+    [string]$ProjectReadmePath,
+    [switch]$Recreate,
     [switch]$Apply
 )
 
@@ -49,7 +53,7 @@ if (-not $ProjectDirectory) { $ProjectDirectory = [string]$spec.directoryPath }
 if ([string]::IsNullOrWhiteSpace($ProjectDirectory)) { $ProjectDirectory = Join-Path $WorkspaceRoot ('90-tmp\agent-demo-scaffold-v20-' + (Get-Date -Format 'yyyyMMdd-HHmmss')) }
 $spec.directoryPath = $ProjectDirectory
 $ProjectDirectory = [IO.Path]::GetFullPath($ProjectDirectory)
-if ($Apply -and (Test-Path -LiteralPath $ProjectDirectory)) { throw "Apply destination already exists: $ProjectDirectory" }
+if ($Apply -and (Test-Path -LiteralPath $ProjectDirectory) -and -not $Recreate) { throw "Apply destination already exists: $ProjectDirectory. Use -Recreate to rebuild it from scratch." }
 $sourcePath = @($spec.sclSourceFiles)[0]
 foreach ($path in @($spec.sclSourceFiles)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing SCL source listed in the spec: $path" }
@@ -357,6 +361,126 @@ function Invoke-PostApplyVerification([string]$ReportDirectory) {
     return $post
 }
 
+function Invoke-DeliverySteps([string]$Project, [object]$Spec, [string]$ReportDirectory) {
+    # Cierra el ciclo de entrega: pantalla HMI, export al src/ del PROYECTO, informe real
+    # del compilador en ops/, y copia al espejo versionado. Es lo que convierte "el proyecto
+    # existe" en "el proyecto esta entregado".
+    $delivery = [ordered]@{
+        success = $false
+        hmi = $null
+        src = $null
+        ops = $null
+        mirror = $null
+        readme = $null
+    }
+    $projectRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $Project))
+    $srcPath = Join-Path $projectRoot 'src'
+    $opsPath = Join-Path $projectRoot 'ops'
+    if (Test-Path -LiteralPath $srcPath) { Remove-Item -LiteralPath $srcPath -Recurse -Force }
+    New-Item -ItemType Directory -Path $srcPath, $opsPath, (Join-Path $srcPath 'Program blocks'), (Join-Path $srcPath 'tags'), (Join-Path $srcPath 'sources') -Force | Out-Null
+
+    # 1. Pantalla HMI y sus bindings.
+    if ($HmiScreenPath) {
+        $hmiRunner = Join-Path $WorkspaceRoot '30-tools\scripts\Invoke-TiaHmiScreenFromJson.ps1'
+        $hmiReport = Join-Path $ReportDirectory 'hmi-screen.json'
+        $hmiOutput = (& $pwsh -NoProfile -NonInteractive -File $hmiRunner -ScreenJsonPath $HmiScreenPath -ProjectFile $Project 2>&1 | Out-String).Trim()
+        $hmiExit = $LASTEXITCODE
+        $delivery.hmi = [ordered]@{ success = ($hmiExit -eq 0); screenJsonPath = $HmiScreenPath; output = $hmiOutput }
+        if ($hmiExit -ne 0) { return $delivery }
+    }
+
+    # 2. Compilacion real con informe, y export al src/ del proyecto.
+    $compileCalls = @(
+        @{ name = 'Connect'; args = @{} },
+        @{ name = 'OpenProject'; args = @{ path = $Project; closeForeignProject = $false } },
+        @{ name = 'CompileSoftware'; args = @{ softwarePath = [string]$Spec.plcName; password = '' } },
+        @{ name = 'ExportBlocks'; args = @{ softwarePath = [string]$Spec.plcName; exportPath = (Join-Path $srcPath 'Program blocks'); regexName = '.*'; preservePath = $false } }
+    )
+    # La tabla de tags del spec, exportada a XML: el export textual del proyecto
+    # tiene que incluir donde estan las senales, no solo los bloques.
+    foreach ($table in @($Spec.tagTable)) {
+        if ([string]::IsNullOrWhiteSpace([string]$table.tableName)) { continue }
+        $compileCalls += @{ name = 'ExportPlcTagTable'; args = @{ softwarePath = [string]$Spec.plcName; tagTableName = [string]$table.tableName; exportPath = (Join-Path $srcPath ('tags\' + [string]$table.tableName + '.xml')) } }
+    }
+    $compileCalls += @(
+        @{ name = 'SaveProject'; args = @{} },
+        @{ name = 'CloseProject'; args = @{} },
+        @{ name = 'Disconnect'; args = @{} }
+    )
+    $compileReport = Join-Path $ReportDirectory 'compile.json'
+    $compileArgs = @(
+        '-NoProfile', '-NonInteractive', '-File', $sequenceScript,
+        '-ExecutablePath', $exe,
+        '-Arguments', '--tia-major-version 20 --profile full',
+        '-CallsJson', ($compileCalls | ConvertTo-Json -Depth 20 -Compress),
+        '-OutputPath', $compileReport,
+        '-TimeoutSeconds', '1200'
+    )
+    $null = & $pwsh @compileArgs 2>&1
+    $compileSequence = if (Test-Path -LiteralPath $compileReport -PathType Leaf) { Get-Content -Raw -LiteralPath $compileReport | ConvertFrom-Json } else { $null }
+    if (-not $compileSequence) { throw 'The compile/export sequence did not produce a report.' }
+    $compileCall = @($compileSequence.calls) | Where-Object name -eq 'CompileSoftware' | Select-Object -First 1
+    $compilePayload = if ($compileCall) { $compileCall.text | ConvertFrom-Json } else { $null }
+    $compileOk = ($compileCall -and [bool]$compileCall.success -and [string]$compilePayload.state -eq 'Success' -and [int]$compilePayload.errorCount -eq 0 -and [int]$compilePayload.warningCount -eq 0)
+    [ordered]@{
+        schemaVersion = 1
+        generatedAt = [DateTimeOffset]::Now.ToString('o')
+        tool = 'CompileSoftware'
+        project = [string]$Spec.projectName
+        softwarePath = [string]$Spec.plcName
+        state = [string]$compilePayload.state
+        errorCount = [int]$compilePayload.errorCount
+        warningCount = [int]$compilePayload.warningCount
+        messages = @($compilePayload.messages)
+    } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $opsPath 'compile-report.json') -Encoding UTF8
+    @("CompileSoftware $([string]$Spec.projectName) / $([string]$Spec.plcName)", "state=$([string]$compilePayload.state) errors=$([int]$compilePayload.errorCount) warnings=$([int]$compilePayload.warningCount)", "generado: $([DateTimeOffset]::Now.ToString('o'))", "") + @($compilePayload.messages) | Set-Content -LiteralPath (Join-Path $opsPath 'compile-report.txt') -Encoding UTF8
+    $delivery.ops = [ordered]@{ success = $compileOk; state = [string]$compilePayload.state; errorCount = [int]$compilePayload.errorCount; warningCount = [int]$compilePayload.warningCount }
+
+    # 3. Inventario y estandar, con el codigo de salida que PA-1 exige.
+    $inventory = Get-ChildItem -LiteralPath $ReportDirectory -Filter 'inventory.json' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    $standardsPath = Join-Path $opsPath 'standards.json'
+    if ($inventory) {
+        $standardsOutput = (& $pwsh -NoProfile -NonInteractive -File (Join-Path $WorkspaceRoot '30-tools\scripts\Check-TiaStandards.ps1') -InventoryPath $inventory.FullName -ExportPath $srcPath -OutputPath $standardsPath 2>&1 | Out-String).Trim()
+        $standardsExit = $LASTEXITCODE
+        Copy-Item -LiteralPath $inventory.FullName -Destination (Join-Path $srcPath 'inventory.json') -Force
+        $delivery.src = [ordered]@{ success = ($standardsExit -eq 0); standardsExitCode = $standardsExit; standards = $standardsOutput; path = $srcPath }
+    } else {
+        $delivery.src = [ordered]@{ success = $false; error = 'No inventory to run the standards check against.' }
+    }
+
+    # 3b. Las fuentes SCL que se importaron y la definicion de la pantalla tambien
+    #     son parte del export textual: sin ellas, el src/ no cuenta que hizo el agente.
+    foreach ($source in @($Spec.sclSourceFiles)) {
+        $sourcePath = [string]$source
+        if (-not [string]::IsNullOrWhiteSpace($sourcePath) -and (Test-Path -LiteralPath $sourcePath -PathType Leaf)) {
+            Copy-Item -LiteralPath $sourcePath -Destination (Join-Path $srcPath 'sources') -Force
+        }
+    }
+    if ($HmiScreenPath -and (Test-Path -LiteralPath $HmiScreenPath -PathType Leaf)) {
+        Copy-Item -LiteralPath $HmiScreenPath -Destination (Join-Path $srcPath (Split-Path -Leaf $HmiScreenPath)) -Force
+    }
+
+    # 4. README del proyecto y espejo versionado.
+    if ($ProjectReadmePath -and (Test-Path -LiteralPath $ProjectReadmePath -PathType Leaf)) {
+        Copy-Item -LiteralPath $ProjectReadmePath -Destination (Join-Path $projectRoot 'README.md') -Force
+        $delivery.readme = [ordered]@{ success = $true; path = (Join-Path $projectRoot 'README.md') }
+    }
+    if ($MirrorPath) {
+        $MirrorPath = [IO.Path]::GetFullPath($MirrorPath)
+        if (Test-Path -LiteralPath (Join-Path $MirrorPath 'src')) { Remove-Item -LiteralPath (Join-Path $MirrorPath 'src') -Recurse -Force }
+        New-Item -ItemType Directory -Path (Join-Path $MirrorPath 'src') -Force | Out-Null
+        Copy-Item -Path (Join-Path $srcPath '*') -Destination (Join-Path $MirrorPath 'src') -Recurse -Force
+        if ($delivery.readme.success) { Copy-Item -LiteralPath (Join-Path $projectRoot 'README.md') -Destination (Join-Path $MirrorPath 'README.md') -Force }
+        $delivery.mirror = [ordered]@{ success = $true; path = $MirrorPath }
+    }
+
+    $delivery.success = (
+        ($null -eq $delivery.hmi -or $delivery.hmi.success) -and
+        $delivery.ops.success -and $delivery.src.success
+    )
+    return $delivery
+}
+
 $dryRunResult = Invoke-ScaffoldCall $true (Join-Path $OutputRoot 'dry-run.json')
 if ($dryRunResult.exitCode -ne 0 -or -not $dryRunResult.report.success) {
     $final = [ordered]@{ schemaVersion = 1; success = $false; applied = $false; effectiveSpec = $effectiveSpecPath; dryRun = $dryRunResult }
@@ -369,12 +493,32 @@ else {
     if (-not $sessionGuard.allowed) {
         $final = [ordered]@{ schemaVersion = 1; success = $false; applied = $false; effectiveSpec = $effectiveSpecPath; dryRun = $dryRunResult; sessionGuard = $sessionGuard; message = 'Apply blocked: a visible TIA project could not be proven absent.' }
     } else {
-        $applyResult = Invoke-ScaffoldApplySequence (Join-Path $OutputRoot 'apply.json')
-        $postApply = $null
-        if ($applyResult.exitCode -eq 0 -and $applyResult.report.success) {
-            $postApply = Invoke-PostApplyVerification $OutputRoot
-        }
-        $final = [ordered]@{ schemaVersion = 1; success = ($applyResult.exitCode -eq 0 -and $applyResult.report.success -and $null -ne $postApply -and $postApply.success); applied = $true; effectiveSpec = $effectiveSpecPath; dryRun = $dryRunResult; sessionGuard = $sessionGuard; apply = $applyResult; postApply = $postApply; projectDirectory = $ProjectDirectory }
+          # El proyecto es desechable: para poder repetir la cadena, se borra el anterior.
+          if ((Test-Path -LiteralPath $ProjectDirectory) -and $Recreate) {
+              Remove-Item -LiteralPath $ProjectDirectory -Recurse -Force
+              Write-Output "Previous project removed for a clean run: $ProjectDirectory"
+          }
+          $applyResult = Invoke-ScaffoldApplySequence (Join-Path $OutputRoot 'apply.json')
+          $postApply = $null
+          $delivery = $null
+          if ($applyResult.exitCode -eq 0 -and $applyResult.report.success) {
+              $postApply = Invoke-PostApplyVerification $OutputRoot
+              if ($postApply.success) {
+                  $delivery = Invoke-DeliverySteps $postApply.projectFile $spec $OutputRoot
+              }
+          }
+          $final = [ordered]@{
+              schemaVersion = 1
+              success = ($applyResult.exitCode -eq 0 -and $applyResult.report.success -and $null -ne $postApply -and $postApply.success -and $null -ne $delivery -and $delivery.success)
+              applied = $true
+              effectiveSpec = $effectiveSpecPath
+              dryRun = $dryRunResult
+              sessionGuard = $sessionGuard
+              apply = $applyResult
+              postApply = $postApply
+              delivery = $delivery
+              projectDirectory = $ProjectDirectory
+          }
     }
 }
 $finalPath = Join-Path $OutputRoot 'scaffold-report.json'

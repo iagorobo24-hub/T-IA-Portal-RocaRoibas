@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "readOnly": true,
+  "generatedAt": "2026-10-21T15:27:12.4007361+02:00",
+  "projectPath": "C:\\Users\\jose.mellid\\Desktop\\BIBLIOGRAFIA\\00. IA-go\\01.Repositorios\\TIA Portal\\TIA-Claude\\40-projects\\DEMO-Cinta01\\tia\\DEMO-Cinta01\\DEMO-Cinta01.ap20",
+  "projectTree": "```\nDEMO-Cinta01\r\n├── Devices [Collection]\r\n│   ├── PLC_1 [Device: System:Device.S71500]\r\n│   │   ├── Rail_0 [DeviceItem]\r\n│   │   │   └── PLC_1 [Hardware Component]\r\n│   │   └── PLC_1 [DeviceItem]\r\n│   │       ├── PlcSoftware: PLC_1 [PLC Program]\r\n│   │       ├── Card reader/writer_1 [Hardware Component]\r\n│   │       ├── CPU display_1 [Hardware Component]\r\n│   │       ├── OPC UA_1 [Hardware Component]\r\n│   │       ├── PROFINET interface_1 [Hardware Component]\r\n│   │       ├── Card reader/writer_1 [DeviceItem]\r\n│   │       ├── CPU display_1 [DeviceItem]\r\n│   │       ├── OPC UA_1 [DeviceItem]\r\n│   │       └── PROFINET interface_1 [DeviceItem]\r\n│   │           ├── Port_1 [Hardware Component]\r\n│   │           ├── Port_2 [Hardware Component]\r\n│   │           ├── Port_1 [DeviceItem]\r\n│   │           └── Port_2 [DeviceItem]\r\n│   └── HMI_RT_1 [Device: ]\r\n│       ├── HMI_RT_1 [DeviceItem]\r\n│       │   ├── HMI_RT_1 [Hardware Component]\r\n│       │   └── HMI_RT_1.IE_CP_1 [Hardware Component]\r\n│       ├── HMI_RT_1 [DeviceItem]\r\n│       │   └── HmiSoftware: HMI_RT_1 [HMI Program]\r\n│       └── HMI_RT_1.IE_CP_1 [DeviceItem]\r\n│           ├── PROFINET Interface_GBit [Hardware Component]\r\n│           └── PROFINET Interface_GBit [DeviceItem]\r\n│               ├── Port_1 [Hardware Component]\r\n│               └── Port_1 [DeviceItem]\r\n└── UngroupedDevicesGroup: Ungrouped devices [System Group]\r\n\n```",
+  "plcs": [
+    {
+      "name": "PLC_1",
+      "softwarePath": "PLC_1",
+      "summary": {
+        "name": "PLC_1",
+        "description": "Siemens.Engineering.SW.PlcSoftware",
+        "attributes": [
+          {
+            "name": "Name",
+            "value": "PLC_1",
+            "accessMode": "Read"
+          }
+        ],
+        "message": "Software info retrieved from 'PLC_1'",
+        "meta": {
+          "timestamp": "2026-10-21T15:26:59.8714574+02:00",
+          "success": true
+        }
+      },
+      "softwareTree": "```\nPLC_1 [PLC Software]\r\n├── Program blocks\r\n│   ├── FB_Motor [FB1, SCL]\r\n│   ├── iDB_M01 [DB1, DB]\r\n│   └── Main [OB1, SCL]\r\n└── PLC data types\r\n\n```",
+      "blocks": [
+        {
+          "path": "",
+          "name": "FB_Motor",
+          "typeName": "FB",
+          "programmingLanguage": "SCL",
+          "isConsistent": true,
+          "isKnowHowProtected": false,
+          "comment": true,
+          "commentEvidence": "block-export-xml",
+          "commentEncodingStatus": "clean"
+        },
+        {
+          "path": "",
+          "name": "iDB_M01",
+          "typeName": "InstanceDB",
+          "programmingLanguage": "DB",
+          "isConsistent": true,
+          "isKnowHowProtected": false,
+          "comment": null,
+          "commentEvidence": "not-collected",
+          "commentEncodingStatus": "unknown"
+        },
+        {
+          "path": "",
+          "name": "Main",
+          "typeName": "OB",
+          "programmingLanguage": "SCL",
+          "isConsistent": true,
+          "isKnowHowProtected": false,
+          "comment": null,
+          "commentEvidence": "not-collected",
+          "commentEncodingStatus": "unknown"
+        }
+      ],
+      "defaultTagCount": 0
+    }
+  ],
+  "blocks": [
+    {
+      "path": "",
+      "name": "FB_Motor",
+      "typeName": "FB",
+      "programmingLanguage": "SCL",
+      "isConsistent": true,
+      "isKnowHowProtected": false,
+      "comment": true,
+      "commentEvidence": "block-export-xml",
+      "commentEncodingStatus": "clean"
+    },
+    {
+      "path": "",
+      "name": "iDB_M01",
+      "typeName": "InstanceDB",
+      "programmingLanguage": "DB",
+      "isConsistent": true,
+      "isKnowHowProtected": false,
+      "comment": null,
+      "commentEvidence": "not-collected",
+      "commentEncodingStatus": "unknown"
+    },
+    {
+      "path": "",
+      "name": "Main",
+      "typeName": "OB",
+      "programmingLanguage": "SCL",
+      "isConsistent": true,
+      "isKnowHowProtected": false,
+      "comment": null,
+      "commentEvidence": "not-collected",
+      "commentEncodingStatus": "unknown"
+    }
+  ],
+  "defaultTagCount": 0
+}
