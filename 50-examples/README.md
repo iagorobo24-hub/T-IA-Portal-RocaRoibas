@@ -31,6 +31,21 @@ proyecto en una copia con revisión del log y compilación. Detalle en
 
 ---
 
+## Material propio: `demo-cinta01`
+
+| Carpeta | Qué es | V |
+|---|---|:---:|
+| [`demo-cinta01`](demo-cinta01/) | Proyecto **generado por el agente** para la aceptación PA-1: cinta con un motor (M01), seta de emergencia y HMI Unified. Trae el spec que lo crea, las fuentes SCL, la definición de la pantalla y el export real | V20 |
+
+No es un proyecto de terceros: lo crea `ScaffoldProject` a partir de
+[`specs/scaffold.json`](demo-cinta01/specs/scaffold.json) y lo compila con **0 errores y 0
+avisos**. Sirve de banco de pruebas del propio workspace y de ejemplo de cómo se construye un
+proyecto de demostración con nombres conformes a `20-standards/naming.md`. El proyecto vivo vive en
+`40-projects/DEMO-Cinta01/` (que no se versiona, por ADR-005) y aquí está su export y su
+especificación. Detalle y evidencia: [`pa1-evidencia.json`](demo-cinta01/pa1-evidencia.json).
+
+---
+
 ## Estructura de cada carpeta
 
 ```

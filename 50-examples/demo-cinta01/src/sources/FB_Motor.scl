@@ -1,0 +1,117 @@
+FUNCTION_BLOCK "FB_Motor"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+AUTHOR : JMellid
+FAMILY : Drives
+//==============================================================================
+// Mando de un motor de marcha/paro con confirmacion y deteccion de fallo.
+//
+// Arranca con CmdStart si Interlock lo permite. Si no llega Feedback antes de
+// StartTimeout, levanta Fault y corta la salida. Si la confirmacion se pierde
+// estando en marcha, tambien. El fallo es enclavado: solo lo borra CmdReset.
+//
+// El enclavamiento NO se calcula aqui: entra por Interlock, para que la cadena
+// de condiciones se vea en LAD en el punto de llamada, que es donde la mira el
+// mantenedor. Ver 10-kb/20-recetas/R08-bloque-motor.md
+//==============================================================================
+   VAR_INPUT
+      CmdStart     : Bool;                // Orden de marcha (pulso o mantenida)
+      CmdStop      : Bool;                // Orden de paro. Manda sobre CmdStart
+      CmdReset     : Bool;                // Rearme del fallo enclavado
+      Interlock    : Bool := TRUE;        // TRUE = permitido arrancar
+      Feedback     : Bool;                // Confirmacion de marcha desde campo
+      FeedbackUsed : Bool := TRUE;        // FALSE si el motor no tiene retorno
+      StartTimeout : Time := T#3S;        // Espera maxima de confirmacion
+      StopTimeout  : Time := T#3S;        // Espera maxima hasta que cae Feedback
+   END_VAR
+
+   VAR_OUTPUT
+      Run       : Bool;                   // Salida al contactor
+      Running   : Bool;                   // Marcha confirmada
+      Ready     : Bool;                   // Disponible para arrancar
+      Fault     : Bool;                   // Fallo enclavado
+      FaultCode : Int;                    // 0 = sin fallo, ver constantes
+   END_VAR
+
+   VAR
+      statRunLatch     : Bool;            // Memoria de la orden de marcha
+      statWasConfirmed : Bool;            // Hubo confirmacion en este arranque
+      statFault        : Bool;            // Estado interno del fallo
+      statFaultCode    : Int;             // Codigo interno del fallo
+      tonStart : TON_TIME;                // Vigila la aparicion de Feedback
+      tonStop  : TON_TIME;                // Vigila la desaparicion de Feedback
+   END_VAR
+
+   VAR CONSTANT
+      FAULT_NONE          : Int := 0;
+      FAULT_NO_FEEDBACK   : Int := 101;   // No confirmo la marcha a tiempo
+      FAULT_FEEDBACK_LOST : Int := 102;   // Confirmo y despues se perdio
+      FAULT_NO_STOP       : Int := 103;   // Sigue confirmando tras el paro
+   END_VAR
+
+BEGIN
+
+   REGION 1 - Rearme del fallo
+      // Va primero: un rearme debe surtir efecto en el mismo ciclo.
+      IF #CmdReset THEN
+         #statFault        := FALSE;
+         #statFaultCode    := #FAULT_NONE;
+         #statWasConfirmed := FALSE;
+      END_IF;
+   END_REGION
+
+   REGION 2 - Memoria de marcha
+      // El paro, el fallo y el enclavamiento mandan SIEMPRE sobre la orden de
+      // marcha. Esta rama va primero para que se falle por el lado seguro.
+      IF #CmdStop OR #statFault OR NOT #Interlock THEN
+         #statRunLatch := FALSE;
+      ELSIF #CmdStart THEN
+         #statRunLatch := TRUE;
+      END_IF;
+   END_REGION
+
+   REGION 3 - Vigilancia de la confirmacion
+      // tonStart cubre los dos casos: nunca confirmo, y confirmo y se perdio.
+      // La diferencia la da statWasConfirmed, para dar un codigo distinto.
+      #tonStart(IN := #statRunLatch AND #FeedbackUsed AND NOT #Feedback,
+                PT := #StartTimeout);
+
+      #tonStop(IN := NOT #statRunLatch AND #FeedbackUsed AND #Feedback,
+               PT := #StopTimeout);
+
+      IF #statRunLatch AND #Feedback THEN
+         #statWasConfirmed := TRUE;
+      END_IF;
+
+      IF NOT #statFault THEN
+         IF #tonStart.Q THEN
+            #statFault := TRUE;
+            IF #statWasConfirmed THEN
+               #statFaultCode := #FAULT_FEEDBACK_LOST;
+            ELSE
+               #statFaultCode := #FAULT_NO_FEEDBACK;
+            END_IF;
+         ELSIF #tonStop.Q THEN
+            #statFault     := TRUE;
+            #statFaultCode := #FAULT_NO_STOP;
+         END_IF;
+      END_IF;
+
+      IF NOT #statRunLatch THEN
+         #statWasConfirmed := FALSE;
+      END_IF;
+   END_REGION
+
+   REGION 4 - Salidas
+      // Cada salida se escribe en UN solo sitio, al final del bloque.
+      // El estado vive en variables stat; las salidas solo lo publican.
+      // Si se leyera #Fault en la logica, el compilador avisa de que puede no
+      // estar inicializado: las salidas se escriben, no se usan como memoria.
+      #Run       := #statRunLatch AND NOT #statFault;
+      #Running   := #Run AND (#Feedback OR NOT #FeedbackUsed);
+      #Ready     := #Interlock AND NOT #statFault AND NOT #statRunLatch;
+      #Fault     := #statFault;
+      #FaultCode := #statFaultCode;
+   END_REGION
+
+END_FUNCTION_BLOCK

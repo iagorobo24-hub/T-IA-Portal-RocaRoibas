@@ -1,0 +1,916 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Document>
+  <Engineering version="V20" />
+  <DocumentInfo>
+    <Created>2026-10-21T12:16:32.2357155Z</Created>
+    <ExportSetting>None</ExportSetting>
+    <InstalledProducts>
+      <Product>
+        <DisplayName>Totally Integrated Automation Portal</DisplayName>
+        <DisplayVersion>V20</DisplayVersion>
+      </Product>
+      <OptionPackage>
+        <DisplayName>TIA Portal Openness</DisplayName>
+        <DisplayVersion>V20</DisplayVersion>
+      </OptionPackage>
+      <OptionPackage>
+        <DisplayName>TIA Portal Version Control Interface</DisplayName>
+        <DisplayVersion>V20</DisplayVersion>
+      </OptionPackage>
+      <Product>
+        <DisplayName>STEP 7 Professional</DisplayName>
+        <DisplayVersion>V20</DisplayVersion>
+      </Product>
+      <OptionPackage>
+        <DisplayName>STEP 7 Safety</DisplayName>
+        <DisplayVersion>V20</DisplayVersion>
+      </OptionPackage>
+      <Product>
+        <DisplayName>WinCC Basic/Comfort/Advanced</DisplayName>
+        <DisplayVersion>V20</DisplayVersion>
+      </Product>
+      <Product>
+        <DisplayName>WinCC Unified</DisplayName>
+        <DisplayVersion>V20</DisplayVersion>
+      </Product>
+    </InstalledProducts>
+  </DocumentInfo>
+  <SW.Blocks.FB ID="0">
+    <AttributeList>
+      <HeaderAuthor>JMellid</HeaderAuthor>
+      <HeaderFamily>Drives</HeaderFamily>
+      <Interface><Sections xmlns="http://www.siemens.com/automation/Openness/SW/Interface/v5">
+  <Section Name="Input">
+    <Member Name="CmdStart" Datatype="Bool">
+      <Comment>
+        <MultiLanguageText Lang="en-US">Orden de marcha (pulso o mantenida)</MultiLanguageText>
+      </Comment>
+    </Member>
+    <Member Name="CmdStop" Datatype="Bool">
+      <Comment>
+        <MultiLanguageText Lang="en-US">Orden de paro. Manda sobre CmdStart</MultiLanguageText>
+      </Comment>
+    </Member>
+    <Member Name="CmdReset" Datatype="Bool">
+      <Comment>
+        <MultiLanguageText Lang="en-US">Rearme del fallo enclavado</MultiLanguageText>
+      </Comment>
+    </Member>
+    <Member Name="Interlock" Datatype="Bool">
+      <Comment>
+        <MultiLanguageText Lang="en-US">TRUE = permitido arrancar</MultiLanguageText>
+      </Comment>
+      <StartValue>TRUE</StartValue>
+    </Member>
+    <Member Name="Feedback" Datatype="Bool">
+      <Comment>
+        <MultiLanguageText Lang="en-US">Confirmacion de marcha desde campo</MultiLanguageText>
+      </Comment>
+    </Member>
+    <Member Name="FeedbackUsed" Datatype="Bool">
+      <Comment>
+        <MultiLanguageText Lang="en-US">FALSE si el motor no tiene retorno</MultiLanguageText>
+      </Comment>
+      <StartValue>TRUE</StartValue>
+    </Member>
+    <Member Name="StartTimeout" Datatype="Time">
+      <Comment>
+        <MultiLanguageText Lang="en-US">Espera maxima de confirmacion</MultiLanguageText>
+      </Comment>
+      <StartValue>T#3S</StartValue>
+    </Member>
+    <Member Name="StopTimeout" Datatype="Time">
+      <Comment>
+        <MultiLanguageText Lang="en-US">Espera maxima hasta que cae Feedback</MultiLanguageText>
+      </Comment>
+      <StartValue>T#3S</StartValue>
+    </Member>
+  </Section>
+  <Section Name="Output">
+    <Member Name="Run" Datatype="Bool">
+      <Comment>
+        <MultiLanguageText Lang="en-US">Salida al contactor</MultiLanguageText>
+      </Comment>
+    </Member>
+    <Member Name="Running" Datatype="Bool">
+      <Comment>
+        <MultiLanguageText Lang="en-US">Marcha confirmada</MultiLanguageText>
+      </Comment>
+    </Member>
+    <Member Name="Ready" Datatype="Bool">
+      <Comment>
+        <MultiLanguageText Lang="en-US">Disponible para arrancar</MultiLanguageText>
+      </Comment>
+    </Member>
+    <Member Name="Fault" Datatype="Bool">
+      <Comment>
+        <MultiLanguageText Lang="en-US">Fallo enclavado</MultiLanguageText>
+      </Comment>
+    </Member>
+    <Member Name="FaultCode" Datatype="Int">
+      <Comment>
+        <MultiLanguageText Lang="en-US">0 = sin fallo, ver constantes</MultiLanguageText>
+      </Comment>
+    </Member>
+  </Section>
+  <Section Name="InOut" />
+  <Section Name="Static">
+    <Member Name="statRunLatch" Datatype="Bool">
+      <Comment>
+        <MultiLanguageText Lang="en-US">Memoria de la orden de marcha</MultiLanguageText>
+      </Comment>
+    </Member>
+    <Member Name="statWasConfirmed" Datatype="Bool">
+      <Comment>
+        <MultiLanguageText Lang="en-US">Hubo confirmacion en este arranque</MultiLanguageText>
+      </Comment>
+    </Member>
+    <Member Name="statFault" Datatype="Bool">
+      <Comment>
+        <MultiLanguageText Lang="en-US">Estado interno del fallo</MultiLanguageText>
+      </Comment>
+    </Member>
+    <Member Name="statFaultCode" Datatype="Int">
+      <Comment>
+        <MultiLanguageText Lang="en-US">Codigo interno del fallo</MultiLanguageText>
+      </Comment>
+    </Member>
+    <Member Name="tonStart" Datatype="TON_TIME" Version="1.0">
+      <AttributeList>
+        <BooleanAttribute Name="SetPoint" SystemDefined="true">true</BooleanAttribute>
+      </AttributeList>
+      <Comment>
+        <MultiLanguageText Lang="en-US">Vigila la aparicion de Feedback</MultiLanguageText>
+      </Comment>
+    </Member>
+    <Member Name="tonStop" Datatype="TON_TIME" Version="1.0">
+      <AttributeList>
+        <BooleanAttribute Name="SetPoint" SystemDefined="true">true</BooleanAttribute>
+      </AttributeList>
+      <Comment>
+        <MultiLanguageText Lang="en-US">Vigila la desaparicion de Feedback</MultiLanguageText>
+      </Comment>
+    </Member>
+  </Section>
+  <Section Name="Temp" />
+  <Section Name="Constant">
+    <Member Name="FAULT_NONE" Datatype="Int">
+      <StartValue>0</StartValue>
+    </Member>
+    <Member Name="FAULT_NO_FEEDBACK" Datatype="Int">
+      <Comment>
+        <MultiLanguageText Lang="en-US">No confirmo la marcha a tiempo</MultiLanguageText>
+      </Comment>
+      <StartValue>101</StartValue>
+    </Member>
+    <Member Name="FAULT_FEEDBACK_LOST" Datatype="Int">
+      <Comment>
+        <MultiLanguageText Lang="en-US">Confirmo y despues se perdio</MultiLanguageText>
+      </Comment>
+      <StartValue>102</StartValue>
+    </Member>
+    <Member Name="FAULT_NO_STOP" Datatype="Int">
+      <Comment>
+        <MultiLanguageText Lang="en-US">Sigue confirmando tras el paro</MultiLanguageText>
+      </Comment>
+      <StartValue>103</StartValue>
+    </Member>
+  </Section>
+</Sections></Interface>
+      <MemoryLayout>Optimized</MemoryLayout>
+      <MemoryReserve>100</MemoryReserve>
+      <Name>FB_Motor</Name>
+      <Namespace />
+      <Number>1</Number>
+      <ProgrammingLanguage>SCL</ProgrammingLanguage>
+      <SetENOAutomatically>false</SetENOAutomatically>
+    </AttributeList>
+    <ObjectList>
+      <MultilingualText ID="1" CompositionName="Comment">
+        <ObjectList>
+          <MultilingualTextItem ID="2" CompositionName="Items">
+            <AttributeList>
+              <Culture>en-US</Culture>
+              <Text>==============================================================================
+ Mando de un motor de marcha/paro con confirmacion y deteccion de fallo.
+
+ Arranca con CmdStart si Interlock lo permite. Si no llega Feedback antes de
+ StartTimeout, levanta Fault y corta la salida. Si la confirmacion se pierde
+ estando en marcha, tambien. El fallo es enclavado: solo lo borra CmdReset.
+
+ El enclavamiento NO se calcula aqui: entra por Interlock, para que la cadena
+ de condiciones se vea en LAD en el punto de llamada, que es donde la mira el
+ mantenedor. Ver 10-kb/20-recetas/R08-bloque-motor.md
+==============================================================================</Text>
+            </AttributeList>
+          </MultilingualTextItem>
+        </ObjectList>
+      </MultilingualText>
+      <SW.Blocks.CompileUnit ID="3" CompositionName="CompileUnits">
+        <AttributeList>
+          <NetworkSource><StructuredText xmlns="http://www.siemens.com/automation/Openness/SW/NetworkSource/StructuredText/v4">
+  <NewLine Num="2" UId="21" />
+  <Token Text="REGION" UId="22" />
+  <Blank UId="23" />
+  <Text UId="24">1 - Rearme del fallo</Text>
+  <NewLine UId="25" />
+  <Blank Num="4" UId="26" />
+  <LineComment UId="27">
+    <Text UId="28"> Va primero: un rearme debe surtir efecto en el mismo ciclo.</Text>
+  </LineComment>
+  <NewLine UId="29" />
+  <Blank Num="4" UId="30" />
+  <Token Text="IF" UId="31" />
+  <Blank UId="32" />
+  <Access Scope="LocalVariable" UId="33">
+    <Symbol UId="34">
+      <Component Name="CmdReset" UId="35" />
+    </Symbol>
+  </Access>
+  <Blank UId="36" />
+  <Token Text="THEN" UId="37" />
+  <NewLine UId="38" />
+  <Blank Num="8" UId="39" />
+  <Access Scope="LocalVariable" UId="40">
+    <Symbol UId="41">
+      <Component Name="statFault" UId="42" />
+    </Symbol>
+  </Access>
+  <Blank UId="43" />
+  <Token Text=":=" UId="44" />
+  <Blank UId="45" />
+  <Access Scope="LiteralConstant" UId="46">
+    <Constant UId="47">
+      <ConstantValue UId="49">FALSE</ConstantValue>
+    </Constant>
+  </Access>
+  <Token Text=";" UId="50" />
+  <NewLine UId="51" />
+  <Blank Num="8" UId="52" />
+  <Access Scope="LocalVariable" UId="53">
+    <Symbol UId="54">
+      <Component Name="statFaultCode" UId="55" />
+    </Symbol>
+  </Access>
+  <Blank UId="56" />
+  <Token Text=":=" UId="57" />
+  <Blank UId="58" />
+  <Access Scope="LocalConstant" UId="59">
+    <Constant Name="FAULT_NONE" UId="60" />
+  </Access>
+  <Token Text=";" UId="63" />
+  <NewLine UId="64" />
+  <Blank Num="8" UId="65" />
+  <Access Scope="LocalVariable" UId="66">
+    <Symbol UId="67">
+      <Component Name="statWasConfirmed" UId="68" />
+    </Symbol>
+  </Access>
+  <Blank UId="69" />
+  <Token Text=":=" UId="70" />
+  <Blank UId="71" />
+  <Access Scope="LiteralConstant" UId="72">
+    <Constant UId="73">
+      <ConstantValue UId="75">FALSE</ConstantValue>
+    </Constant>
+  </Access>
+  <Token Text=";" UId="76" />
+  <NewLine UId="77" />
+  <Blank Num="4" UId="78" />
+  <Token Text="END_IF" UId="79" />
+  <Token Text=";" UId="80" />
+  <NewLine UId="81" />
+  <Token Text="END_REGION" UId="82" />
+  <NewLine Num="2" UId="83" />
+  <Token Text="REGION" UId="84" />
+  <Blank UId="85" />
+  <Text UId="86">2 - Memoria de marcha</Text>
+  <NewLine UId="87" />
+  <Blank Num="4" UId="88" />
+  <LineComment UId="89">
+    <Text UId="90"> El paro, el fallo y el enclavamiento mandan SIEMPRE sobre la orden de</Text>
+  </LineComment>
+  <NewLine UId="91" />
+  <Blank Num="4" UId="92" />
+  <LineComment UId="93">
+    <Text UId="94"> marcha. Esta rama va primero para que se falle por el lado seguro.</Text>
+  </LineComment>
+  <NewLine UId="95" />
+  <Blank Num="4" UId="96" />
+  <Token Text="IF" UId="97" />
+  <Blank UId="98" />
+  <Access Scope="LocalVariable" UId="99">
+    <Symbol UId="100">
+      <Component Name="CmdStop" UId="101" />
+    </Symbol>
+  </Access>
+  <Blank UId="102" />
+  <Token Text="OR" UId="103" />
+  <Blank UId="104" />
+  <Access Scope="LocalVariable" UId="105">
+    <Symbol UId="106">
+      <Component Name="statFault" UId="107" />
+    </Symbol>
+  </Access>
+  <Blank UId="108" />
+  <Token Text="OR" UId="109" />
+  <Blank UId="110" />
+  <Token Text="NOT" UId="111" />
+  <Blank UId="112" />
+  <Access Scope="LocalVariable" UId="113">
+    <Symbol UId="114">
+      <Component Name="Interlock" UId="115" />
+    </Symbol>
+  </Access>
+  <Blank UId="116" />
+  <Token Text="THEN" UId="117" />
+  <NewLine UId="118" />
+  <Blank Num="8" UId="119" />
+  <Access Scope="LocalVariable" UId="120">
+    <Symbol UId="121">
+      <Component Name="statRunLatch" UId="122" />
+    </Symbol>
+  </Access>
+  <Blank UId="123" />
+  <Token Text=":=" UId="124" />
+  <Blank UId="125" />
+  <Access Scope="LiteralConstant" UId="126">
+    <Constant UId="127">
+      <ConstantValue UId="129">FALSE</ConstantValue>
+    </Constant>
+  </Access>
+  <Token Text=";" UId="130" />
+  <NewLine UId="131" />
+  <Blank Num="4" UId="132" />
+  <Token Text="ELSIF" UId="133" />
+  <Blank UId="134" />
+  <Access Scope="LocalVariable" UId="135">
+    <Symbol UId="136">
+      <Component Name="CmdStart" UId="137" />
+    </Symbol>
+  </Access>
+  <Blank UId="138" />
+  <Token Text="THEN" UId="139" />
+  <NewLine UId="140" />
+  <Blank Num="8" UId="141" />
+  <Access Scope="LocalVariable" UId="142">
+    <Symbol UId="143">
+      <Component Name="statRunLatch" UId="144" />
+    </Symbol>
+  </Access>
+  <Blank UId="145" />
+  <Token Text=":=" UId="146" />
+  <Blank UId="147" />
+  <Access Scope="LiteralConstant" UId="148">
+    <Constant UId="149">
+      <ConstantValue UId="151">TRUE</ConstantValue>
+    </Constant>
+  </Access>
+  <Token Text=";" UId="152" />
+  <NewLine UId="153" />
+  <Blank Num="4" UId="154" />
+  <Token Text="END_IF" UId="155" />
+  <Token Text=";" UId="156" />
+  <NewLine UId="157" />
+  <Token Text="END_REGION" UId="158" />
+  <NewLine Num="2" UId="159" />
+  <Token Text="REGION" UId="160" />
+  <Blank UId="161" />
+  <Text UId="162">3 - Vigilancia de la confirmacion</Text>
+  <NewLine UId="163" />
+  <Blank Num="4" UId="164" />
+  <LineComment UId="165">
+    <Text UId="166"> tonStart cubre los dos casos: nunca confirmo, y confirmo y se perdio.</Text>
+  </LineComment>
+  <NewLine UId="167" />
+  <Blank Num="4" UId="168" />
+  <LineComment UId="169">
+    <Text UId="170"> La diferencia la da statWasConfirmed, para dar un codigo distinto.</Text>
+  </LineComment>
+  <NewLine UId="171" />
+  <Blank Num="4" UId="172" />
+  <Access Scope="LocalVariable" UId="173">
+    <Symbol UId="174">
+      <Component Name="tonStart" UId="175" />
+    </Symbol>
+  </Access>
+  <Access Scope="Call" UId="176">
+    <Instruction UId="177">
+      <Token Text="(" UId="178" />
+      <Parameter Name="IN" UId="179">
+        <Blank UId="180" />
+        <Token Text=":=" UId="181" />
+        <Blank UId="182" />
+        <Access Scope="LocalVariable" UId="183">
+          <Symbol UId="184">
+            <Component Name="statRunLatch" UId="185" />
+          </Symbol>
+        </Access>
+        <Blank UId="186" />
+        <Token Text="AND" UId="187" />
+        <Blank UId="188" />
+        <Access Scope="LocalVariable" UId="189">
+          <Symbol UId="190">
+            <Component Name="FeedbackUsed" UId="191" />
+          </Symbol>
+        </Access>
+        <Blank UId="192" />
+        <Token Text="AND" UId="193" />
+        <Blank UId="194" />
+        <Token Text="NOT" UId="195" />
+        <Blank UId="196" />
+        <Access Scope="LocalVariable" UId="197">
+          <Symbol UId="198">
+            <Component Name="Feedback" UId="199" />
+          </Symbol>
+        </Access>
+      </Parameter>
+      <Token Text="," UId="200" />
+      <NewLine UId="201" />
+      <Blank Num="14" UId="202" />
+      <Parameter Name="PT" UId="203">
+        <Blank UId="204" />
+        <Token Text=":=" UId="205" />
+        <Blank UId="206" />
+        <Access Scope="LocalVariable" UId="207">
+          <Symbol UId="208">
+            <Component Name="StartTimeout" UId="209" />
+          </Symbol>
+        </Access>
+      </Parameter>
+      <Token Text=")" UId="210" />
+    </Instruction>
+  </Access>
+  <Token Text=";" UId="211" />
+  <NewLine UId="212" />
+  <Blank Num="4" UId="213" />
+  <NewLine UId="214" />
+  <Blank Num="4" UId="215" />
+  <Access Scope="LocalVariable" UId="216">
+    <Symbol UId="217">
+      <Component Name="tonStop" UId="218" />
+    </Symbol>
+  </Access>
+  <Access Scope="Call" UId="219">
+    <Instruction UId="220">
+      <Token Text="(" UId="221" />
+      <Parameter Name="IN" UId="222">
+        <Blank UId="223" />
+        <Token Text=":=" UId="224" />
+        <Blank UId="225" />
+        <Token Text="NOT" UId="226" />
+        <Blank UId="227" />
+        <Access Scope="LocalVariable" UId="228">
+          <Symbol UId="229">
+            <Component Name="statRunLatch" UId="230" />
+          </Symbol>
+        </Access>
+        <Blank UId="231" />
+        <Token Text="AND" UId="232" />
+        <Blank UId="233" />
+        <Access Scope="LocalVariable" UId="234">
+          <Symbol UId="235">
+            <Component Name="FeedbackUsed" UId="236" />
+          </Symbol>
+        </Access>
+        <Blank UId="237" />
+        <Token Text="AND" UId="238" />
+        <Blank UId="239" />
+        <Access Scope="LocalVariable" UId="240">
+          <Symbol UId="241">
+            <Component Name="Feedback" UId="242" />
+          </Symbol>
+        </Access>
+      </Parameter>
+      <Token Text="," UId="243" />
+      <NewLine UId="244" />
+      <Blank Num="13" UId="245" />
+      <Parameter Name="PT" UId="246">
+        <Blank UId="247" />
+        <Token Text=":=" UId="248" />
+        <Blank UId="249" />
+        <Access Scope="LocalVariable" UId="250">
+          <Symbol UId="251">
+            <Component Name="StopTimeout" UId="252" />
+          </Symbol>
+        </Access>
+      </Parameter>
+      <Token Text=")" UId="253" />
+    </Instruction>
+  </Access>
+  <Token Text=";" UId="254" />
+  <NewLine UId="255" />
+  <Blank Num="4" UId="256" />
+  <NewLine UId="257" />
+  <Blank Num="4" UId="258" />
+  <Token Text="IF" UId="259" />
+  <Blank UId="260" />
+  <Access Scope="LocalVariable" UId="261">
+    <Symbol UId="262">
+      <Component Name="statRunLatch" UId="263" />
+    </Symbol>
+  </Access>
+  <Blank UId="264" />
+  <Token Text="AND" UId="265" />
+  <Blank UId="266" />
+  <Access Scope="LocalVariable" UId="267">
+    <Symbol UId="268">
+      <Component Name="Feedback" UId="269" />
+    </Symbol>
+  </Access>
+  <Blank UId="270" />
+  <Token Text="THEN" UId="271" />
+  <NewLine UId="272" />
+  <Blank Num="8" UId="273" />
+  <Access Scope="LocalVariable" UId="274">
+    <Symbol UId="275">
+      <Component Name="statWasConfirmed" UId="276" />
+    </Symbol>
+  </Access>
+  <Blank UId="277" />
+  <Token Text=":=" UId="278" />
+  <Blank UId="279" />
+  <Access Scope="LiteralConstant" UId="280">
+    <Constant UId="281">
+      <ConstantValue UId="283">TRUE</ConstantValue>
+    </Constant>
+  </Access>
+  <Token Text=";" UId="284" />
+  <NewLine UId="285" />
+  <Blank Num="4" UId="286" />
+  <Token Text="END_IF" UId="287" />
+  <Token Text=";" UId="288" />
+  <NewLine UId="289" />
+  <Blank Num="4" UId="290" />
+  <NewLine UId="291" />
+  <Blank Num="4" UId="292" />
+  <Token Text="IF" UId="293" />
+  <Blank UId="294" />
+  <Token Text="NOT" UId="295" />
+  <Blank UId="296" />
+  <Access Scope="LocalVariable" UId="297">
+    <Symbol UId="298">
+      <Component Name="statFault" UId="299" />
+    </Symbol>
+  </Access>
+  <Blank UId="300" />
+  <Token Text="THEN" UId="301" />
+  <NewLine UId="302" />
+  <Blank Num="8" UId="303" />
+  <Token Text="IF" UId="304" />
+  <Blank UId="305" />
+  <Access Scope="LocalVariable" UId="306">
+    <Symbol UId="307">
+      <Component Name="tonStart" UId="308" />
+      <Token Text="." UId="309" />
+      <Component Name="Q" UId="310" />
+    </Symbol>
+  </Access>
+  <Blank UId="311" />
+  <Token Text="THEN" UId="312" />
+  <NewLine UId="313" />
+  <Blank Num="12" UId="314" />
+  <Access Scope="LocalVariable" UId="315">
+    <Symbol UId="316">
+      <Component Name="statFault" UId="317" />
+    </Symbol>
+  </Access>
+  <Blank UId="318" />
+  <Token Text=":=" UId="319" />
+  <Blank UId="320" />
+  <Access Scope="LiteralConstant" UId="321">
+    <Constant UId="322">
+      <ConstantValue UId="324">TRUE</ConstantValue>
+    </Constant>
+  </Access>
+  <Token Text=";" UId="325" />
+  <NewLine UId="326" />
+  <Blank Num="12" UId="327" />
+  <Token Text="IF" UId="328" />
+  <Blank UId="329" />
+  <Access Scope="LocalVariable" UId="330">
+    <Symbol UId="331">
+      <Component Name="statWasConfirmed" UId="332" />
+    </Symbol>
+  </Access>
+  <Blank UId="333" />
+  <Token Text="THEN" UId="334" />
+  <NewLine UId="335" />
+  <Blank Num="16" UId="336" />
+  <Access Scope="LocalVariable" UId="337">
+    <Symbol UId="338">
+      <Component Name="statFaultCode" UId="339" />
+    </Symbol>
+  </Access>
+  <Blank UId="340" />
+  <Token Text=":=" UId="341" />
+  <Blank UId="342" />
+  <Access Scope="LocalConstant" UId="343">
+    <Constant Name="FAULT_FEEDBACK_LOST" UId="344" />
+  </Access>
+  <Token Text=";" UId="347" />
+  <NewLine UId="348" />
+  <Blank Num="12" UId="349" />
+  <Token Text="ELSE" UId="350" />
+  <NewLine UId="351" />
+  <Blank Num="16" UId="352" />
+  <Access Scope="LocalVariable" UId="353">
+    <Symbol UId="354">
+      <Component Name="statFaultCode" UId="355" />
+    </Symbol>
+  </Access>
+  <Blank UId="356" />
+  <Token Text=":=" UId="357" />
+  <Blank UId="358" />
+  <Access Scope="LocalConstant" UId="359">
+    <Constant Name="FAULT_NO_FEEDBACK" UId="360" />
+  </Access>
+  <Token Text=";" UId="363" />
+  <NewLine UId="364" />
+  <Blank Num="12" UId="365" />
+  <Token Text="END_IF" UId="366" />
+  <Token Text=";" UId="367" />
+  <NewLine UId="368" />
+  <Blank Num="8" UId="369" />
+  <Token Text="ELSIF" UId="370" />
+  <Blank UId="371" />
+  <Access Scope="LocalVariable" UId="372">
+    <Symbol UId="373">
+      <Component Name="tonStop" UId="374" />
+      <Token Text="." UId="375" />
+      <Component Name="Q" UId="376" />
+    </Symbol>
+  </Access>
+  <Blank UId="377" />
+  <Token Text="THEN" UId="378" />
+  <NewLine UId="379" />
+  <Blank Num="12" UId="380" />
+  <Access Scope="LocalVariable" UId="381">
+    <Symbol UId="382">
+      <Component Name="statFault" UId="383" />
+    </Symbol>
+  </Access>
+  <Blank UId="384" />
+  <Token Text=":=" UId="385" />
+  <Blank UId="386" />
+  <Access Scope="LiteralConstant" UId="387">
+    <Constant UId="388">
+      <ConstantValue UId="390">TRUE</ConstantValue>
+    </Constant>
+  </Access>
+  <Token Text=";" UId="391" />
+  <NewLine UId="392" />
+  <Blank Num="12" UId="393" />
+  <Access Scope="LocalVariable" UId="394">
+    <Symbol UId="395">
+      <Component Name="statFaultCode" UId="396" />
+    </Symbol>
+  </Access>
+  <Blank UId="397" />
+  <Token Text=":=" UId="398" />
+  <Blank UId="399" />
+  <Access Scope="LocalConstant" UId="400">
+    <Constant Name="FAULT_NO_STOP" UId="401" />
+  </Access>
+  <Token Text=";" UId="404" />
+  <NewLine UId="405" />
+  <Blank Num="8" UId="406" />
+  <Token Text="END_IF" UId="407" />
+  <Token Text=";" UId="408" />
+  <NewLine UId="409" />
+  <Blank Num="4" UId="410" />
+  <Token Text="END_IF" UId="411" />
+  <Token Text=";" UId="412" />
+  <NewLine UId="413" />
+  <Blank Num="4" UId="414" />
+  <NewLine UId="415" />
+  <Blank Num="4" UId="416" />
+  <Token Text="IF" UId="417" />
+  <Blank UId="418" />
+  <Token Text="NOT" UId="419" />
+  <Blank UId="420" />
+  <Access Scope="LocalVariable" UId="421">
+    <Symbol UId="422">
+      <Component Name="statRunLatch" UId="423" />
+    </Symbol>
+  </Access>
+  <Blank UId="424" />
+  <Token Text="THEN" UId="425" />
+  <NewLine UId="426" />
+  <Blank Num="8" UId="427" />
+  <Access Scope="LocalVariable" UId="428">
+    <Symbol UId="429">
+      <Component Name="statWasConfirmed" UId="430" />
+    </Symbol>
+  </Access>
+  <Blank UId="431" />
+  <Token Text=":=" UId="432" />
+  <Blank UId="433" />
+  <Access Scope="LiteralConstant" UId="434">
+    <Constant UId="435">
+      <ConstantValue UId="437">FALSE</ConstantValue>
+    </Constant>
+  </Access>
+  <Token Text=";" UId="438" />
+  <NewLine UId="439" />
+  <Blank Num="4" UId="440" />
+  <Token Text="END_IF" UId="441" />
+  <Token Text=";" UId="442" />
+  <NewLine UId="443" />
+  <Token Text="END_REGION" UId="444" />
+  <NewLine Num="2" UId="445" />
+  <Token Text="REGION" UId="446" />
+  <Blank UId="447" />
+  <Text UId="448">4 - Salidas</Text>
+  <NewLine UId="449" />
+  <Blank Num="4" UId="450" />
+  <LineComment UId="451">
+    <Text UId="452"> Cada salida se escribe en UN solo sitio, al final del bloque.</Text>
+  </LineComment>
+  <NewLine UId="453" />
+  <Blank Num="4" UId="454" />
+  <LineComment UId="455">
+    <Text UId="456"> El estado vive en variables stat; las salidas solo lo publican.</Text>
+  </LineComment>
+  <NewLine UId="457" />
+  <Blank Num="4" UId="458" />
+  <LineComment UId="459">
+    <Text UId="460"> Si se leyera #Fault en la logica, el compilador avisa de que puede no</Text>
+  </LineComment>
+  <NewLine UId="461" />
+  <Blank Num="4" UId="462" />
+  <LineComment UId="463">
+    <Text UId="464"> estar inicializado: las salidas se escriben, no se usan como memoria.</Text>
+  </LineComment>
+  <NewLine UId="465" />
+  <Blank Num="4" UId="466" />
+  <Access Scope="LocalVariable" UId="467">
+    <Symbol UId="468">
+      <Component Name="Run" UId="469" />
+    </Symbol>
+  </Access>
+  <Blank UId="470" />
+  <Token Text=":=" UId="471" />
+  <Blank UId="472" />
+  <Access Scope="LocalVariable" UId="473">
+    <Symbol UId="474">
+      <Component Name="statRunLatch" UId="475" />
+    </Symbol>
+  </Access>
+  <Blank UId="476" />
+  <Token Text="AND" UId="477" />
+  <Blank UId="478" />
+  <Token Text="NOT" UId="479" />
+  <Blank UId="480" />
+  <Access Scope="LocalVariable" UId="481">
+    <Symbol UId="482">
+      <Component Name="statFault" UId="483" />
+    </Symbol>
+  </Access>
+  <Token Text=";" UId="484" />
+  <NewLine UId="485" />
+  <Blank Num="4" UId="486" />
+  <Access Scope="LocalVariable" UId="487">
+    <Symbol UId="488">
+      <Component Name="Running" UId="489" />
+    </Symbol>
+  </Access>
+  <Blank UId="490" />
+  <Token Text=":=" UId="491" />
+  <Blank UId="492" />
+  <Access Scope="LocalVariable" UId="493">
+    <Symbol UId="494">
+      <Component Name="Run" UId="495" />
+    </Symbol>
+  </Access>
+  <Blank UId="496" />
+  <Token Text="AND" UId="497" />
+  <Blank UId="498" />
+  <Token Text="(" UId="499" />
+  <Access Scope="LocalVariable" UId="500">
+    <Symbol UId="501">
+      <Component Name="Feedback" UId="502" />
+    </Symbol>
+  </Access>
+  <Blank UId="503" />
+  <Token Text="OR" UId="504" />
+  <Blank UId="505" />
+  <Token Text="NOT" UId="506" />
+  <Blank UId="507" />
+  <Access Scope="LocalVariable" UId="508">
+    <Symbol UId="509">
+      <Component Name="FeedbackUsed" UId="510" />
+    </Symbol>
+  </Access>
+  <Token Text=")" UId="511" />
+  <Token Text=";" UId="512" />
+  <NewLine UId="513" />
+  <Blank Num="4" UId="514" />
+  <Access Scope="LocalVariable" UId="515">
+    <Symbol UId="516">
+      <Component Name="Ready" UId="517" />
+    </Symbol>
+  </Access>
+  <Blank UId="518" />
+  <Token Text=":=" UId="519" />
+  <Blank UId="520" />
+  <Access Scope="LocalVariable" UId="521">
+    <Symbol UId="522">
+      <Component Name="Interlock" UId="523" />
+    </Symbol>
+  </Access>
+  <Blank UId="524" />
+  <Token Text="AND" UId="525" />
+  <Blank UId="526" />
+  <Token Text="NOT" UId="527" />
+  <Blank UId="528" />
+  <Access Scope="LocalVariable" UId="529">
+    <Symbol UId="530">
+      <Component Name="statFault" UId="531" />
+    </Symbol>
+  </Access>
+  <Blank UId="532" />
+  <Token Text="AND" UId="533" />
+  <Blank UId="534" />
+  <Token Text="NOT" UId="535" />
+  <Blank UId="536" />
+  <Access Scope="LocalVariable" UId="537">
+    <Symbol UId="538">
+      <Component Name="statRunLatch" UId="539" />
+    </Symbol>
+  </Access>
+  <Token Text=";" UId="540" />
+  <NewLine UId="541" />
+  <Blank Num="4" UId="542" />
+  <Access Scope="LocalVariable" UId="543">
+    <Symbol UId="544">
+      <Component Name="Fault" UId="545" />
+    </Symbol>
+  </Access>
+  <Blank UId="546" />
+  <Token Text=":=" UId="547" />
+  <Blank UId="548" />
+  <Access Scope="LocalVariable" UId="549">
+    <Symbol UId="550">
+      <Component Name="statFault" UId="551" />
+    </Symbol>
+  </Access>
+  <Token Text=";" UId="552" />
+  <NewLine UId="553" />
+  <Blank Num="4" UId="554" />
+  <Access Scope="LocalVariable" UId="555">
+    <Symbol UId="556">
+      <Component Name="FaultCode" UId="557" />
+    </Symbol>
+  </Access>
+  <Blank UId="558" />
+  <Token Text=":=" UId="559" />
+  <Blank UId="560" />
+  <Access Scope="LocalVariable" UId="561">
+    <Symbol UId="562">
+      <Component Name="statFaultCode" UId="563" />
+    </Symbol>
+  </Access>
+  <Token Text=";" UId="564" />
+  <NewLine UId="565" />
+  <Token Text="END_REGION" UId="566" />
+  <NewLine Num="2" UId="567" />
+</StructuredText></NetworkSource>
+          <ProgrammingLanguage>SCL</ProgrammingLanguage>
+        </AttributeList>
+        <ObjectList>
+          <MultilingualText ID="4" CompositionName="Comment">
+            <ObjectList>
+              <MultilingualTextItem ID="5" CompositionName="Items">
+                <AttributeList>
+                  <Culture>en-US</Culture>
+                  <Text />
+                </AttributeList>
+              </MultilingualTextItem>
+            </ObjectList>
+          </MultilingualText>
+          <MultilingualText ID="6" CompositionName="Title">
+            <ObjectList>
+              <MultilingualTextItem ID="7" CompositionName="Items">
+                <AttributeList>
+                  <Culture>en-US</Culture>
+                  <Text />
+                </AttributeList>
+              </MultilingualTextItem>
+            </ObjectList>
+          </MultilingualText>
+        </ObjectList>
+      </SW.Blocks.CompileUnit>
+      <MultilingualText ID="8" CompositionName="Title">
+        <ObjectList>
+          <MultilingualTextItem ID="9" CompositionName="Items">
+            <AttributeList>
+              <Culture>en-US</Culture>
+              <Text />
+            </AttributeList>
+          </MultilingualTextItem>
+        </ObjectList>
+      </MultilingualText>
+    </ObjectList>
+  </SW.Blocks.FB>
+</Document>

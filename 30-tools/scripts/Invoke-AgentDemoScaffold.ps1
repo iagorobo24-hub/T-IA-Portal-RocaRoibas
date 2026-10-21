@@ -12,6 +12,7 @@ param(
     [string]$WorkspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path,
     [string]$ProjectDirectory,
     [string]$OutputRoot,
+    [string]$SpecPath,
     [switch]$Apply
 )
 
@@ -19,28 +20,40 @@ $ErrorActionPreference = 'Stop'
 $WorkspaceRoot = [IO.Path]::GetFullPath($WorkspaceRoot)
 if (-not $OutputRoot) { $OutputRoot = Join-Path $WorkspaceRoot ('70-runs\e2e\agent-demo-scaffold-' + (Get-Date -Format 'yyyyMMdd-HHmmss')) }
 $OutputRoot = [IO.Path]::GetFullPath($OutputRoot)
-if (-not $ProjectDirectory) { $ProjectDirectory = Join-Path $WorkspaceRoot ('90-tmp\agent-demo-scaffold-v20-' + (Get-Date -Format 'yyyyMMdd-HHmmss')) }
-$ProjectDirectory = [IO.Path]::GetFullPath($ProjectDirectory)
-if ($Apply -and (Test-Path -LiteralPath $ProjectDirectory)) { throw "Apply destination already exists: $ProjectDirectory" }
-
-$templatePath = Join-Path $WorkspaceRoot '50-examples\agent-demo\specs\scaffold.json'
-$sourcePath = Join-Path $WorkspaceRoot '50-examples\agent-demo\sources\FB_AgentDemo.scl'
+$templatePath = if ($SpecPath) { [IO.Path]::GetFullPath($SpecPath) } else { Join-Path $WorkspaceRoot '50-examples\agent-demo\specs\scaffold.json' }
+$defaultSourcePath = Join-Path $WorkspaceRoot '50-examples\agent-demo\sources\FB_AgentDemo.scl'
 $exe = Join-Path $WorkspaceRoot '30-tools\mcp\tia-create\bin\v20\TiaMcpServer.exe'
 $callScript = Join-Path $WorkspaceRoot '30-tools\scripts\Invoke-McpToolCall.ps1'
 $sequenceScript = Join-Path $WorkspaceRoot '30-tools\scripts\Invoke-McpToolSequence.ps1'
 $invoke = Join-Path $WorkspaceRoot '30-tools\scripts\Invoke-TiaMcp.ps1'
 $metadataScript = Join-Path $WorkspaceRoot '30-tools\scripts\TiaBlockMetadata.ps1'
 $fixtureManifestScript = Join-Path $WorkspaceRoot '30-tools\scripts\New-TiaFixtureManifest.ps1'
-foreach ($path in @($templatePath, $sourcePath, $exe, $callScript, $sequenceScript, $invoke, $metadataScript, $fixtureManifestScript)) {
+foreach ($path in @($templatePath, $exe, $callScript, $sequenceScript, $invoke, $metadataScript, $fixtureManifestScript)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing scaffold input: $path" }
 }
 . $metadataScript
 
 New-Item -ItemType Directory -Path $OutputRoot -Force | Out-Null
 $spec = Get-Content -Raw -LiteralPath $templatePath | ConvertFrom-Json
-$spec.projectName = 'AgentDemo_V20'
+if (-not $SpecPath) {
+    # Comportamiento historico: el runner fija el nombre y la fuente del ejemplo.
+    $spec.projectName = 'AgentDemo_V20'
+    $spec.sclSourceFiles = @($defaultSourcePath)
+}
+# Las rutas relativas del spec se resuelven contra el workspace.
+$spec.sclSourceFiles = @(@($spec.sclSourceFiles) | ForEach-Object {
+    if ([string]::IsNullOrWhiteSpace([string]$_)) { throw 'The spec has an empty sclSourceFiles entry.' }
+    if ([IO.Path]::IsPathRooted([string]$_)) { [string]$_ } else { Join-Path $WorkspaceRoot ([string]$_) }
+})
+if (-not $ProjectDirectory) { $ProjectDirectory = [string]$spec.directoryPath }
+if ([string]::IsNullOrWhiteSpace($ProjectDirectory)) { $ProjectDirectory = Join-Path $WorkspaceRoot ('90-tmp\agent-demo-scaffold-v20-' + (Get-Date -Format 'yyyyMMdd-HHmmss')) }
 $spec.directoryPath = $ProjectDirectory
-$spec.sclSourceFiles = @($sourcePath)
+$ProjectDirectory = [IO.Path]::GetFullPath($ProjectDirectory)
+if ($Apply -and (Test-Path -LiteralPath $ProjectDirectory)) { throw "Apply destination already exists: $ProjectDirectory" }
+$sourcePath = @($spec.sclSourceFiles)[0]
+foreach ($path in @($spec.sclSourceFiles)) {
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Missing SCL source listed in the spec: $path" }
+}
 $specJson = $spec | ConvertTo-Json -Depth 30 -Compress
 $effectiveSpecPath = Join-Path $OutputRoot 'spec-effective.json'
 $spec | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath $effectiveSpecPath -Encoding UTF8
@@ -198,12 +211,21 @@ function Invoke-PostApplyVerification([string]$ReportDirectory) {
     }
     $project = Get-ChildItem -LiteralPath $ProjectDirectory -Recurse -File -Filter '*.ap20' -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $project) { throw "Scaffold reported success but no .ap20 was found under $ProjectDirectory." }
+    if ($project.DirectoryName.Length -gt 143) {
+        throw ("TIA no abre proyectos cuya carpeta supere 143 caracteres: '$($project.DirectoryName)' ($($project.DirectoryName.Length) caracteres). Mueve el proyecto a una ruta mas corta.")
+    }
 
     # tia-inspect V20 only opens a project in isolated mode when the exact
     # project and an unchanged backup are recorded in a fixture manifest. The
     # ScaffoldProject response is produced by tia-create, so prepare a
     # byte-identical disposable inspection copy before starting tia-inspect.
-    $inspectionFixtureRoot = Join-Path $ReportDirectory 'isolated-fixture'
+    # TIA NO abre un proyecto cuya ruta supere 143 caracteres: responde
+    # "The specified path '...' (N character) is too long. A maximum of 143 characters is
+    # allowed", y en modo aislado esa excepcion se come y solo queda un
+    # 'Failed to open project' sin detalle. Por eso la copia de inspeccion va a una ruta
+    # CORTA bajo %TEMP%, y no dentro del directorio de informes, que en este workspace ya
+    # es largo de por si.
+    $inspectionFixtureRoot = Join-Path ([IO.Path]::GetTempPath()) ('tia-inspect-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
     $inspectionProjectDirectory = Join-Path $inspectionFixtureRoot 'project'
     $inspectionBackupDirectory = Join-Path $inspectionFixtureRoot 'backup'
     New-Item -ItemType Directory -Path $inspectionProjectDirectory, $inspectionBackupDirectory -Force | Out-Null
@@ -223,6 +245,24 @@ function Invoke-PostApplyVerification([string]$ReportDirectory) {
     function Invoke-IsolatedInspect([array]$Calls) {
         return & $invoke -TiaMajor 20 -Isolated -FixtureRoot $inspectionFixtureRoot -TimeoutSeconds 900 -ContinueOnError -Calls $Calls
     }
+    function Invoke-ProjectInspect([array]$Calls) {
+        $callsJson = $Calls | ConvertTo-Json -Depth 20 -Compress
+        $reportPath = Join-Path $ReportDirectory 'project-inspect.json'
+        $callArgs = @(
+            '-NoProfile', '-NonInteractive', '-File', $sequenceScript,
+            '-ExecutablePath', $exe,
+            '-Arguments', '--tia-major-version 20 --profile full',
+            '-CallsJson', $callsJson,
+            '-OutputPath', $reportPath,
+            '-TimeoutSeconds', '900'
+        )
+        $null = & $pwsh @callArgs 2>&1
+        $sequence = if (Test-Path -LiteralPath $reportPath -PathType Leaf) { Get-Content -Raw -LiteralPath $reportPath | ConvertFrom-Json } else { $null }
+        if (-not $sequence) { throw 'The project inspection sequence did not produce a report.' }
+        return @($sequence.calls | ForEach-Object {
+            [pscustomobject]@{ Tool = $_.name; Text = $_.text; IsError = (-not $_.success) }
+        })
+    }
     $post.projectFile = $project.FullName
     $scaffoldResponse = Read-ToolJson $applyResult.report 'ScaffoldProject apply response'
     $post.scaffoldCompile = [ordered]@{
@@ -237,19 +277,28 @@ function Invoke-PostApplyVerification([string]$ReportDirectory) {
     $targetBlockName = [IO.Path]::GetFileNameWithoutExtension($sourcePath)
     $blockExportDirectory = Join-Path $ReportDirectory 'export-blocks'
     New-Item -ItemType Directory -Path $blockExportDirectory -Force | Out-Null
-    # OpenProject and every read/export must use this same isolated MCP
-    # session. A new isolated process starts with no project, so splitting the
-    # calls would make a later GetProjectTree fail even though OpenProject had
-    # succeeded in an earlier process.
-    $inspectionResults = Invoke-IsolatedInspect @(
+    # La inspeccion y el export se hacen con tia-create en modo NO aislado, sobre la COPIA
+    # desechable del proyecto, nunca sobre el original.
+    #
+    # Por que no tia-inspect --isolated: el modo aislado abre el proyecto en una instancia de
+    # Openness privada sin interfaz, y ahi el limite de 143 caracteres de TIA se come la
+    # excepcion y solo queda 'Failed to open project' sin detalle. Con tia-create el error
+    # llega completo. Las llamadas de aqui (arbol, resumen, bloques, export) no mutan nada, y
+    # el session guard de arriba ya ha comprobado que no hay ninguna TIA visible con un
+    # proyecto abierto.
+    #
+    # OpenProject y todas las lecturas y exports deben ir en la MISMA sesion MCP: un proceso
+    # nuevo arranca sin proyecto, asi que separar las llamadas haria fallar un GetProjectTree
+    # posterior aunque OpenProject hubiera funcionado en otro proceso.
+    $inspectionResults = Invoke-ProjectInspect @(
         @{ name = 'Connect' },
         @{ name = 'OpenProject'; args = @{ path = $inspectionProjectFile } },
         @{ name = 'GetState' },
         @{ name = 'GetProjectTree' },
-        @{ name = 'GetSoftwareTree'; args = @{ softwarePath = [string]$spec.plcName; sections = 'blocks,tags,types,sources' } },
-        @{ name = 'GetPlcSummary'; args = @{ softwarePath = [string]$spec.plcName } },
-        @{ name = 'GetBlocks'; args = @{ softwarePath = [string]$spec.plcName; regexName = 'AgentDemo' } },
-        @{ name = 'ExportPlcAsSourceTree'; args = @{ softwarePath = [string]$spec.plcName; exportPath = $exportDirectory } },
+        @{ name = 'GetSoftwareTree'; args = @{ softwarePath = [string]$spec.plcName } },
+        @{ name = 'GetSoftwareInfo'; args = @{ softwarePath = [string]$spec.plcName } },
+        @{ name = 'GetBlocks'; args = @{ softwarePath = [string]$spec.plcName; regexName = '.*' } },
+        @{ name = 'ExportBlocks'; args = @{ softwarePath = [string]$spec.plcName; exportPath = $exportDirectory; regexName = '.*'; preservePath = $true } },
         @{ name = 'ExportBlock'; args = @{ softwarePath = [string]$spec.plcName; blockPath = $targetBlockName; exportPath = $blockExportDirectory; preservePath = $false } },
         @{ name = 'CloseProject' },
         @{ name = 'Disconnect' }
@@ -263,9 +312,9 @@ function Invoke-PostApplyVerification([string]$ReportDirectory) {
     $tree = Read-ToolJson (Get-ToolResult $inspectionResults 'GetProjectTree') 'GetProjectTree'
     $softwareTree = Read-ToolJson (Get-ToolResult $inspectionResults 'GetSoftwareTree') 'GetSoftwareTree'
     if ([string]$softwareTree.tree -notmatch [regex]::Escape($targetBlockName)) { throw "GetSoftwareTree did not confirm the scaffold block path: $targetBlockName" }
-    $summary = Read-ToolJson (Get-ToolResult $inspectionResults 'GetPlcSummary') 'GetPlcSummary'
+    $summary = Read-ToolJson (Get-ToolResult $inspectionResults 'GetSoftwareInfo') 'GetSoftwareInfo'
     $blocksPayload = Read-ToolJson (Get-ToolResult $inspectionResults 'GetBlocks') 'GetBlocks'
-    $export = Read-ToolJson (Get-ToolResult $inspectionResults 'ExportPlcAsSourceTree') 'ExportPlcAsSourceTree'
+    $export = Read-ToolJson (Get-ToolResult $inspectionResults 'ExportBlocks') 'ExportBlocks'
     $blockExport = Read-ToolJson (Get-ToolResult $inspectionResults 'ExportBlock') 'ExportBlock'
     $blockXmlFiles = @(Get-ChildItem -LiteralPath $blockExportDirectory -Recurse -File -Filter '*.xml' -ErrorAction SilentlyContinue)
     $blocks = @($blocksPayload.items | ForEach-Object {
@@ -292,13 +341,14 @@ function Invoke-PostApplyVerification([string]$ReportDirectory) {
     [ordered]@{
         schemaVersion = 1; readOnly = $true; generatedAt = [DateTimeOffset]::Now.ToString('o'); projectPath = $project.FullName
         projectTree = [string]$tree.tree
-        plcs = @([ordered]@{ name = [string]$summary.name; softwarePath = [string]$spec.plcName; summary = $summary; softwareTree = [string]$softwareTree.tree; blocks = $blocks; defaultTagCount = 0 })
+        plcs = @([ordered]@{ name = [string]$spec.plcName; softwarePath = [string]$spec.plcName; summary = $summary; softwareTree = [string]$softwareTree.tree; blocks = $blocks; defaultTagCount = 0 })
         blocks = $blocks; defaultTagCount = 0
     } | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $inventoryPath -Encoding UTF8
     $standardsPath = Join-Path $ReportDirectory 'standards.json'
     $standardsOutput = (& $pwsh -NoProfile -NonInteractive -File (Join-Path $WorkspaceRoot '30-tools\scripts\Check-TiaStandards.ps1') -InventoryPath $inventoryPath -ExportPath $exportDirectory -OutputPath $standardsPath 2>&1 | Out-String).Trim()
     $standardsExit = $LASTEXITCODE
-    $post.inspection = [ordered]@{ success = ($blocks.Count -gt 0 -and [string]$summary.name -eq [string]$spec.plcName); blocks = $blocks.Count; tree = $tree.tree }
+    $softwarePathInTree = ([string]$tree.tree -match [regex]::Escape([string]$spec.plcName))
+    $post.inspection = [ordered]@{ success = ($blocks.Count -gt 0 -and $softwarePathInTree); blocks = $blocks.Count; tree = $tree.tree }
     $post.blockExport = [ordered]@{ success = ($null -ne $blockExport -and $blockXmlFiles.Count -gt 0); path = $blockExportDirectory; files = @($blockXmlFiles.FullName); response = $blockExport }
     $post.export = [ordered]@{ success = ($standardsExit -eq 0 -and $null -ne $export -and $post.blockExport.success); path = $exportDirectory; response = $export }
     $post.standards = [ordered]@{ success = ($standardsExit -eq 0); path = $standardsPath; output = $standardsOutput }

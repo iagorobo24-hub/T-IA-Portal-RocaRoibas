@@ -1,0 +1,58 @@
+// Al generar este bloque, TIA crea el DB de instancia "iDB_M01" del FB_Motor.
+//==============================================================================
+DATA_BLOCK "iDB_M01"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   "FB_Motor"
+END_DATA_BLOCK
+
+ORGANIZATION_BLOCK "Main"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+AUTHOR : JMellid
+FAMILY : Drives
+//==============================================================================
+// OB ciclico de la cinta DEMO-Cinta01.
+//
+// El OB ciclico se llama "Main" porque ese es el nombre que le pone TIA al
+// OB1 del sistema: generar desde una fuente un OB llamado "OB_Main" falla con
+// 'Type conflict: Object "OB_Main" cannot be overwritten'. El estandar
+// OB_<Funcion> de 20-standards/naming.md aplica a los OB de arranque y de
+// error, no al OB1 del sistema, cuyo nombre es de TIA.
+//
+// Una cinta con un solo motor (M01) y seta de emergencia.
+//
+// El enclavamiento NO se calcula dentro del FB: se ve aqui, en el punto de
+// llamada, que es donde lo mira el mantenedor de la maquina. Ver R08.
+//
+// La seta de emergencia (DI_ES01_Ok, contacto normalmente cerrado: TRUE cuando
+// NO esta pulsada) hace las dos cosas que tiene que hacer, y las dos son
+// obligatorias:
+//   1. Prohíbe arrancar: el Interlock del FB exige DI_ES01_Ok.
+//   2. Ordena parar:     CmdStop incluye NOT DI_ES01_Ok, de modo que con la
+//                        seta pulsada el motor para aunque nadie pulse el
+//                        boton de paro.
+// Si solo se hiciera la primera, el motor seguiria girando con la seta
+// pulsada. Eso no es una seta de emergencia: es un pulsador de arranque.
+//
+// "DI_M01_Start" y "DI_M01_Stop" los escribe el HMI (botones de la pantalla
+// Main) y tambien pueden venir de un pulsador de campo. "DI_M01_Feedback"
+// llega del contacto auxiliar del contactor.
+//
+// Al generar este bloque, TIA crea el DB de instancia "iDB_M01" del FB_Motor.
+//==============================================================================
+BEGIN
+   "iDB_M01"(CmdStart     := "DI_M01_Start",
+             CmdStop      := "DI_M01_Stop" OR NOT "DI_ES01_Ok",
+             CmdReset     := "DI_M01_Reset",
+             Interlock    := "DI_ES01_Ok",
+             Feedback     := "DI_M01_Feedback",
+             FeedbackUsed := TRUE,
+             StartTimeout := T#3S,
+             StopTimeout  := T#3S,
+             Run          => "DO_M01_Run",
+             Running      => "M_M01_Running",
+             Ready        => "M_M01_Interlock",
+             Fault        => "M_M01_Fault",
+             FaultCode    => "M_M01_FaultCode");
+END_ORGANIZATION_BLOCK
