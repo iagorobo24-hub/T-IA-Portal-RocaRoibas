@@ -73,7 +73,7 @@ Un resumen honesto. La fuente más fiable es [`AGENTS.md`](AGENTS.md) y los info
 | Análisis semántico de un snapshot y propuestas SCL | 🟡 | Hay preview y compuertas. La **aplicación** de propuestas está bloqueada por diseño mientras el perfil V20 no registre un importador acotado. |
 | Aceptación en PLCSIM Advanced | ✅ | **Verificada en ejecución** (2026-10-21): `FB_AlarmLatch` (65/65 pasos, 9 casos) y `FC_Escalado` (33/33, 9 casos), solo contra CPU virtual. Recetas [R28](10-kb/20-recetas/R28-aceptacion-plcsim.md) y [ADR-015](00-meta/decisiones/ADR-015-estado-real-2026-10-21.md). |
 | HMI (WinCC Unified/Comfort): recetas y aceptación | 🟡 | Documentado (R13, R14, R20), sin verificar en runtime. |
-| Aceptación global (`accepted`) | 🚧 | Sigue en `false`: PA-1 es más amplio que la aceptación de bloques (crear un proyecto completo con HMI y responder trazabilidad). Lo de bloques ya está: ver ADR-015. |
+| Aceptación global (`accepted`) | 🚧 | Sigue en `false`: **PA-1 está cumplido** (proyecto `DEMO-Cinta01` creado desde un spec, 0/0, `Check-TiaStandards` con código 0, y la pregunta de trazabilidad respondida con referencias reales — ADR-016), pero **WinCC Unified Runtime no se ha arrancado nunca** y la simulación HMI sigue siendo el hueco de R13, R14 y R20. |
 | Compatibilidad con TIA Portal V21 | 🚧 | Receta de compilación escrita, sin verificar (ADR-014). |
 | CI en GitHub Actions | ✅ | En verde desde el 2026-10-21: 13 checks, 0 FAIL. Los dos tests que fallaban eran gates de seguridad que dejaron de ser comprobables. |
 
@@ -159,7 +159,7 @@ Detalle en [`capacidades-y-alcance-por-conexion.md`](10-kb/10-openness/capacidad
 
 ```
 AGENTS.md          contrato del agente (fuente de verdad); CLAUDE.md solo apunta a él
-00-meta/           análisis, arquitectura, plan, ADR 001-015 y evaluación del conocimiento
+00-meta/           análisis, arquitectura, plan, ADR 001-016 y evaluación del conocimiento
 10-kb/             base de conocimiento: Openness, recetas R01-R29, lenguajes, HMI, errores
 20-standards/      nomenclatura, estilo SCL, estructura de proyecto, definición de terminado
 30-tools/          servidores MCP (build + parches), scripts PowerShell, PLCSIM, pruebas
@@ -172,7 +172,7 @@ docs/              planes y relevos de trabajo (docs/superpowers) y gráficos de
 ## Documentación
 
 - [`AGENTS.md`](AGENTS.md): contrato y reglas duras.
-- [`00-meta/decisiones/`](00-meta/decisiones/): decisiones de arquitectura (ADR-001 a ADR-015). El [ADR-015](00-meta/decisiones/ADR-015-estado-real-2026-10-21.md) es la foto real del workspace a 2026-10-21.
+- [`00-meta/decisiones/`](00-meta/decisiones/): decisiones de arquitectura (ADR-001 a ADR-016). El [ADR-015](00-meta/decisiones/ADR-015-estado-real-2026-10-21.md) es la foto real del workspace tras la aceptación en PLCSIM, y el [ADR-016](00-meta/decisiones/ADR-016-pa1-cumplida.md) recoge PA-1 cumplida.
 - [`10-kb/20-recetas/`](10-kb/20-recetas/README.md): recetas con su estado.
 - [`SECURITY.md`](SECURITY.md): frontera pública; los proyectos de cliente, `.ap20`, contraseñas y material de seguridad funcional no van en este repositorio.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md).

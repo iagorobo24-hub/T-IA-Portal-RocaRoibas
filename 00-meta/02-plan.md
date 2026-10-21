@@ -138,24 +138,35 @@ responde a *"¿dónde miro un ejemplo de comunicación OPC-UA?"* sin abrir TIA.
 
 ---
 
-### M6 - PA-1 `[PENDIENTE — la parte de simulación ya está hecha]`
+### M6 - PA-1 `[COMPLETO — 2026-10-21]`
 
 Ejecutar la prueba de aceptación completa. Arreglar lo que salga. Documentar el resultado.
 
 **✅ Criterio de aceptación M6:** PA-1 pasa entera, en dos harnesses, dos veces seguidas desde
 sesión fría.
 
-**Lo que ya no bloquea (2026-10-21):** la descarga a CPU virtual y el plan funcional de
-comportamiento, que eran el muro. Verificados con `FB_AlarmLatch` (65/65 pasos, 9 casos) y
-`FC_Escalado` (33/33, 9 casos), solo contra CPU virtual. Receta
-[R28](../10-kb/20-recetas/R28-aceptacion-plcsim.md) y
-[ADR-015](decisiones/ADR-015-estado-real-2026-10-21.md).
+**Estado:** los cinco entregables de PA-1 están verificados y la segunda frase se responde con
+referencias cruzadas reales. Evidencia en
+[`50-examples/demo-cinta01/pa1-evidencia.json`](../50-examples/demo-cinta01/pa1-evidencia.json),
+hechos en [ADR-016](decisiones/ADR-016-pa1-cumplida.md), relevo en
+[`docs/superpowers/handoffs/2026-10-21-pa1-demo-cinta01-handoff.md`](../docs/superpowers/handoffs/2026-10-21-pa1-demo-cinta01-handoff.md)
+y receta del flujo en
+[R30](../10-kb/20-recetas/R30-crear-proyecto-desde-spec.md).
 
-**Lo que le falta a PA-1:** crear el proyecto `DEMO-Cinta01` completo (S7-1500, control de
-motor con enclavamiento y seta, HMI Unified con pantalla de operación), compilarlo con 0 errores,
-exportarlo a `src/` y responder la pregunta de trazabilidad sobre el proyecto existente. La
-simulación HMI en runtime sigue sin verificar (R13, R14, R20), y la creación de proyecto con
-`ScaffoldProject` sigue sin ejecutarse de verdad.
+**Lo que PA-1 pedía y está:** proyecto `DEMO-Cinta01` con S7-1500, motor M01 con enclavamiento y
+seta de emergencia, HMI Unified con pantalla de operación, compilación 0/0 con informe en `ops/`,
+nomenclatura verificada con `Check-TiaStandards.ps1` saliendo con **código 0**, export textual en
+`src/` y README del proyecto desde la plantilla. Y la pregunta *«¿dónde se usa la tag
+`Motor_Marcha`?»*: **no existe** (el inventario real son 10 tags en `Cinta_Signals`, y
+`naming.md` la cita como contraejemplo de su propia regla); la equivalente es `DI_M01_Start`, la
+escribe la HMI y la lee el OB `Main`.
+
+**Lo que NO se afirma, y por qué `accepted` sigue en `false`:** el proyecto no se ha descargado ni
+ejecutado en CPU virtual (no lo pedía PA-1), y **WinCC Unified Runtime no se ha arrancado nunca**:
+la pantalla está creada y enlazada, pero el runtime HMI sigue siendo el hueco de R13, R14 y R20.
+
+**Lo que queda de PA-1 propiamente:** repetir el flujo **en frío**, sin máquina delante, para
+probar que la cadena no necesita a nadie. Se ha ejecutado una vez con el operador delante.
 
 ---
 

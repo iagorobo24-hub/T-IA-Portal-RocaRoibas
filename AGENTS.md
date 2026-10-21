@@ -331,6 +331,17 @@ quedaban —la ruta PG/PC y la confirmación de CPU simulada— están resueltos
 Verificado: `FB_AlarmLatch` (65/65 pasos, 9 casos) y `FC_Escalado` (33/33 pasos, 9 casos), ambos
 solo contra CPU virtual, con la respuesta real de `DownloadToPlc` guardada.
 
+**Actualización 2026-10-21 (tarde): PA-1 cumplido.** El objetivo global de `00-meta/02-plan.md`
+está cerrado: el proyecto `DEMO-Cinta01` (S7-1500, motor M01 con enclavamiento y seta de
+emergencia, HMI Unified con pantalla de operación) se crea desde un spec, compila con 0/0, pasa
+`Check-TiaStandards.ps1` con **código 0** y tiene export textual y README; y la pregunta de
+trazabilidad se responde con referencias reales. Ver [ADR-016](00-meta/decisiones/ADR-016-pa1-cumplida.md)
+y la receta [R30](10-kb/20-recetas/R30-crear-proyecto-desde-spec.md). Cuatro trampas que
+costaron tiempo y que ya están en el código y en el catálogo de errores: **TIA no abre un proyecto
+cuya carpeta supere 143 caracteres**; **el OB cíclico lo nombra TIA** (`"Main"`, no `"OB_Main"`);
+**el DB de instancia se declara en la fuente SCL** con `DATA_BLOCK`; y **el modo aislado de
+`tia-inspect` no abre proyectos con WinCC Unified**.
+
 ---
 
 ## 7. Cómo comunicarte con el usuario
