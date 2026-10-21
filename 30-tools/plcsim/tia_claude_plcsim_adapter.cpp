@@ -538,6 +538,84 @@ int RunDisposableProbe(ISimulationRuntimeManager* manager, int argc, wchar_t* ar
     return success ? 0 : 1;
 }
 
+// Runs the acceptance command protocol against an ALREADY registered instance, without
+// registering, powering, downloading or unregistering anything. It exists because the
+// downloaded program lives in the instance memory: restarting the instance to run a plan
+// would throw the download away.
+int RunPlanOnRegisteredInstance(ISimulationRuntimeManager* manager, int argc, wchar_t* argv[])
+{
+    const std::wstring requestedName = ArgumentValue(argc, argv, L"--name", L"");
+    if (requestedName.empty())
+    {
+        std::wcout << L"{\"status\":\"failed\",\"stage\":\"validate\",\"message\":\"--name is required.\"}\n";
+        return 2;
+    }
+
+    const UINT32 registeredCount = manager->GetRegisteredInstancesCount();
+    SInstanceInfo matchedInfo{};
+    bool found = false;
+    for (UINT32 index = 0; index < registeredCount; ++index)
+    {
+        SInstanceInfo info{};
+        const ERuntimeErrorCode listCode = manager->GetRegisteredInstanceInfoAt(index, &info);
+        if (listCode != SREC_OK)
+        {
+            std::wcout << L"{\"status\":\"failed\",\"stage\":\"list-instances\",\"registeredCount\":"
+                       << registeredCount << ",\"listCode\":\"0x" << std::hex << static_cast<int>(listCode) << std::dec << L"\"}\n";
+            return 1;
+        }
+        if (requestedName == info.Name)
+        {
+            matchedInfo = info;
+            found = true;
+            break;
+        }
+    }
+    if (!found)
+    {
+        std::wcout << L"{\"status\":\"not-found\",\"requestedName\":";
+        PrintJsonString(requestedName);
+        std::wcout << L",\"registeredCount\":" << registeredCount << L"}\n";
+        return 3;
+    }
+
+    IInstance* instance = nullptr;
+    std::wstring mutableName = requestedName;
+    const ERuntimeErrorCode createCode = manager->CreateInterface(mutableName.data(), &instance);
+    if (createCode != SREC_OK || instance == nullptr)
+    {
+        std::wcout << L"{\"status\":\"failed\",\"stage\":\"attach\",\"createCode\":\"0x" << std::hex
+                   << static_cast<int>(createCode) << std::dec << L"\"}\n";
+        return 1;
+    }
+
+    std::wcout << L"{\"status\":\"ready\",\"stage\":\"attached\",\"instanceName\":";
+    PrintJsonString(requestedName);
+    std::wcout << L",\"cpuType\":";
+    PrintJsonString(GetNameOfCPUType(instance->GetCPUType()));
+    std::wcout << L",\"communicationInterface\":";
+    PrintJsonString(GetNameOfCommunicationInterface(instance->GetCommunicationInterface()));
+    std::wcout << L",\"operatingState\":";
+    PrintJsonString(GetNameOfOperatingState(instance->GetOperatingState()));
+    std::wcout << L"}\n";
+    std::wcout.flush();
+
+    std::wstring command;
+    while (std::getline(std::wcin, command))
+    {
+        if (command == L"stop" || command == L"quit") break;
+        HandleAcceptanceCommand(instance, command);
+    }
+
+    // Only the interface is released: the instance, its power state and the downloaded
+    // program are left exactly as they were found.
+    const ERuntimeErrorCode destroyCode = DestroyInterface(instance);
+    std::wcout << L"{\"status\":\"stopped\",\"stage\":\"detached\",";
+    PrintCode(L"destroyCode", destroyCode);
+    std::wcout << L"}\n";
+    return destroyCode == SREC_OK ? 0 : 1;
+}
+
 // Read-only inspection of an already registered instance. Does not register,
 // power on/off, download, or unregister the PLC.
 int RunInspectRegisteredInstance(ISimulationRuntimeManager* manager, int argc, wchar_t* argv[])
@@ -1089,8 +1167,11 @@ int RunLocalAcceptanceInstance(ISimulationRuntimeManager* manager, int argc, wch
             mappingCode = instance->SetNetInterfaceMapping(EPLCInterface::IE1, static_cast<DWORD>(0));
         }
         mappingReadback = instance->GetNetInterfaceMapping(EPLCInterface::IE1);
-        // Zero selects local PC communication only, so the simulated CPU never becomes
-        // reachable from the LAN.
+        // Binding the runtime to zero selects local PC communication only. That is the mode
+        // PLCSIM Advanced uses for TCP/IP single adapter, and it is the one in which the
+        // virtual CPU is actually reachable: a non-zero index puts the virtual switch in
+        // promiscuous mode, where the CPU's frames leave through the PC adapter and the
+        // simulated CPU stops answering on the local host.
         bindingCode = manager->SetNetInterfaceBindings(0);
     }
     const ERuntimeErrorCode powerOnCode = instance->PowerOn(timeoutMs);
@@ -1149,6 +1230,7 @@ int RunLocalAcceptanceInstance(ISimulationRuntimeManager* manager, int argc, wch
 int wmain(int argc, wchar_t* argv[])
 {
     const bool behavioralSmoke = HasArgument(argc, argv, L"--behavioral-smoke-existing");
+    const bool planExisting = HasArgument(argc, argv, L"--plan-existing");
     const bool inspectRegisteredInstance = HasArgument(argc, argv, L"--inspect-registered-instance");
     const bool acceptance = HasArgument(argc, argv, L"--register-acceptance");
     const bool tcpIpProbe = HasArgument(argc, argv, L"--tcpip-disposable");
@@ -1164,11 +1246,13 @@ int wmain(int argc, wchar_t* argv[])
 
     const int exitCode = behavioralSmoke
         ? RunBehavioralSmokeOnRegisteredInstance(manager, argc, argv)
+        : (planExisting
+        ? RunPlanOnRegisteredInstance(manager, argc, argv)
         : (inspectRegisteredInstance
         ? RunInspectRegisteredInstance(manager, argc, argv)
         : (acceptance
             ? RunLocalAcceptanceInstance(manager, argc, argv)
-            : (tcpIpProbe ? RunTcpIpDisposableProbe(manager, argc, argv) : RunDisposableProbe(manager, argc, argv))));
+            : (tcpIpProbe ? RunTcpIpDisposableProbe(manager, argc, argv) : RunDisposableProbe(manager, argc, argv)))));
     const ERuntimeErrorCode shutdownCode = ShutdownAndFreeApi(manager);
     if (exitCode != 0 || shutdownCode != SREC_OK)
     {
