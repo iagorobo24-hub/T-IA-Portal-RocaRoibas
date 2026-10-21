@@ -1068,7 +1068,10 @@ int RunLocalAcceptanceInstance(ISimulationRuntimeManager* manager, int argc, wch
                 PrintJsonString(interfaces[index].interfaceName);
                 std::wcout << L",\"description\":";
                 PrintJsonString(interfaces[index].interfaceDescription);
-                std::wcout << L",\"index\":" << interfaces[index].interfaceIndex << "}";
+                std::wcout << L",\"index\":" << interfaces[index].interfaceIndex;
+                std::wcout << L",\"isConnected\":" << (interfaces[index].isConnected ? "true" : "false");
+                std::wcout << L",\"vSwitchBindingEnabled\":" << (interfaces[index].vSwitchBindingEnabled ? "true" : "false");
+                std::wcout << L"}";
             }
             std::wcout << L"]}\n";
             std::wcout.flush();
