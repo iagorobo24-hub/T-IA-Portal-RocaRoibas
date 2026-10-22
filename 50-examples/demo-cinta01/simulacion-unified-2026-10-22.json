@@ -1,0 +1,135 @@
+{
+  "fecha": "2026-10-22",
+  "proyecto": "DEMO-Cinta01",
+  "objetivo": "probar la simulacion de WinCC Unified con lo ya instalado (sin descargar nada)",
+  "veredicto": "FALLO por incompatibilidad de version del runtime Unified: hace falta SIMATIC WinCC Unified PC V20",
+  "decision": "ADR-017",
+  "receta": "10-kb/20-recetas/R31-simulacion-plcsim-unified.md",
+
+  "entorno": {
+    "tiaPortal": "V20",
+    "tiaInstalado": [
+      "Siemens Totally Integrated Automation Portal V19",
+      "Siemens Totally Integrated Automation Portal V20"
+    ],
+    "runtimeUnifiedInstalado": {
+      "producto": "SIMATIC WinCC Unified PC V19",
+      "version": "V19",
+      "stationConfigurator": "SIMATIC WinCC Unified Station Configurator V19.0 Upd3",
+      "ruta": "C:\\Program Files\\Siemens\\Automation\\WinCCUnified",
+      "gfxRts": "C:\\Program Files\\Siemens\\Automation\\WinCCUnified\\bin\\GfxRTS.exe",
+      "fileVersion": "500.30.8901.3",
+      "productVersion": "500.30.8901.3"
+    },
+    "plcsimInstalado": [
+      "S7-PLCSIM Setup V19.0 Upd1",
+      "S7-PLCSIM Setup V20.0",
+      "SIMATIC S7-PLCSIM V20"
+    ],
+    "formatoRuntimeGeneradoPorElProyecto": "0_Chrom_20.0.0.0_Rdf_20.0.0.0",
+    "rutaDelFormato": "40-projects\\DEMO-Cinta01\\tia\\DEMO-Cinta01\\IM\\HMI\\I\\AdditionalFiles\\0_Chrom_20.0.0.0_Rdf_20.0.0.0"
+  },
+
+  "intentosDeSimulacionHmi": [
+    {
+      "hora": "09:16:15",
+      "contexto": "sin PLC en linea",
+      "mensajes": [
+        "Start downloading to device.",
+        "HM_RT_1",
+        "Online connection to HM_RT_1 failed.",
+        "Action cancelled before download."
+      ]
+    },
+    {
+      "hora": "09:32:29",
+      "contexto": "PLC todavia sin configurar; descarga del PLC cancelada a los 70 s",
+      "mensajes": [
+        "Start downloading to device.",
+        "Action cancelled before download."
+      ]
+    },
+    {
+      "hora": "09:57:21",
+      "contexto": "PLC conectado a las 09:47:00 (192.168.0.1) y certificado aceptado; timeout de 26 s",
+      "mensajes": [
+        "Start downloading to device.",
+        "HM_RT_1",
+        "Online connection to HM_RT_1 failed.",
+        "Action cancelled before download."
+      ],
+      "timeoutSegundos": 26
+    }
+  ],
+
+  "runtimeLanzadoPorLaSimulacion": false,
+  "notaSobreLosProcesosUnified": {
+    "observado": ["Siemens.Runtime.HmiUnified.Client.exe (PID 7184)", "Siemens.Runtime.HmiUnified.ControlCenter.exe (PID 13568)"],
+    "inicioDelControlCenter": "2026-10-22 07:10:27",
+    "lectura": "ya estaban arrancados antes de la sesion; pertenecen al Unified Station Configurator, NO son el runtime de la simulacion",
+    "puertosPublicadosPorElRuntime": 0
+  },
+
+  "bloqueosResueltos": [
+    {
+      "id": "0626:000013",
+      "titulo": "Enable Simulation Support",
+      "texto": "The blocks contained in this project cannot be simulated with S7-PLCSIM. Do you want to enable the 'Support simulation during block compilation' option in the project properties?",
+      "causa": "propiedad del proyecto desactivada por defecto en V20",
+      "resolucion": "OK: propiedad activada en las propiedades del proyecto",
+      "efecto": "S7-PLCSIM V20 arranca con el proyecto"
+    },
+    {
+      "id": "0626:000002",
+      "titulo": "Enable Simulation Support",
+      "texto": "Starting simulation will disable all online interfaces.",
+      "resolucion": "OK"
+    },
+    {
+      "id": "certificado",
+      "titulo": "Establish connection to device",
+      "texto": "\"PLC_1\" might not be a trustworthy device. The device uses an unknown, self-signed certificate.",
+      "resolucion": "Connect",
+      "efecto": "9:47:00 Connected to PLC_1, via address IP=192.168.0.1",
+      "riesgo": "sin responder, la descarga se cancela sola a los ~70 s sin explicar por que"
+    }
+  ],
+
+  "bloqueoPendiente": {
+    "mensaje": "The target PLC_1 in the offline project is different from the target in the online project (addr...)",
+    "estadoOnline": {
+      "State": "Incompatible",
+      "IsOnline": false,
+      "IsReachable": false,
+      "Message": "'PLC_1' online but firmware/config mismatch. Download required."
+    },
+    "ipEnElProyecto": "192.168.0.1",
+    "ipDelSimulador": "192.168.0.1",
+    "causa": "el proyecto guarda un destino de descarga de una CPU virtual de una sesion anterior, con otra direccion",
+    "arreglo": "rehacer la descarga por GUI con el simulador activo, o limpiar el destino en 'Online access'"
+  },
+
+  "comprobacionesPorApi": {
+    "getDeviceIpAddress": { "device": "PLC_1", "ipAddress": "192.168.0.1", "nodeCount": 6 },
+    "getOnlineState": { "State": "Incompatible", "IsOnline": false, "IsReachable": false },
+    "checkDownloadReadiness": {
+      "Ready": false,
+      "HasDownloadProvider": false,
+      "HasConfiguration": false,
+      "downloadRouteCount": 0,
+      "Issues": ["DownloadProvider service not available. Check hardware/network configuration."],
+      "lectura": "el Softbus de S7-PLCSIM no es una ruta de red que vea el DownloadProvider de Openness"
+    }
+  },
+
+  "procesoSimulador": {
+    "ejecutable": "C:\\Program Files\\Siemens\\Automation\\PLCSIM_V20\\S7PLCSIMV20.exe",
+    "argumentos": "--family=S71500 --mnemonic=17 --language=en-US --projectname=\"DEMO-Cinta01\" --mlfb=\"6ES7 513-1AM03-0AB0...\"",
+    "uiWeb": "http://localhost:8101",
+    "instancia": "Instance_1",
+    "estado": "RUN/STOP (STOP), 'PLC sin configurar', X1 = 192.168.0.1"
+  },
+
+  "conclusion": "El lado PLC es resoluble con lo instalado. El lado HMI no: con WinCC Unified Runtime V19 y un proyecto V20, TIA no consigue conexión online con HM_RT_1 y cancela a los 26 s sin lanzar el runtime. hace falta SIMATIC WinCC Unified PC V20 (lo descarga el usuario).",
+  "licencia": "no es un bloqueo: el runtime sin licencia funciona en modo no licenciado (aviso cada 10 min) y la simulacion se activa 1 hora sin licencia"
+}

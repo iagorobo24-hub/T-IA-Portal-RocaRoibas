@@ -271,6 +271,17 @@ PLCSIM o MCP, el runner exige `-SimulationTargetEvidencePath` con la evidencia r
 `10-kb/20-recetas/R17-aceptacion-plcsim.md`; `-AcknowledgeVirtualTarget` por sí solo no confirma
 visualmente el destino.
 
+**Para simular una HMI Unified** hace falta además el **runtime de la misma versión que TIA**
+([ADR-017](00-meta/decisiones/ADR-017-runtime-unified-igual-version.md)). Con runtime V19 y un
+proyecto V20, la simulación falla con `Start downloading to device` → `HM_RT_1` → `Online connection
+to HM_RT_1 failed` a los **26 s**, y **no arranca ningún proceso de runtime**: el síntoma no
+menciona la versión y parece un problema de PLC. El lado PLC es independiente y sí funciona con lo
+instalado, pero exige dos cosas que se olvidan: activar la propiedad **Support simulation during
+block compilation** (V20 la deja desactivada) y **aceptar el diálogo `Establish connection to device`
+→ `Connect`** del certificado autofirmado del PLC virtual. Si nadie responde a ese diálogo, la
+descarga **se cancela sola a los ~70 s** sin explicar por qué. Todo el procedimiento, medido, está en
+[R31](10-kb/20-recetas/R31-simulacion-plcsim-unified.md).
+
 El procedimiento ejecutable completo, incluida la elección de PLCSIM según CPU/firmware, arranque,
 primera descarga, RUN, plan funcional y limpieza está en
 [`10-kb/20-recetas/R17-aceptacion-plcsim.md`](10-kb/20-recetas/R17-aceptacion-plcsim.md); todos los
@@ -377,6 +388,7 @@ cuya carpeta supere 143 caracteres**; **el OB cíclico lo nombra TIA** (`"Main"`
 |---|---|
 | TIA Portal | **V20** build `2000.0.9501.1` (V19 instalado pero no soportado — ADR-002; receta V21 preparada y sin verificar en esta máquina — ADR-014) |
 | PLCSIM | V19 y V20 (clásico; **no es la causa** del bloqueo de descarga — H-19 refutada) |
+| WinCC Unified Runtime | **V19** instalado (`SIMATIC WinCC Unified PC V19`; `GfxRTS.exe` 500.30.8901.3). **La simulación de una HMI Unified exige el runtime de la misma versión que TIA**: con TIA V20 hace falta `SIMATIC WinCC Unified PC V20`, que descarga el usuario. Ver [ADR-017](00-meta/decisiones/ADR-017-runtime-unified-igual-version.md) y [R31](10-kb/20-recetas/R31-simulacion-plcsim-unified.md). |
 | PLCSIM Advanced | **V7.0.0.0**; API 7.0 / interfaz `0x00070000` inicializada; adaptador compilado y ciclo desechable de registro/PowerOn/PowerOff/limpieza verificados. **Desde el 2026-10-21 hay descarga y aceptación de comportamiento**: `FB_AlarmLatch` (65/65) y `FC_Escalado` (33/33), solo contra CPU virtual. Ver ADR-015. |
 | PowerShell | **7.6.7** instalado (winget). Antes solo había Windows PowerShell 5.1, y varios scripts y tests no eran ejecutables en este host; ver R29. |
 | `tia-inspect` | `30-tools/mcp/tia-inspect/bin/v20/TiaMcpServer.exe --tia-major-version 20` |
