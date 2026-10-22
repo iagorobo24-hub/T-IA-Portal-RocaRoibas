@@ -67,4 +67,4 @@ description: Genera o actualiza la documentación automática de un proyecto TIA
 
 ## Encadenamiento
 
-Si aparece cualquier fallo no cubierto arriba — o si un fallo conocido reaparece en un contexto distinto — cargar la skill [\	ia-error-triage\](../tia-error-triage/SKILL.md) antes de reintentar nada. Las skills no se disparan solas: el disparo depende de que el agente lea la descripcion; este encadenamiento lo hace explicito en el propio runbook, que es la unica palanca real que tenemos.
+Si aparece cualquier fallo no cubierto arriba — o si un fallo conocido reaparece en un contexto distinto — cargar la skill [`tia-error-triage](../tia-error-triage/SKILL.md) antes de reintentar nada. Las skills no se disparan solas: el disparo depende de que el agente lea la descripcion; este encadenamiento lo hace explicito en el propio runbook, que es la unica palanca real que tenemos.
