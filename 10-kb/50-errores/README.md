@@ -556,6 +556,29 @@ no lo libera.
 `30-tools/tia-ui/Invoke-TiaUiEngine.ps1` (contenido idéntico). Si el bloqueo se levanta, se puede
 volver al nombre original.
 
+### El MCP recibe un JSON corrupto cuando la secuencia pasa por PowerShell 5.1
+
+**Síntoma:** el runner `Invoke-McpToolSequence.ps1` falla al parsear las llamadas y la sesión ni
+llega a arrancar. Reproducido el 2026-10-22:
+
+```
+JSON real : {"name":"Bootstrap"}
+via 5.1   : {name:Bootstrap}   <- sin comillas
+```
+
+**Causa:** pasar el JSON por **parámetro de línea de comandos** (`-CallsJson $callsJson`) a un
+**proceso externo** (`& $pwsh -File ...`). Al construir la línea de comandos de un proceso nativo,
+Windows PowerShell 5.1 elimina las comillas dobles del argumento. No pasa nada si el destino es
+otro script PowerShell invocado en el propio proceso, ni si el host falla a PowerShell 7.
+
+**Arreglo:** escribir el JSON a un fichero temporal UTF-8 sin BOM y usar `-CallsJsonPath`, que lee
+por disco. Se corrigieron los tres scripts que invocaban un proceso externo
+(`Write-TiaSimulationReadiness.ps1`, `Invoke-TiaSclProposalApply.ps1`,
+`Invoke-TiaHmiScreenFromJson.ps1`) y el paquete portable se regeneró con
+`Build-PortablePackage.ps1 -Force`. Efecto práctico importante: este bug dejaba el gate
+`tiaInstanceSafeForApply` en `false` aunque la sesión estuviera sana, porque la sonda de
+`ListPortalProcessProjects` nunca ejecutaba su secuencia.
+
 ---
 
 ## Cuando el error no está aquí

@@ -98,9 +98,12 @@ function Invoke-Sequence([array]$Calls, [string]$Name) {
     if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw "Missing tia-inspect V20 executable: $exe" }
     $pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
     if (-not $pwsh) { $pwsh = (Get-Command powershell -ErrorAction Stop).Source }
-    $callsJson = $Calls | ConvertTo-Json -Depth 30 -Compress
+    # El JSON va por FICHERO: pasado por la linea de comandos de un proceso nativo,
+    # Windows PowerShell 5.1 elimina las comillas dobles y el MCP recibe un JSON corrupto.
+    $callsPath = $sequencePath + '.calls.json'
+    [IO.File]::WriteAllText($callsPath, ($Calls | ConvertTo-Json -Depth 30 -Compress), (New-Object Text.UTF8Encoding($false)))
     if ([string]::IsNullOrWhiteSpace($mcpArguments)) { throw 'Isolated write server arguments have not been configured from a validated fixture manifest.' }
-    $output = (& $pwsh -NoProfile -NonInteractive -File $sequenceScript -ExecutablePath $exe -Arguments $mcpArguments -CallsJson $callsJson -OutputPath $sequencePath -TimeoutSeconds 900 2>&1 | Out-String).Trim()
+    $output = (& $pwsh -NoProfile -NonInteractive -File $sequenceScript -ExecutablePath $exe -Arguments $mcpArguments -CallsJsonPath $callsPath -OutputPath $sequencePath -TimeoutSeconds 900 2>&1 | Out-String).Trim()
     $exitCode = $LASTEXITCODE
     $sequence = if (Test-Path -LiteralPath $sequencePath -PathType Leaf) { Get-Content -Raw -LiteralPath $sequencePath | ConvertFrom-Json } else { $null }
     if (-not $sequence) { throw "$Name MCP sequence produced no report. $output" }

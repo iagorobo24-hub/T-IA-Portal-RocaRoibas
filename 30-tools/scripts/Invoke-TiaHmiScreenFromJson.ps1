@@ -112,7 +112,10 @@ $sequence += [ordered]@{ name = 'SaveProject'; args = @{} }
 $sequence += [ordered]@{ name = 'CloseProject'; args = @{} }
 $sequence += [ordered]@{ name = 'Disconnect'; args = @{} }
 
-$callsJson = $sequence | ConvertTo-Json -Depth 20 -Compress
+$callsJsonPath = Join-Path ([IO.Path]::GetTempPath()) ('tia-hmi-screen-calls-' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '.json')
+# El JSON va por FICHERO: pasado por la linea de comandos de un proceso nativo, Windows
+# PowerShell 5.1 elimina las comillas dobles y el MCP recibe un JSON corrupto.
+[IO.File]::WriteAllText($callsJsonPath, ($sequence | ConvertTo-Json -Depth 20 -Compress), (New-Object Text.UTF8Encoding($false)))
 $reportPath = Join-Path ([IO.Path]::GetTempPath()) ('tia-hmi-screen-' + [guid]::NewGuid().ToString('N').Substring(0, 8) + '.json')
 $pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
 if (-not $pwsh) { $pwsh = (Get-Command powershell -ErrorAction Stop).Source }
@@ -120,11 +123,12 @@ $callArgs = @(
     '-NoProfile', '-NonInteractive', '-File', $sequenceScript,
     '-ExecutablePath', $exe,
     '-Arguments', '--tia-major-version 20 --profile full',
-    '-CallsJson', $callsJson,
+    '-CallsJsonPath', $callsJsonPath,
     '-OutputPath', $reportPath,
     '-TimeoutSeconds', '1200'
 )
 $null = & $pwsh @callArgs 2>&1
+Remove-Item -LiteralPath $callsJsonPath -Force -ErrorAction SilentlyContinue
 $report = if (Test-Path -LiteralPath $reportPath -PathType Leaf) { Get-Content -Raw -LiteralPath $reportPath | ConvertFrom-Json } else { $null }
 if (-not $report) { throw 'The HMI screen sequence did not produce a report.' }
 $failed = @($report.calls | Where-Object { -not $_.success })
