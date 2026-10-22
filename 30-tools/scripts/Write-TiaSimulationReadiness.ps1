@@ -100,11 +100,16 @@ function Get-TiaSessionSafety([object[]]$VisibleTia) {
         @{ name = 'Disconnect' }
     )
     try {
-        $callsJson = $calls | ConvertTo-Json -Depth 10 -Compress
+        # El JSON va por FICHERO, no por la linea de comandos: al construir la linea de
+        # comandos de un proceso nativo, Windows PowerShell 5.1 elimina las comillas dobles
+        # y el MCP recibe un JSON corrupto ({name:Bootstrap}), que rompe el parseo y deja
+        # el gate tiaInstanceSafeForApply en false aunque la sesion este sana.
+        $callsJsonPath = $probePath + '.calls.json'
+        [IO.File]::WriteAllText($callsJsonPath, ($calls | ConvertTo-Json -Depth 10 -Compress), (New-Object Text.UTF8Encoding($false)))
         & $pwsh -NoProfile -NonInteractive -File $sequenceScript `
             -ExecutablePath $createExe `
             -Arguments '--tia-major-version 20 --profile lite' `
-            -CallsJson $callsJson `
+            -CallsJsonPath $callsJsonPath `
             -OutputPath $probePath `
             -TimeoutSeconds 120 | Out-Null
         $probe = if (Test-Path -LiteralPath $probePath -PathType Leaf) { Read-Json $probePath } else { $null }
@@ -134,6 +139,7 @@ function Get-TiaSessionSafety([object[]]$VisibleTia) {
     }
     finally {
         if (Test-Path -LiteralPath $probePath) { Remove-Item -LiteralPath $probePath -Force }
+        if (Test-Path -LiteralPath $callsJsonPath) { Remove-Item -LiteralPath $callsJsonPath -Force }
     }
 }
 
