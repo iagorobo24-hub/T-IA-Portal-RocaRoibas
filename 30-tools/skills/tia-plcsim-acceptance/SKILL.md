@@ -70,3 +70,8 @@ description: Ejecuta la aceptacion de comportamiento en PLCSIM (Advanced V7 o S7
 - ADR-015 (estado real y verificado), ADR-017 (runtime unificado por versión)
 - Recetas: `R28-aceptacion-plcsim.md`, `R31-simulacion-plcsim-unified.md`
 - Playbook GUI: `10-kb/00-fundamentos/playbook-gui-tia.md`
+
+
+## Encadenamiento
+
+Si aparece cualquier fallo no cubierto arriba — o si un fallo conocido reaparece en un contexto distinto — cargar la skill [\	ia-error-triage\](../tia-error-triage/SKILL.md) antes de reintentar nada. Las skills no se disparan solas: el disparo depende de que el agente lea la descripcion; este encadenamiento lo hace explicito en el propio runbook, que es la unica palanca real que tenemos.

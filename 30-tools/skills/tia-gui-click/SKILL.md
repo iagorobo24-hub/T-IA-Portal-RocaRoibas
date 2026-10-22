@@ -57,3 +57,8 @@ description: Realiza interacciones seguras con la interfaz gráfica de TIA Porta
 
 - Playbook: `10-kb/00-fundamentos/playbook-gui-tia.md` (ritual completo y anclajes)
 - Candado: `30-tools/tia-ui/Invoke-TiaGuiClick.ps1`
+
+
+## Encadenamiento
+
+Si aparece cualquier fallo no cubierto arriba — o si un fallo conocido reaparece en un contexto distinto — cargar la skill [\	ia-error-triage\](../tia-error-triage/SKILL.md) antes de reintentar nada. Las skills no se disparan solas: el disparo depende de que el agente lea la descripcion; este encadenamiento lo hace explicito en el propio runbook, que es la unica palanca real que tenemos.

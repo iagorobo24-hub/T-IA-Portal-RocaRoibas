@@ -67,3 +67,8 @@ description: Analiza un proyecto TIA Portal desde cero y entrega un dossier con 
 - Fundamento: `10-kb/00-fundamentos/tia-interfaz-y-computer-use.md`
 - Límites de la API: `10-kb/10-openness/limites.md`
 - Receta: `10-kb/20-recetas/R04-entender-un-bloque.md`
+
+
+## Encadenamiento
+
+Si aparece cualquier fallo no cubierto arriba — o si un fallo conocido reaparece en un contexto distinto — cargar la skill [\	ia-error-triage\](../tia-error-triage/SKILL.md) antes de reintentar nada. Las skills no se disparan solas: el disparo depende de que el agente lea la descripcion; este encadenamiento lo hace explicito en el propio runbook, que es la unica palanca real que tenemos.
