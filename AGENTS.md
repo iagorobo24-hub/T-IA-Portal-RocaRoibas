@@ -364,7 +364,7 @@ cuya carpeta supere 143 caracteres**; **el OB cíclico lo nombra TIA** (`"Main"`
   **bloqueado**, e indica la evidencia y el siguiente paso cuando no esté verificado.
 - **No inventes que algo funciona.** Este dominio no perdona el optimismo: un bloque que
   "debería funcionar" en una máquina en marcha es un problema real.
-- Cuando una herramienta falle, lee el mensaje: los tres servidores devuelven errores tipados
+- Cuando una herramienta falle, lee el mensaje: si el mensaje no casa con el catalogo de 10-kb/50-errores/README.md, **carga la skill 	ia-error-triage** (en 30-tools/skills/) y sigue su diagnostico antes de reintentar nada. los tres servidores devuelven errores tipados
   (`NotFound`, `InvalidParams`, `NotSupported`, `ExportFailed`...). Ese código dice qué hacer.
 - Si algo es una limitación de la propia API Openness y no un fallo tuyo, dilo: está en
   `10-kb/10-openness/limites.md`.

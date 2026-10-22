@@ -58,3 +58,8 @@ description: Crea un proyecto TIA Portal completo desde un spec del usuario — 
 
 - Receta: `10-kb/20-recetas/R30-crear-proyecto-desde-spec.md`
 - ADR-016 (PA-1 cumplida), ADR-017 (runtime)
+
+
+## Encadenamiento
+
+Si aparece cualquier fallo no cubierto arriba — o si un fallo conocido reaparece en un contexto distinto — cargar la skill [\	ia-error-triage\](../tia-error-triage/SKILL.md) antes de reintentar nada. Las skills no se disparan solas: el disparo depende de que el agente lea la descripcion; este encadenamiento lo hace explicito en el propio runbook, que es la unica palanca real que tenemos.

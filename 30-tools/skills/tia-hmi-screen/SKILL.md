@@ -58,3 +58,8 @@ description: Programa o modifica pantallas HMI (WinCC Unified y Comfort) en TIA 
 
 - Recetas: `R31-simulacion-plcsim-unified.md`, `R13`/`R14`/`R20` (HMI Comfort/Advanced)
 - ADR-017: runtime = misma version que TIA
+
+
+## Encadenamiento
+
+Si aparece cualquier fallo no cubierto arriba — o si un fallo conocido reaparece en un contexto distinto — cargar la skill [\	ia-error-triage\](../tia-error-triage/SKILL.md) antes de reintentar nada. Las skills no se disparan solas: el disparo depende de que el agente lea la descripcion; este encadenamiento lo hace explicito en el propio runbook, que es la unica palanca real que tenemos.

@@ -62,3 +62,8 @@ description: Abre una sesión de programación funcional de bloques SCL en TIA P
 - Contrato: `AGENTS.md` §6 (ciclo), §3.3 (bloques protegidos)
 - Recetas: `R28-aceptacion-plcsim.md`, `R30-crear-proyecto-desde-spec.md`
 - ADR-002 (lenguajes) y la receta R30 si la sesion crea bloques nuevos
+
+
+## Encadenamiento
+
+Si aparece cualquier fallo no cubierto arriba — o si un fallo conocido reaparece en un contexto distinto — cargar la skill [\	ia-error-triage\](../tia-error-triage/SKILL.md) antes de reintentar nada. Las skills no se disparan solas: el disparo depende de que el agente lea la descripcion; este encadenamiento lo hace explicito en el propio runbook, que es la unica palanca real que tenemos.
