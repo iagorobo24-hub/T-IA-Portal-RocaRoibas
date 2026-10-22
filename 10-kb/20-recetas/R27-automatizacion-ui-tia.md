@@ -8,7 +8,12 @@
 Openness (la API de TIA) cubre el **contenido** del proyecto, no la **interfaz**. Para lo que
 solo existe en la GUI —el diálogo *Extended download to device*, el *Load preview*, el buscador
 de destinos— hace falta automatizar la ventana. Esta receta documenta el motor
-`30-tools/tia-ui/Invoke-TiaUi.ps1` y, sobre todo, **qué expone TIA V20 y qué no**, medido.
+Esta receta documenta el motor `30-tools/tia-ui/Invoke-TiaUiEngine.ps1` y, sobre todo, **qué expone TIA V20 y qué no**, medido.
+
+> **El motor cambió de nombre el 2026-10-22.** Antes era `30-tools/tia-ui/Invoke-TiaUi.ps1` y ese
+> path exacto quedó **reservado a nivel de sistema**: cualquier escritura devuelve *Acceso
+> denegado*, mientras que el mismo nombre en otra carpeta sí se escribe. El contenido es idéntico;
+> solo cambia el nombre. Ver el catálogo de errores.
 
 ## Qué expone TIA V20 (medido el 2026-10-21)
 
@@ -25,17 +30,17 @@ de destinos— hace falta automatizar la ventana. Esta receta documenta el motor
 Conclusión práctica: **el menú contextual y los diálogos son la vía limpia; el árbol y el ribbon
 solo se tocan por OCR.**
 
-## El motor: `30-tools/tia-ui/Invoke-TiaUi.ps1`
+## El motor: `30-tools/tia-ui/Invoke-TiaUiEngine.ps1`
 
 ```powershell
-Invoke-TiaUi.ps1 -Action ListWindows                     # ventanas del escritorio
-Invoke-TiaUi.ps1 -Action Dump      -ProcessId 11856     # árbol UIA completo
-Invoke-TiaUi.ps1 -Action Find       -ProcessId 11856 -Text 'PLC_1'
-Invoke-TiaUi.ps1 -Action ClickText  -ProcessId 11856 -Text 'Project view'
-Invoke-TiaUi.ps1 -Action RightClickText -ProcessId 11856 -Text 'PLC_1'
-Invoke-TiaUi.ps1 -Action ClickId    -ProcessId 11856 -AutomationId 'm_OpenButton'
-Invoke-TiaUi.ps1 -Action SetText    -ProcessId 11856 -AutomationId 'X' -Value 'texto'
-Invoke-TiaUi.ps1 -Action Ocr        -ProcessId 11856     # lectura con coordenadas
+Invoke-TiaUiEngine.ps1 -Action ListWindows                     # ventanas del escritorio
+Invoke-TiaUiEngine.ps1 -Action Dump      -ProcessId 11856     # árbol UIA completo
+Invoke-TiaUiEngine.ps1 -Action Find       -ProcessId 11856 -Text 'PLC_1'
+Invoke-TiaUiEngine.ps1 -Action ClickText  -ProcessId 11856 -Text 'Project view'
+Invoke-TiaUiEngine.ps1 -Action RightClickText -ProcessId 11856 -Text 'PLC_1'
+Invoke-TiaUiEngine.ps1 -Action ClickId    -ProcessId 11856 -AutomationId 'm_OpenButton'
+Invoke-TiaUiEngine.ps1 -Action SetText    -ProcessId 11856 -AutomationId 'X' -Value 'texto'
+Invoke-TiaUiEngine.ps1 -Action Ocr        -ProcessId 11856     # lectura con coordenadas
 ```
 
 ### Piezas que no son evidentes

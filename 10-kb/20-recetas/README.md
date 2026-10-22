@@ -97,6 +97,7 @@ Si falla        los modos de fallo conocidos y su arreglo
 | [R28](R28-aceptacion-plcsim.md) | Aceptacion de comportamiento en PLCSIM sin humano en el bucle: sesion adjunta, margen del Control Panel, UpdateTagList() y nombres de tag sin prefijo | ? verificado 2026-10-21 con FB_AlarmLatch: descarga 0/0 y plan de 65 pasos 65/65 |
 | [R29](R29-portabilidad-powershell.md) | Portabilidad de los scripts de PowerShell y de los arneses de prueba: 5.1 frente a 7, mojibake que rompe el parser, gates antes del toolchain y evidencia de destino simulado | ? verificado 2026-10-21: los dos tests que tenian el CI en rojo, en verde con el job completo en local |
 | [R30](R30-crear-proyecto-desde-spec.md) | Crear un proyecto TIA completo desde un spec: proyecto, CPU, HMI, tags, fuentes SCL, pantalla de operacion, export y verificacion, sin intervencion manual | ? verificado 2026-10-21: DEMO-Cinta01 creado, compila 0/0, check-standards sale con codigo 0 |
+| [R31](R31-simulacion-plcsim-unified.md) | Simular el PLC con S7-PLCSIM y arrancar la HMI Unified en TIA V20: la propiedad que V20 deja desactivada, el certificado del PLC virtual y el runtime que tiene que ser de la misma version que TIA | ? verificado 2026-10-22: PLCSIM V20 arranca con el proyecto y el PLC conecta; la HMI Unified necesita el runtime V20 (ADR-017) |
 
 El orden y su porquÃ© estÃ¡n en [ADR-004](../../00-meta/decisiones/ADR-004-prioridades.md).
 

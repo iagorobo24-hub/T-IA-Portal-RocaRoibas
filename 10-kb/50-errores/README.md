@@ -466,6 +466,98 @@ guarde en el proyecto: clic derecho en el dispositivo del arbol -> "Descargar en
 
 ---
 
+### `Online connection to HM_RT_1 failed` al simular una HMI Unified
+
+**Causa:** la simulación de una HMI Unified **usa el WinCC Unified Runtime instalado**, y ese runtime
+tiene que ser **de la misma versión que el TIA Portal del proyecto**. Con runtime V19 y un proyecto
+V20, TIA intenta la conexión online con el dispositivo HMI `HM_RT_1`, espera **26 segundos** y
+cancela: `Start downloading to device` → `HM_RT_1` → `Online connection to HM_RT_1 failed.` →
+`Action cancelled before download.`
+
+**El síntoma no menciona la versión**, y parece un problema de PLC. Es la causa más cara
+registrada aquí: se puede perder una hora sospechando del PLC cuando el PLC está perfecto.
+
+Medido el 2026-10-22 con `DEMO-Cinta01` (TIA V20, runtime Unified V19 instalado). Comprobación:
+
+```powershell
+# version del runtime instalado -> 500.30.8901.3 = V19
+Get-ChildItem 'C:\Program Files\Siemens\Automation\WinCCUnified' -Recurse -Filter 'GfxRTS.exe' |
+  ForEach-Object { $_.VersionInfo.ProductVersion }
+# formato de runtime que pide el proyecto -> ..._Rdf_20.0.0.0
+Get-ChildItem '<proyecto>\tia\<proyecto>\IM\HMI' -Recurse -Directory |
+  Where-Object Name -match 'Rdf' | Select-Object -ExpandProperty Name
+```
+
+**Arreglo:** instalar el runtime de la misma versión (`SIMATIC WinCC Unified PC V20`). Lo descarga
+el usuario; el agente no. **No es un bloqueo de licencia**: sin licencia el runtime funciona en modo
+no licenciado (aviso cada 10 min) y la simulación dura 1 hora.
+Ver [ADR-017](../../00-meta/decisiones/ADR-017-runtime-unified-igual-version.md) y
+[R31](../20-recetas/R31-simulacion-plcsim-unified.md).
+
+---
+
+### `The blocks contained in this project cannot be simulated with S7-PLCSIM` (0626:000013)
+
+**Causa:** la propiedad del proyecto **"Support simulation during block compilation"** está
+desactivada. **V20 la deja desactivada por defecto**, así que el botón de simulación no hace nada
+visible y la instancia de PLCSIM se queda en `PLC sin configurar`.
+
+**Arreglo:** `OK` en el diálogo; la propiedad queda activada en las propiedades del proyecto
+(protección). Sin esto, la simulación del PLC no arranca aunque PLCSIM esté instalado.
+
+---
+
+### `Establish connection to device` / `"PLC_1" might not be a trustworthy device`
+
+**Causa:** el PLC virtual usa un **certificado autofirmado** y TIA pide confirmación.
+
+**Arreglo:** botón **`Connect`**.
+
+**Ojo, este es un bloqueo silencioso**: si nadie responde al diálogo, la descarga **se cancela sola
+a los ~70 segundos** y el panel de salida solo dice `Action cancelled before download`, sin mencionar
+el certificado. Cuando ese aviso aparezca sin explicación, **mira primero si hay un diálogo de
+certificado abierto**.
+
+---
+
+### `The target PLC_1 in the offline project is different from the target in the online project`
+
+**Causa:** el proyecto guarda un **destino de descarga** (una CPU virtual de una sesión anterior,
+con otra dirección) que ya no corresponde al simulador actual. La IP del proyecto puede ser
+correcta: con `GetDeviceIpAddress` se lee la del proyecto, y con `GetOnlineState` sale
+`State: Incompatible` / *"online but firmware/config mismatch. Download required."*
+
+**Arreglo:** rehacer la descarga por la GUI con el simulador activo, para que TIA reescriba el
+destino; o limpiar el destino guardado en `Online access`.
+
+**Además:** `CheckDownloadReadiness` sobre un PLC en S7-PLCSIM (Softbus) devuelve
+`downloadRouteCount: 0` y `HasDownloadProvider: false`: **el Softbus no es una ruta de red que vea
+el `DownloadProvider` de Openness**. Con PLCSIM Advanced (que publica TCP/IP) sí hay rutas.
+
+---
+
+### `Permission denied` al escribir `30-tools/tia-ui/Invoke-TiaUi.ps1`
+
+**Causa:** en esta máquina hay una **reserva a nivel de sistema sobre ese path exacto**. Medido el
+2026-10-22:
+
+```
+30-tools/tia-ui\Invoke-TiaUi.ps1    -> Acceso denegado   (tambien con otra caja: Invoke-TiaUI.ps1)
+30-tools/tia-ui\Invoke-TiaUi2.ps1   -> OK
+30-tools\tia-ui\Invoke-TiaUi .ps1   -> OK
+30-tools\scripts\Invoke-TiaUi.ps1   -> OK                (mismo nombre, otra ruta)
+```
+
+No es la extensión, ni los permisos del directorio (`prueba.ps1` se escribe bien en el mismo sitio),
+ni el antivirus (Defender tiene `RealTimeProtection` desactivado). Borrar y recrear el directorio
+no lo libera.
+
+**Arreglo:** usar otro nombre de fichero. El motor vive ahora en
+`30-tools/tia-ui/Invoke-TiaUiEngine.ps1` (contenido idéntico). Si el bloqueo se levanta, se puede
+volver al nombre original.
+
+---
+
 ## Cuando el error no está aquí
 
 1. Lee el mensaje entero, incluido el `InnerException` si lo trae
