@@ -579,6 +579,37 @@ por disco. Se corrigieron los tres scripts que invocaban un proceso externo
 `tiaInstanceSafeForApply` en `false` aunque la sesión estuviera sana, porque la sonda de
 `ListPortalProcessProjects` nunca ejecutaba su secuencia.
 
+### El fondo de la pantalla se queda en negro tras cambiar de escritorio virtual
+
+**Síntoma:** tras saltar de escritorio virtual con `Win+Ctrl+Flecha` (buscando la ventana de TIA),
+el fondo de **todos** los monitores se ve negro aunque las ventanas y la barra de tareas funcionen
+normal. Visto 2026-10-23.
+
+**Diagnóstico verificado:** el registro mantiene el fichero original
+(`HKCU:\Control Panel\Desktop` → `Wallpaper`, `WallpaperStyle=10`), así que no es un cambio de
+preferencia sino de render. Re-aplicar `SystemParametersInfo(SPI_SETDESKWALLPAPER)` y alternar el
+fondo a otro fichero y de vuelta **no arregla nada**.
+
+**Causa:** bug de DWM de Windows 11 al cambiar de escritorio virtual: el wallpaper deja de
+repintarse hasta que el escritorio se reconstruye de verdad.
+
+**Arreglo verificado:** reiniciar `explorer.exe`. El escritorio se reconstruye y el wallpaper
+vuelve. Efectos colaterales medidos: la barra de tareas desaparece unos segundos y **las ventanas
+del Explorador de archivos se cierran**; antes de matar el proceso conviene capturar sus rutas para
+reabrirlas:
+
+```powershell
+(New-Object -ComObject Shell.Application).Windows() | ForEach-Object { $_.LocationURL }
+```
+
+El resto de aplicaciones (instaladores, TIA, Excel...) no se ven afectadas. Reiniciar `dwm.exe`
+primero no es posible sin permisos de administrador (protegido por el sistema, *Acceso denegado*):
+no lo fuerces.
+
+**Prevención:** [`10-kb/00-fundamentos/playbook-gui-tia.md`](../00-fundamentos/playbook-gui-tia.md)
+regla 2: no cambiar de escritorio virtual para buscar ventanas; si la ventana objetivo no está en
+el escritorio activo, parar y avisar al usuario.
+
 ---
 
 ## Cuando el error no está aquí

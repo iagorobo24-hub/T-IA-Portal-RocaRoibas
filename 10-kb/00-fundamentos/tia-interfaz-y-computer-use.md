@@ -1,5 +1,10 @@
 # Operar TIA Portal por la interfaz gráfica (computer use)
 
+> **Versión accionable:** para los pasos concretos con los candados, las herramientas de esta
+> máquina y el ritual de clic verificado, ver el
+> [playbook GUI](playbook-gui-tia.md) (lo vivido el 2026-10-22). Este documento es el marco; el
+> playbook, la ejecución.
+
 > El contenido de inspección visual de TIA fue verificado el 2026-09-14 con el proyecto
 > `npatel-sorting-plant` migrado a V20. Las instrucciones de API de control que aparecen más abajo
 > describían el harness usado entonces; para Codex en Windows, sigue primero la sección actual.

@@ -31,7 +31,7 @@ Es un proyecto personal de investigación sobre automatización industrial, **no
 | | |
 |---|---|
 | 🧭 **Contrato para el agente** | [`AGENTS.md`](AGENTS.md) fija el orden de arranque, las reglas duras y cómo informar de lo verificado y lo no verificado. |
-| 📚 **Base de conocimiento** | [`10-kb/`](10-kb/): cómo funciona Openness (rutas, límites, sesiones) y 26 recetas ([R01 a R26](10-kb/20-recetas/README.md)) con secuencia, verificación y modos de fallo. |
+| 📚 **Base de conocimiento** | [`10-kb/`](10-kb/): cómo funciona Openness (rutas, límites, sesiones) y 31 recetas ([R01 a R31](10-kb/20-recetas/README.md)) con secuencia, verificación y modos de fallo. |
 | 📏 **Estándares** | [`20-standards/`](20-standards/): nomenclatura, estilo SCL, estructura de proyecto y definición de «terminado». |
 | 🧩 **Bloques SCL propios** | [`60-library/blocks/`](60-library/blocks/): motor, válvula, plantilla de secuencia, modos y alarma. |
 | 🔌 **Dos servidores MCP** | `tia-inspect` (leer y exportar) y `tia-create` (crear), con perfiles `read`, `write`, `create` y `full`. Se compilan desde sus fuentes con `build.ps1` y parches propios. |
@@ -159,9 +159,10 @@ Detalle en [`capacidades-y-alcance-por-conexion.md`](10-kb/10-openness/capacidad
 
 ```
 AGENTS.md          contrato del agente (fuente de verdad); CLAUDE.md solo apunta a él
-00-meta/           análisis, arquitectura, plan, ADR 001-016 y evaluación del conocimiento
-10-kb/             base de conocimiento: Openness, recetas R01-R29, lenguajes, HMI, errores
-20-standards/      nomenclatura, estilo SCL, estructura de proyecto, definición de terminado
+00-meta/           análisis, arquitectura, plan, ADR 001-017 y evaluación del conocimiento
+10-kb/             base de conocimiento: Openness, recetas R01-R31, lenguajes, HMI, errores
+\
+40-projects/       el trabajo real: proyecto .ap20 + fuentes exportadas + ops
 30-tools/          servidores MCP (build + parches), scripts PowerShell, PLCSIM, pruebas
 50-examples/       ejemplos de terceros con ficha (ver licencias más abajo)
 60-library/        bloques SCL propios
@@ -173,7 +174,8 @@ docs/              planes y relevos de trabajo (docs/superpowers) y gráficos de
 
 - [`AGENTS.md`](AGENTS.md): contrato y reglas duras.
 - [`00-meta/decisiones/`](00-meta/decisiones/): decisiones de arquitectura (ADR-001 a ADR-016). El [ADR-015](00-meta/decisiones/ADR-015-estado-real-2026-10-21.md) es la foto real del workspace tras la aceptación en PLCSIM, y el [ADR-016](00-meta/decisiones/ADR-016-pa1-cumplida.md) recoge PA-1 cumplida.
-- [`10-kb/20-recetas/`](10-kb/20-recetas/README.md): recetas con su estado.
+- [playbook GUI de TIA](10-kb/00-fundamentos/playbook-gui-tia.md): cómo el agente maneja la interfaz gráfica en esta máquina — jerarquía de herramientas, candado de clic con hit-test del PID y evidencia por paso.
+- [10-kb/20-recetas/\](10-kb/20-recetas/README.md): recetas con su estado.
 - [`SECURITY.md`](SECURITY.md): frontera pública; los proyectos de cliente, `.ap20`, contraseñas y material de seguridad funcional no van en este repositorio.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
