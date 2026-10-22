@@ -1,4 +1,4 @@
-# R31 — Simular el PLC con S7-PLCSIM y arrancar la HMI Unified en TIA V20
+﻿# R31 — Simular el PLC con S7-PLCSIM y arrancar la HMI Unified en TIA V20
 
 > Qué hace falta para que un PLC y una HMI Unified **simulados** funcionen en TIA Portal V20,
 > medido el 2026-10-22 con `DEMO-Cinta01`, incluidos los cuatro bloqueos que aparecen en orden y
@@ -129,3 +129,49 @@ destino; o borrar el destino guardado en `Online access`.
   Con PLCSIM Advanced (que publica una interfaz TCP/IP) sí hay rutas.
 - La **simulación 1 hora sin licencia**: el runtime Unified sin licencia avisa cada 10 minutos y
   funciona igual. No hace falta comprar nada para verificar.
+
+---
+
+## Actualización 2026-10-22 — Primer ensayo real con skills 	ia-plcsim-acceptance / 	ia-hmi-screen
+
+### Resumen del día
+- **Proyecto**: DEMO-Cinta01 (CPU S7-1513, IP 192.168.0.1, HMI Unified HMI_RT_1).
+- **Entorno**: TIA V20 (PID 30048), PLCSIM V20, WinCC Unified Runtime V19 (mismatch).
+- **Evidencia**: $run\ (JSONs 01..21, PNGs ui/22..33).
+
+### Lo que funcionó
+1. **Reinicio limpio de TIA** (PID 28328 → 30048): el TIA anterior tenía shell muerta (menús/toolbar/F10/atajos no respondían tras attach/detach MCP repetidos). El TIA fresco tiene tiles, árbol, menú Online vivos.
+2. **MCP OpenProject(path=...)** abre proyecto; AttachToOpenProject(projectName) adjunta a ventana abierta. **Argumento es path (no projectPath)**.
+3. **CompileSoftware("PLC_1")** → Success (0 err / 0 warn).
+4. **CheckDownloadReadiness("PLC_1")** → eady=true, 5 rutas, incluye Siemens PLCSIM Virtual Ethernet Adapter.
+5. **GetDeviceIpAddress("PLC_1")** → 192.168.0.1 (X1) ✓.
+6. **PLCSIM sin args + Ctrl+1** crea instancia Instance_1 (S7-1500, X1:192.168.0.1). Capturas 22, 29.
+7. **Power ON instancia** (botón ⏻) → arranca (toast "Arrancando Instance_1"). Capturas 24, 25, 28, 30.
+8. **HMI Runtime arranca**: menú Online → HMI → Start runtime → procesos Siemens.Runtime.HmiUnified.Client (PID 6960) + ControlCenter (PID 10152). Capturas 31, 32.
+
+### Bloqueo PLC: Softbus sin IP
+- Adaptador Windows Ethernet 2 (Siemens PLCSIM Virtual Ethernet Adapter) con IP **192.168.0.100/24** asignada vía 
+etsh/PowerShell admin.
+- **Pero el driver NDIS no propaga la IP al stack Softbus**: registro HKLM\...\0001 muestra IPAddress: vacío; CheckDownloadReadiness y DownloadToPlc ven ruta PLCSIM [no IP] → 1 X1.
+- **Causa raíz**: MSI del mediodía (11:57-12:08) reconfiguró stack (WinCC Unified PC V20 + plugins AWB Host); Event 1038 "requiere reinicio" a las 11:57; reboot ~12:20. El bindeo NDIS quedó pendiente.
+- **Solución**: **reiniciar la máquina** (fuerza rebind del driver). Sin reboot, la descarga a PLCSIM no conectará.
+
+### Bloqueo HMI: Runtime versión incorrecta
+- TIA V20 + Runtime Unified V19 instalado (GfxRTS.exe 500.30.8901.3).
+- **La simulación de HMI Unified exige runtime de la misma versión que TIA** (ADR-017). Con V19 no arranca pantalla; el proceso Client sube pero no hay interfaz web expuesta en puertos estándar.
+
+### Hallazgos de GUI/Interacción (para R27/playbook)
+- **Toolbar TIA V20 NO tiene icono "Start simulation"**: la vía es menú Online → Simulation ▶ → Start (Ctrl+Shift+X).
+- **Tooltip de iconos requiere**: clic de activación previo en la barra + ratón quieto ~3.5 s.
+- **Posiciones toolbar (monitor 1920px offset)**:
+  - (2586,71) = "Accessible devices"
+  - (2610,71) = **"Start CPU"** (NO "Start simulation")
+  - (2632,71) = "Stop CPU"
+- **Regla de selección**: con PLC_1 seleccionado en el árbol → item "Start" del menú Online está NEGRO (habilitado); si se pierde selección → GRIS. Siempre re-clic en árbol tras activaciones.
+- **PLCSIM args --projectname/--mlfb**: arrancan app con cabecera "DEMO-Cinta01" pero workspace inexistente en disco → instancia no se crea (botón + mudo). **Sin args + Ctrl+1** sí crea instancia.
+
+### Próximos pasos
+1. **Reboot máquina** → rebinde NDIS → reintentar DownloadToPlc (MCP) con instancia PLCSIM activa.
+2. **Instalar WinCC Unified PC V20** para HMI simulation completa.
+3. Tras reboot + runtime V20: cadena completa PLC + HMI en una sesión.
+
