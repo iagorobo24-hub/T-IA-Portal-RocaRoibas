@@ -397,7 +397,10 @@ acepta como delimitadores de cadena.
 1. **La carpeta del proyecto supera los 143 caracteres.** TIA responde *The specified path '…'
    (156 character) is too long. A maximum of 143 characters is allowed*, pero en modo aislado la
    excepción se come y solo queda `Failed to open project`.
-2. **El proyecto tiene WinCC Unified**, y el modo aislado de `tia-inspect` (instancia de Openness
+2. **La ruta del proyecto supera los 143 caracteres**, que es lo que TIA dice, pero el modo
+   aislado se come la excepción. Y un apunte que **desmiente un diagnóstico anterior**: el modo
+   aislado **sí** abre proyectos con WinCC Unified, medido el 2026-10-22 con la copia en
+   ruta corta.
    privada sin interfaz) no lo abre.
 
 **Arreglo:** medir la longitud de la carpeta del proyecto (límite 143) y poner la copia de
@@ -440,6 +443,26 @@ del OB, y `GetCrossReferences` responde *Cross reference service not available f
 **Arreglo:** la referencia cruzada se saca del **export textual** (el `.scl` que se importó y el
 XML del bloque, donde aparece como `<Component Name="…" UId="…">`). `Invoke-TiaTagUsage.ps1` lo
 hace así y lo dice en su salida.
+
+---
+
+### `Connect to module PLC_1 failed` en un proyecto recien creado
+
+**Causa:** un proyecto que TIA acaba de crear **no tiene destino de descarga configurado**. TIA no
+sabe a quien descargar, asi que la descarga por API falla aunque todo lo demas este bien: la CPU
+virtual en RUN, la IP del proyecto coincidiendo con la de la CPU, la proteccion de datos de
+configuracion desactivada y el hardware compilado con 0 errores y 0 avisos.
+
+Medido el 2026-10-22 con `DEMO-Cinta01`. En la GUI, TIA lo dice en la barra de estado:
+*"Action cancelled before download"*.
+
+**Arreglo:** hacer **una descarga por la GUI** la primera vez, para que TIA aprenda el destino y lo
+guarde en el proyecto: clic derecho en el dispositivo del arbol -> "Descargar en el dispositivo" ->
+"Hardware y software" -> elegir la CPU virtual. A partir de ahi la descarga por API funciona.
+
+**Ojo con el diagnostico**: el nombre interno de la entrada es
+`LoadService.LoadCommandsUI:MenuItemDownload`, y su submenu tiene `MenuItemDownloadHwSw`
+(hardware y software), `MenuItemDownloadHw` y `MenuItemDownloadSw`.
 
 ---
 
