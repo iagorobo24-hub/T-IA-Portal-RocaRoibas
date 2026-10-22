@@ -1,0 +1,167 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-22T07:16:55.3053041+02:00",
+  "project": "C:\\Users\\jose.mellid\\Desktop\\BIBLIOGRAFIA\\00. IA-go\\01.Repositorios\\TIA Portal\\TIA-Claude\\40-projects\\DEMO-Cinta01\\tia\\DEMO-Cinta01\\DEMO-Cinta01.ap20",
+  "hmiSoftwarePath": "HMI_RT_1",
+  "plcName": "PLC_1",
+  "plcTagCount": 10,
+  "success": true,
+  "checks": [
+    {
+      "kind": "hmiTag",
+      "hmiTag": "StartPB",
+      "plcTag": "DI_M01_Start",
+      "expectedAddress": "%M0.1",
+      "plcTagExists": true,
+      "plcTagAddress": "%M0.1",
+      "addressMatches": true,
+      "bindingVerified": true,
+      "runtimeAddressReadback": "",
+      "ok": true,
+      "bindingStatus": "AbsoluteVerified"
+    },
+    {
+      "kind": "hmiTag",
+      "hmiTag": "StopPB",
+      "plcTag": "DI_M01_Stop",
+      "expectedAddress": "%M0.2",
+      "plcTagExists": true,
+      "plcTagAddress": "%M0.2",
+      "addressMatches": true,
+      "bindingVerified": true,
+      "runtimeAddressReadback": "",
+      "ok": true,
+      "bindingStatus": "AbsoluteVerified"
+    },
+    {
+      "kind": "hmiTag",
+      "hmiTag": "ResetPB",
+      "plcTag": "DI_M01_Reset",
+      "expectedAddress": "%M0.3",
+      "plcTagExists": true,
+      "plcTagAddress": "%M0.3",
+      "addressMatches": true,
+      "bindingVerified": true,
+      "runtimeAddressReadback": "",
+      "ok": true,
+      "bindingStatus": "AbsoluteVerified"
+    },
+    {
+      "kind": "hmiTag",
+      "hmiTag": "RunOut",
+      "plcTag": "M_M01_Running",
+      "expectedAddress": "%M1.1",
+      "plcTagExists": true,
+      "plcTagAddress": "%M1.1",
+      "addressMatches": true,
+      "bindingVerified": true,
+      "runtimeAddressReadback": "",
+      "ok": true,
+      "bindingStatus": "AbsoluteVerified"
+    },
+    {
+      "kind": "hmiTag",
+      "hmiTag": "FaultOut",
+      "plcTag": "M_M01_Fault",
+      "expectedAddress": "%M1.3",
+      "plcTagExists": true,
+      "plcTagAddress": "%M1.3",
+      "addressMatches": true,
+      "bindingVerified": true,
+      "runtimeAddressReadback": "",
+      "ok": true,
+      "bindingStatus": "AbsoluteVerified"
+    },
+    {
+      "kind": "hmiTag",
+      "hmiTag": "InterlockOut",
+      "plcTag": "M_M01_Interlock",
+      "expectedAddress": "%M1.2",
+      "plcTagExists": true,
+      "plcTagAddress": "%M1.2",
+      "addressMatches": true,
+      "bindingVerified": true,
+      "runtimeAddressReadback": "",
+      "ok": true,
+      "bindingStatus": "AbsoluteVerified"
+    },
+    {
+      "kind": "hmiTag",
+      "hmiTag": "EStopOut",
+      "plcTag": "DI_ES01_Ok",
+      "expectedAddress": "%M0.0",
+      "plcTagExists": true,
+      "plcTagAddress": "%M0.0",
+      "addressMatches": true,
+      "bindingVerified": true,
+      "runtimeAddressReadback": "",
+      "ok": true,
+      "bindingStatus": "AbsoluteVerified"
+    },
+    {
+      "kind": "buttonAction",
+      "button": "BTN_Start",
+      "eventType": "Down",
+      "actionKind": "set-bit",
+      "targetTag": "StartPB",
+      "script": "HMIRuntime.Tags.SysFct.SetBitInTag(\"StartPB\", 0);",
+      "ok": true
+    },
+    {
+      "kind": "buttonAction",
+      "button": "BTN_Stop",
+      "eventType": "Down",
+      "actionKind": "set-bit",
+      "targetTag": "StopPB",
+      "script": "HMIRuntime.Tags.SysFct.SetBitInTag(\"StopPB\", 0);",
+      "ok": true
+    },
+    {
+      "kind": "buttonAction",
+      "button": "BTN_Reset",
+      "eventType": "Down",
+      "actionKind": "set-bit",
+      "targetTag": "ResetPB",
+      "script": "HMIRuntime.Tags.SysFct.SetBitInTag(\"ResetPB\", 0);",
+      "ok": true
+    },
+    {
+      "kind": "tagDynamization",
+      "item": "LMP_Run",
+      "property": "BackColor",
+      "tag": "RunOut",
+      "boundTag": "RunOut",
+      "ok": true,
+      "message": "Tag dynamization for 'LMP_Run.BackColor' bound to 'RunOut'."
+    },
+    {
+      "kind": "tagDynamization",
+      "item": "LMP_Fault",
+      "property": "BackColor",
+      "tag": "FaultOut",
+      "boundTag": "FaultOut",
+      "ok": true,
+      "message": "Tag dynamization for 'LMP_Fault.BackColor' bound to 'FaultOut'."
+    },
+    {
+      "kind": "tagDynamization",
+      "item": "LMP_Interlock",
+      "property": "BackColor",
+      "tag": "InterlockOut",
+      "boundTag": "InterlockOut",
+      "ok": true,
+      "message": "Tag dynamization for 'LMP_Interlock.BackColor' bound to 'InterlockOut'."
+    },
+    {
+      "kind": "tagDynamization",
+      "item": "LMP_EStop",
+      "property": "BackColor",
+      "tag": "EStopOut",
+      "boundTag": "EStopOut",
+      "ok": true,
+      "message": "Tag dynamization for 'LMP_EStop.BackColor' bound to 'EStopOut'."
+    }
+  ],
+  "scope": "Verifica el contrato HMI-PLC leyendo el proyecto. NO comprueba la HMI en runtime: eso exige WinCC Unified Runtime instalado y arrancado.",
+  "reportPath": "C:\\Users\\jose.mellid\\AppData\\Local\\Temp\\tia-hmi-contract-457bbab8.json"
+}

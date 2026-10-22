@@ -75,10 +75,23 @@ salen del **export textual**, y `30-tools/scripts/Invoke-TiaTagUsage.ps1` las bu
 3. **El DB de instancia se declara en la propia fuente SCL** con `DATA_BLOCK`. Sin esa declaración
    la llamada se resuelve como un tag y la compilación da 14 errores: *Tag "iDB_M01" not defined* y
    *The formal parameter '…' is invalid* para cada entrada.
-4. **El modo aislado de `tia-inspect` no abre proyectos con WinCC Unified.** La inspección del
+4. **El modo aislado de `tia-inspect` SÍ abre proyectos con WinCC Unified**, medido el 2026-10-22
+   con la copia en ruta corta. El diagnóstico anterior, que lo daba por cerrado, **era falso**:
+   la causa real del `Failed to open project` es el **límite de 143 caracteres** de TIA, y en
+   modo aislado la excepción se come y solo queda ese mensaje sin detalle. La inspección del
+   post-apply usa `tia-create` en modo no aislado porque así el error llega completo, siempre
+   sobre una **copia desechable** del proyecto y con el session guard comprobando que no hay
+   ninguna TIA visible con un proyecto abierto.
    post-apply pasa a `tia-create` en modo no aislado, sobre una copia desechable, con el session
    guard comprobando que no hay ninguna TIA visible con un proyecto abierto.
 
+5. **Un proyecto recien creado no tiene destino de descarga**, y por eso la descarga por API falla
+   con `Connect to module PLC_1 failed` aunque la CPU virtual este en RUN, la IP coincida con la del
+   proyecto, la proteccion este desactivada y el hardware compile 0/0. TIA lo dice en la barra de
+   estado: *"Action cancelled before download"*. La primera descarga tiene que hacerse por la GUI
+   (menu contextual del dispositivo -> "Descargar en el dispositivo" -> "Hardware y software") para
+   que TIA aprenda el destino. Es lo que explica por que el proyecto de `fb-alarm-latch` (ya
+   descargado el 19/10) descargara sin problema y uno nuevo no.
 ## Qué cambia respecto a ADR-015
 
 | Afirmación en ADR-015 | A 2026-10-21, tarde |
