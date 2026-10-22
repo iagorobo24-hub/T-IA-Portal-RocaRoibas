@@ -92,3 +92,29 @@ arrancados desde las 07:10** (son del *Unified Station Configurator*). Para prob
 - Runtime WinCC Unified: **ningún proceso de simulación** (solo los del Station Configurator).
 - La propiedad *Support simulation during block compilation* **queda activada** en el proyecto
   (es un cambio real, no un ajuste de sesión): se guarda al guardar el proyecto.
+
+
+## Cierre de la sesion (mas tarde del mismo dia)
+
+- El usuario **inicio la instalacion del WinCC Unified PC Runtime V20** (instalador `SIMATIC
+  WinCC Unified PC - Setup` en marcha). Hasta terminar, la simulacion  sigue bloqueada y
+  nada de lo prohibido segun ADR-017 cambia.
+- La maquina quedo restaurada: Control Panel de PLCSIM Advanced cerrado, instancia parada, puertos
+  del softbus libres, adaptadores de red con su IP original, TIA abierta con `DEMO-Cinta01`
+  guardado (0/0).
+- Durante la sesion aparecieron dos incidentes de escritorio que ya estan documentados:
+  el **fondo en negro** por cambios de escritorio virtual (bug DWM de Win11, arreglo con
+  `explorer.exe`, ver `10-kb/50-errores/README.md`) y unos **clics desviados** a apps del usuario
+  por falta de candado de hit-test (regla "punto = pid" del playbook GUI).
+- Producto de la leccion: **`30-tools/tia-ui/Invoke-TiaGuiClick.ps1`** (candado de clic con
+  `InspectOnly`, topmost, evidencia JSON y captura) + **playbook
+  `10-kb/00-fundamentos/playbook-gui-tia.md`** con el ritual de clic. Las tiras temporales de
+  la sesion (`clicfiable.ps1`, `clic-simple.ps1`, `vdesktop.ps1`...) se quedan en
+  `%LOCALAPPDATA%\Temp\opencode\` y se absorben en el candado si vuelven a hacer falta.
+- Bug real del repo corregido y commiteado (`da44aa0`): `-CallsJson` por linea de comandos
+  corrompe el JSON desde Windows PowerShell 5.1; los tres scripts afectados pasan por
+  `-CallsJsonPath` y el paquete portable se regenero con `Build-PortablePackage.ps1 -Force`.
+  Efecto que teniamos encima: el gate `tiaInstanceSafeForApply` quedaba en `false` con la
+  sesion sana.
+- Siguiente paso: cuando el instalador acabe, comprobar la version de `GfxRTS.exe`
+  (debe ser >= 500.2x.xxxx.x sobre TIA V20) y repetir la simulacion siguiendo este handoff.

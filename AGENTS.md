@@ -142,7 +142,7 @@ de abrirla o restaurarla y déjala maximizada al terminar la operación, salvo q
 requiera temporalmente otra disposición.
 
 Para automatizar interacciones gráficas repetibles, sigue el método y los límites de
-[`tia-interfaz-y-computer-use.md`](10-kb/00-fundamentos/tia-interfaz-y-computer-use.md): Openness/MCP
+[`tia-interfaz-y-computer-use.md`](10-kb/00-fundamentos/tia-interfaz-y-computer-use.md); los pasos ejecutables en esta máquina — con el candado de clic 30-tools/tia-ui/Invoke-TiaGuiClick.ps1 (hit-test del PID antes de pulsar) y el ritual completo — están en el [playbook GUI](10-kb/00-fundamentos/playbook-gui-tia.md). Openness/MCP
 primero; Playwright solo para una interfaz web; UI Automation nativa únicamente después de descubrir
 y validar controles semánticos de TIA en un fixture desechable.
 
