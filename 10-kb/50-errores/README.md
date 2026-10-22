@@ -1,4 +1,4 @@
-# Catálogo de errores
+﻿# Catálogo de errores
 
 > Síntoma → causa → arreglo. Es donde un agente pierde más tiempo, así que es lo primero que se
 > escribió.
@@ -618,3 +618,73 @@ el escritorio activo, parar y avisar al usuario.
 2. Comprueba si es un [límite de la API](../10-openness/limites.md) y no un fallo
 3. Si es nuevo y te costó averiguarlo: **añádelo a este fichero.** Eso es lo que hace que la
    base de conocimiento valga con el tiempo
+
+---
+
+## Errores del 2026-10-22 (simulación unificada V20)
+
+### DownloadToPlc: No download route reaches target IP '192.168.0.1' / Connect to module PLC_1 failed con ruta PLCSIM [no IP]
+
+**Síntoma:** CheckDownloadReadiness y DownloadToPlc ven ruta PLCSIM [no IP] → 1 X1. El adaptador Windows Ethernet 2 (Siemens PLCSIM Virtual Ethernet Adapter) tiene IP 192.168.0.100/24 asignada y visible en 
+etsh/Get-NetIPAddress, pero el registro NDIS HKLM\SYSTEM\CurrentControlSet\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}\0001 muestra IPAddress: vacío.
+
+**Causa:** el driver NDIS del adaptador virtual **no propagó la IP al stack Softbus**. Provocado por la reconfiguración MSI del mediodía (11:57-12:08: WinCC Unified PC V20 + AWB Host plugins; Event 1038 "requiere reinicio" a las 11:57; reboot ~12:20). El bindeo NDIS quedó pendiente.
+
+**Arreglo:** **reiniciar la máquina** (fuerza rebind del driver). Tras reboot, CheckDownloadReadiness muestra pgPcAddresses: 192.168.0.100 y DownloadToPlc conecta.
+
+**Evidencia**: 70-runs/2026-10-22-simulacion-unified-v20/19-check-readiness-result.json (solo 1 ruta, pgPcAddresses=\"\"), 20-download-auto-result.json, 21-download-relaunch2-result.json.
+
+---
+
+### PLCSIM V20: botón + (crear instancia) no hace nada con args --projectname/--mlfb
+
+**Síntoma:** arrancar S7PLCSIMV20.exe --family=S71500 --projectname=\"DEMO-Cinta01\" --mlfb=\"6ES7 513-1AM03-0AB0\" carga la app con cabecera \"DEMO-Cinta01\", catálogo S7-1500 visible, pero clic en + (o Ctrl+1) no crea instancia. Workspace Documents\PLCSIM\DEMO-Cinta01 no existe en disco.
+
+**Causa:** los argumentos de CLI fuerzan un workspace con nombre de proyecto que no existe en el filesystem. El adaptador Softbus no se vincula a ese workspace fantasma.
+
+**Arreglo:** arrancar **PLCSIM sin argumentos** → cabecera \"Unsaved workspace\" → Ctrl+1 (atajo Create1500 de SettingsData.JSON) → crea Instance_1 en workspace por defecto.
+
+**Evidencia**: capturas 22-plcsim-instance-created.png, 29-plcsim-relaunch2-inst.png.
+
+---
+
+### TIA V20: toolbar NO tiene icono \"Start simulation\"
+
+**Síntoma:** se clicaba en (2610,71) creyendo que era \"Start simulation\". Tooltip tras activación + dwell 3.5 s dice **\"Start CPU\"**. (2586,71) = \"Accessible devices\". (2632,71) = \"Stop CPU\".
+
+**Vía correcta**: menú Online → Simulation ▶ → Start (Ctrl+Shift+X).
+
+**Regla validada**: con PLC_1 seleccionado en árbol → item \"Start\" del submenú Online está **NEGRO** (habilitado); si se pierde selección → **GRIS**. Siempre re-clic en árbol tras activaciones.
+
+**Evidencia**: capturas 26-icono-2597.png, 27-icono-2584.png, 31-ctx-start-sim.png (menú contextual con \"Start simulation Ctrl+Shift+X\" en negro).
+
+---
+
+### TIA shell muere tras attach/detach MCP reiterados
+
+**Síntoma**: TIA PID 28328 tenía menús/toolbar/F10/atajos muertos (canvas sí respondía). Causa probable: arranque manual + attach/detach MCP repetidos en la sesión anterior.
+
+**Arreglo**: reiniciar TIA limpio (Stop-TiaPortal.ps1 + nuevo Connect). PID 30048 tiene shell viva (tiles, árbol, menú Online abren).
+
+**Evidencia**: diario de arranque en 70-runs/2026-10-22-simulacion-unified-v20/.
+
+---
+
+### OpenProject exige arg path (no projectPath)
+
+**Síntoma:** llamada MCP OpenProject(projectPath=\"...\") falla silenciosamente / no abre. El parámetro correcto es path.
+
+**Evidencia**: secuencia MCP exitosa en 70-runs/2026-10-22-simulacion-unified-v20/01-bootstrap.json... con OpenProject(path=...).
+
+---
+
+### HMI Unified: simulación no arranca con runtime de versión distinta (V19 vs TIA V20)
+
+**Síntoma**: Online → HMI → Start runtime sube procesos Siemens.Runtime.HmiUnified.Client + ControlCenter, pero **no hay ventana ni puerto web expuesto**; la pantalla Main no se muestra.
+
+**Causa**: runtime instalado SIMATIC WinCC Unified PC V19 (GfxRTS.exe 500.30.8901.3), proyecto TIA V20 → formato runtime  _Chrom_20.0.0.0_Rdf_20.0.0.0. **La simulación exige runtime de la misma versión que TIA** (ADR-017).
+
+**Arreglo**: instalar SIMATIC WinCC Unified PC V20. Sin licencia funciona en modo trial (aviso cada 10 min, 1 hora).
+
+**Evidencia**: 4960, 4970, 4980 en 50-errores/README.md (ya documentado arriba) + capturas 31-tia-hmi-menu.png, 32-tia-hmi-started.png, 33-hmi-runtime-fullscreen.png.
+
