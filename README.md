@@ -73,9 +73,9 @@ Un resumen honesto. La fuente más fiable es [`AGENTS.md`](AGENTS.md) y los info
 | Análisis semántico de un snapshot y propuestas SCL | 🟡 | Hay preview y compuertas. La **aplicación** de propuestas está bloqueada por diseño mientras el perfil V20 no registre un importador acotado. |
 | Aceptación en PLCSIM Advanced | ✅ | **Verificada en ejecución** (2026-10-21): `FB_AlarmLatch` (65/65 pasos, 9 casos) y `FC_Escalado` (33/33, 9 casos), solo contra CPU virtual. Recetas [R28](10-kb/20-recetas/R28-aceptacion-plcsim.md) y [ADR-015](00-meta/decisiones/ADR-015-estado-real-2026-10-21.md). |
 | HMI (WinCC Unified/Comfort): recetas y aceptación | 🟡 | Documentado (R13, R14, R20), sin verificar en runtime. |
-| Aceptación global (`accepted`) | 🚧 | Sigue en `false`: **PA-1 está cumplido** (proyecto `DEMO-Cinta01` creado desde un spec, 0/0, `Check-TiaStandards` con código 0, y la pregunta de trazabilidad respondida con referencias reales — ADR-016), pero **WinCC Unified Runtime no se ha arrancado nunca** y la simulación HMI sigue siendo el hueco de R13, R14 y R20. |
+| Aceptación global (`accepted`) | 🚧 | Sigue en `false`: **PA-1 está cumplido** (proyecto `DEMO-Cinta01` creado desde un spec, 0/0, `Check-TiaStandards` con código 0, y la pregunta de trazabilidad respondida con referencias reales — ADR-016), pero **WinCC Unified Runtime no se ha arrancado nunca** y la simulación HMI sigue siendo el hueco de R13, R14 y R20. Para el alcance **offline de release**, `accepted` sigue en `false` por [R21](10-kb/20-recetas/R21-preflight-offline-release.md): falta el paquete de fixtures golden de la release del servidor, que no se puede generar aquí sin fabricarlo (ver la receta). |
 | Compatibilidad con TIA Portal V21 | 🚧 | Receta de compilación escrita, sin verificar (ADR-014). |
-| CI en GitHub Actions | ✅ | En verde desde el 2026-10-21: 13 checks, 0 FAIL. Los dos tests que fallaban eran gates de seguridad que dejaron de ser comprobables. |
+| CI en GitHub Actions | ✅ | `master` en verde desde el 2026-10-21: 18 runs seguidos en verde tras el último fallo (2026-10-21 09:59 UTC), el último el 2026-10-22 (`gh run list`). Los dos tests que fallaban eran gates de seguridad que dejaron de ser comprobables. «Dos semanas seguidas» no se cumple antes del 2026-11-04 y el workflow ejecuta también una vez al día para que haya evidencia sin necesidad de commits. |
 
 ✅ probado · 🟡 implementado, pendiente de validar · 🚧 en construcción.
 
@@ -181,7 +181,7 @@ docs/              planes y relevos de trabajo (docs/superpowers) y gráficos de
 
 ## Licencia y créditos
 
-El código propio (Markdown, PowerShell, SCL) se distribuye bajo [MIT](LICENSE). Los servidores MCP se construyen a partir de proyectos de terceros ([`heilingbrunner/tiaportal-mcp`](https://github.com/heilingbrunner/tiaportal-mcp) y [`bulaofen0036-coder/TIA_Portal_Openness_MCP`](https://github.com/bulaofen0036-coder/TIA_Portal_Openness_MCP), ambos con licencia MIT según [`NOTICE-THIRD-PARTY.md`](TIA-Claude_Portable/docs/NOTICE-THIRD-PARTY.md)); sus binarios no se distribuyen. Los ejemplos de `50-examples/` proceden de repositorios de terceros: sus licencias y condiciones son las de sus autores (el aviso de terceros indica que dos de ellos no incluyen fichero de licencia), así que no los reutilices sin comprobarlo.
+El código propio (Markdown, PowerShell, SCL) se distribuye bajo [MIT](LICENSE). Los servidores MCP se construyen a partir de proyectos de terceros ([`heilingbrunner/tiaportal-mcp`](https://github.com/heilingbrunner/tiaportal-mcp) y [`bulaofen0036-coder/TIA_Portal_Openness_MCP`](https://github.com/bulaofen0036-coder/TIA_Portal_Openness_MCP), ambos con licencia MIT según [`NOTICE-THIRD-PARTY.md`](TIA-Claude_Portable/docs/NOTICE-THIRD-PARTY.md)); sus binarios no se distribuyen. De `50-examples/` solo se versiona lo propio (`demo-cinta01`, `agent-demo`) y las fichas de ejemplos de terceros; los repositorios de origen de `npatel-*` y `orsin-*` **no declaran licencia**, así que su código no se republica. La revisión, con fecha y pendientes, está en [`50-examples/LICENCIAS.md`](50-examples/LICENCIAS.md). El historial de git todavía contiene los ejemplos retirados.
 
 ---
 
