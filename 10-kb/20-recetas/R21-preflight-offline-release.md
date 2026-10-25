@@ -35,6 +35,30 @@ de `50-examples/`, no se copian desde un proyecto de cliente y no se modifican p
 preflight. Si falta cualquiera, el estado es **Bloqueado** y el siguiente paso es obtener el
 paquete de fixtures autorizado o ejecutar solo las suites offline que crean sus propias fixtures.
 
+## Paquete de fixtures de release: definición y estado (WP-21, 2026-10-25)
+
+**Qué es el paquete.** Un árbol `TMP_EXPORT/` (más `docs/hmi_templates/unified_*.json`) que entrega
+la release del servidor MCP de origen; el helper lo lee y no lo crea. Contenido exigido por el
+preflight: los cinco XML golden de arriba, con los marcadores indicados.
+
+**Por qué no se genera aquí.** El helper compara contra muestras exportadas por la release del
+servidor. Escribirlas a mano, o derivarlas de `50-examples/` o de un proyecto, produciría ficheros
+que pasan el preflight sin ser golden, que es justo lo que esta receta prohíbe. Tampoco se
+descargan: el repositorio de origen (`bulaofen0036-coder/TIA_Portal_Openness_MCP`, MIT) no
+contiene `TMP_EXPORT/`, `_verify/` ni `hmi_templates/` (comprobado con la API de GitHub, solo
+lectura, 2026-10-25), así que el paquete solo puede venir de quien distribuya esa release.
+
+**Estado: Bloqueado.** `accepted` queda en `false` para el alcance offline de release. Qué falta:
+
+1. El paquete de release del autor del servidor, con licencia compatible con MIT, o un acuerdo
+   explícito para generarlo con el propio servidor sobre un fixture desechable.
+2. Una decisión de Iago sobre si el paquete se versiona (con aviso en `NOTICE-THIRD-PARTY.md`) o
+   se mantiene fuera del repositorio público y solo se apunta con `-WorkspaceRoot`.
+3. Con el paquete: ejecutar el preflight (debe dar `READY`), la suite, y guardar los hashes.
+
+Hasta entonces las pruebas offline que sí cuentan son las que crean sus propias fixtures
+(R22–R26), ya recogidas en el README.
+
 ## Ejecución
 
 Solo con `READY`, invocar `RunOfflineReleaseValidationSuite` mediante la secuencia MCP normal,
