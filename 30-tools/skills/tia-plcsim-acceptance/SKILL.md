@@ -63,6 +63,7 @@ description: Ejecuta la aceptacion de comportamiento en PLCSIM (Advanced V7 o S7
 | `Connect to module PLC_1 failed`| Verificar: sesión adjunta? Control Panel asentado (100 s)? PG/PC en PLCSIM? |
 | Dialog no identificado del certificado (nadie responde) | repetir la lectura; es la 70-s inconsistencias; si falla, documento de importes |
 | CPU "PLC sin configurar" | falta `Support simulation during block compilation` con recompilar |
+| Hardware en rojo, Description vacía en `PLC_1`, y el único texto es el aviso de la pantalla de la CPU | No es el certificado. Nivel de acceso distinto de `Full access (no protection)`. Catálogo `10-kb/50-errores/README.md`, entrada del 2026-10-26. No poner contraseña. |
 | Metadatos F/Safety incompletos | no se descarga; paso se declara bloqueado |
 
 ## Referencias

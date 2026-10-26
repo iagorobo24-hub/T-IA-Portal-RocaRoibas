@@ -175,3 +175,60 @@ etsh/PowerShell admin.
 2. **Instalar WinCC Unified PC V20** para HMI simulation completa.
 3. Tras reboot + runtime V20: cadena completa PLC + HMI en una sesión.
 
+
+---
+
+## Actualización 2026-10-23 — la descarga por API no es posible con el Softbus
+
+**Contexto:** reinicio de máquina a las 07:09:34, TIA guardado/cerrado/reabierto (PID 23304), proyecto reabierto con `OpenProject` (08:02:21), `IsSimulationDuringBlockCompilationEnabled=true`, `CompileSoftware` OK y `CheckDownloadReadiness.ready=true`.
+
+### Corrección a lo dicho el 2026-10-22
+
+El reinicio **no arregla** el `PLCSIM [no IP]` de forma fiable. Hoy, con la máquina reiniciada y la IP publicada en la clave de clase del adaptador (`IPAddress=192.168.0.100`, `SubnetMask=255.255.255.0`, `Restart-NetAdapter` hecho), `CheckDownloadReadiness` sigue devolviendo:
+
+```json
+{"downloadRouteCount":1,
+ "downloadRoutes":[{"pgPcInterface":"PLCSIM","pgPcAddresses":"","targetAddresses":""}]}
+```
+
+Y `DownloadToPlc` falla igual con **tres** orígenes de instancia distintos: instancia clásica por CDP, instancia clásica tras reiniciar TIA, e instancia de **PLCSIM Advanced creada desde su Panel de Control** (encendida, `192.168.0.1`). Forzando `targetIpAddress`:
+
+> `No download route reaches target IP '192.168.0.1'. Available routes: PN/IE / PLCSIM [no IP] -> 1 X1`
+
+**Conclusión firme:** el Softbus no es una ruta de red para el `DownloadProvider` de Openness. La descarga por API **solo** puede funcionar con PLCSIM Advanced en **TCP/IP**, y eso es lo que está roto en este equipo (`-48`).
+
+### Estado real de PLCSIM Advanced (diagnóstico cerrado)
+
+| Comprobación | Resultado |
+|---|---|
+| `SetNetworkMode(TCPIP_SINGLE_ADAPTER)` sin admin y con admin | `0xffffffd0` (`-48 SREC_COMMUNICATION_INTERFACE_NOT_AVAILABLE`) |
+| Driver `plcsimlwf` | RUNNING, v102 (2024), binding enabled en `Ethernet 2` |
+| Componente de red | `netcfg -q plcsim_ndislwf` → "está instalado"; reinstalado con exit 0 |
+| `AdapterConfigurator.exe` (configura el switch) | **aborta con `-999999`**, sin ventana ni salida |
+| `msiexec /fa` del MSI en caché (Driver64) | **se cuelga en `ADSStartup`** (abortado sin daño) |
+| Instalador original V7 en el equipo | **no está** (en Descargas solo hay el ISO de WinCC Unified RT V20) |
+
+`CommAdapter` sigue vacío en `HKLM\SYSTEM\CurrentControlSet\Services\plcsimlwf\Parameters`, que es justo lo que escribiría el AdapterConfigurator.
+
+**Vía de arreglo:** reinstalar **PLCSIM Advanced V7 desde su instalador original**. La reparación por MSI cacheado no sirve.
+
+### Lo que sí funciona hoy
+
+La descarga por **GUI** de TIA (la de esta receta, secciones 1-4) sigue siendo el único camino verificado:
+
+1. Seleccionar `PLC_1` en el árbol del proyecto (si no, el ítem *Start* sale gris).
+2. **Online → Simulation → Start** (`Ctrl+Shift+X`). La toolbar de V20 **no** tiene icono de simulación.
+3. Aceptar `0626:000002` (OK).
+4. `Establish connection to device` → **Conectar**, y luego **Cargar** (marcar *Arrancar módulo*).
+
+### Receta nueva: instancia de Advanced sin ratón (UI Automation)
+
+El Panel de Control es WPF y expone UIA (TIA no: su shell WinForms devuelve 0 botones). IDs verificados: `HeaderSite` (**Toggle**), `UIAutPLCSIMAdv_InstanceInfoName` (Value), `UIAutPLCSIMAdv_InstanceInfoStartButton` (**Invoke**), `UIAutPLCSIMAdv_RunningInstancesPowerOnOffButton` (**Toggle**), `UIAutPLCSIMAdv_RunningInstancesUnregisterButton` (Invoke).
+
+**Trampa:** la instancia nace con `ToggleState = On`; togglear "para encender" la **apaga**.
+
+### Próximos pasos (2026-10-23)
+
+1. Descarga por GUI (pasos de arriba) para dejar la demo y la evidencia.
+2. Reinstalar PLCSIM Advanced V7 desde instalador original → volver a probar `tcpip-local`; si da `ready`, la descarga por API queda automatizada.
+3. Instalar **WinCC Unified RT V20** desde `SIMATIC_WinCC_Unified_RT_V20_Second_Edition.iso` (Descargas) para el bloqueo HMI de ADR-017.

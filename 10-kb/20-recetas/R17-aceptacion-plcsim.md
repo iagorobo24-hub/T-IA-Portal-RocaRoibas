@@ -147,7 +147,10 @@ En `AgentDemo_V20`, el preflight MCP guardó `CompileSoftware=Success` (0 errore
 errores y 1 aviso. El detalle visible incluye: `The PLC communication certificate cannot be
 configured without the password for confidential PLC configuration data. Enter the password.`
 También apareció el aviso `The S7-1500 CPU display does not contain any password protection.` No se
-cargó el proyecto. El usuario confirma que los proyectos de este workspace son pruebas generadas o
+cargó el proyecto. Si ese aviso es el **único** texto y `Rail_0` / `PLC_1` cuentan 1 error con la
+columna Description vacía, no es este fallo de certificado: el nivel de acceso de la CPU no es
+`Full access (no protection)`. El arreglo medido el 2026-10-26 está en el
+[catálogo de errores](../50-errores/README.md). No inventes una contraseña. El usuario confirma que los proyectos de este workspace son pruebas generadas o
 migraciones de proyectos abiertos y que no debe haber contraseñas que recuperar. Por tanto, este
 mensaje no autoriza a pedir ni inventar una contraseña: se trata como una opción de protección
 incompatible con la fixture.

@@ -13,6 +13,7 @@ servidores MCP. El objetivo no es "tener herramientas": es que el agente **sepa 
 industrial** y trabaje como lo haría el ingeniero responsable.
 
 - `10-kb/` — cómo funciona TIA Portal. Lo que hay que saber.
+- `10-kb/50-errores/` — errores ya resueltos, síntoma → causa → arreglo. **Antes de reintentar un fallo, se busca aquí.**
 - `20-standards/` — cómo se hacen las cosas aquí. Lo que hay que respetar.
 - `40-projects/` — el trabajo real.
 - `60-library/` — bloques propios ya probados. **Míralos antes de escribir uno nuevo.**
@@ -33,6 +34,11 @@ interfaz exclusivamente para un fixture desechable previamente identificado. La 
 `.tia-agent-fixture.json`, que señala el `.ap20` exacto y su backup coincidente. Solo el runner
 serializado debe crear el manifiesto después de copiar y comparar el fixture; nunca se apunta la raíz
 a `40-projects/`, a una carpeta de cliente ni a un original de `50-examples/`.
+
+**Si algo falla, antes de reintentarlo** busca el síntoma en
+[`10-kb/50-errores/README.md`](10-kb/50-errores/README.md). Si ya está, aplica ese arreglo y no
+inventes otro. Si no está y lo resuelves, añádelo a esa carpeta en el mismo momento, con síntoma,
+causa, arreglo y evidencia. Reintentar a ciegas un error ya catalogado es el fallo.
 
 **Nunca inventes una ruta.** Openness navega por *paths* de objetos de ingeniería, no por
 nombres bonitos. `PLC_1`, `PC-System_1/Software PLC_1`, `Group/Subgroup/FB_Motor`. Si no la has

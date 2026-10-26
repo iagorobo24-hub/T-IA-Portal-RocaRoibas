@@ -10,3 +10,5 @@ Resumen de lo que no se negocia:
 - **Nunca** inventes una ruta de Openness: sale de `GetProjectTree` o no existe.
 - **Nunca** escribas LAD a mano. SCL para lógica, LAD solo desde recetas.
 - Backup antes de escribir. Compila con 0 errores antes de guardar. Exporta a `src/` y commitea.
+- Ante un error, **antes de reintentar**, busca el síntoma en `10-kb/50-errores/`. Si no está y lo
+  resuelves, documéntalo ahí.

@@ -25,9 +25,10 @@ description: Diagnostica errores de TIA Portal, Openness, MCP, compilación o sc
 
 ## Pasos
 
-1. [⭐] Cotejar con el catálogo ordenado: arranque → lectura → escritura → sesión →
-   PLCSIM/aceptación → scripts. La sección de PLCSIM/aceptación trae recetas (2026-10-21
-   y 2026-10-22).
+1. [⭐] **Antes de reintentar nada**, buscar el síntoma en `10-kb/50-errores/README.md`
+   (arranque → lectura → escritura → sesión → PLCSIM/aceptación → scripts, y las
+   entradas fechadas del final). Si está, aplicar ese arreglo. Si no está y se
+   resuelve, añadirlo ahí en el mismo momento.
 2. [?] Si el sintoma esta en `50-errores` con arreglo medido: aplicarlo y comprobar.
 3. [⚠] Si no está: reproducir mínimo, separar causa-hipótesis-evidencia; con la respuesta
    completa de llamada/resultado en `70-runs/<fecha>-triage/`.

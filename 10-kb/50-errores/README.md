@@ -3,6 +3,11 @@
 > Síntoma → causa → arreglo. Es donde un agente pierde más tiempo, así que es lo primero que se
 > escribió.
 >
+> **Obligatorio.** En cuanto aparezca un error —de TIA, de Openness, de PLCSIM, de la HMI o de un
+> script— busca el síntoma en esta carpeta **antes de reintentar nada**. Si está, aplica el arreglo
+> de aquí. Si no está y lo resuelves, añádelo al final de este fichero con síntoma, causa, arreglo
+> y evidencia. No abras otra carpeta de errores.
+>
 > **Antes de reintentar nada: lee el mensaje de error.** Los tres servidores MCP devuelven
 > errores **tipados**. El código dice qué hacer; el texto, por qué.
 
@@ -687,4 +692,146 @@ etsh/Get-NetIPAddress, pero el registro NDIS HKLM\SYSTEM\CurrentControlSet\Contr
 **Arreglo**: instalar SIMATIC WinCC Unified PC V20. Sin licencia funciona en modo trial (aviso cada 10 min, 1 hora).
 
 **Evidencia**: 4960, 4970, 4980 en 50-errores/README.md (ya documentado arriba) + capturas 31-tia-hmi-menu.png, 32-tia-hmi-started.png, 33-hmi-runtime-fullscreen.png.
+
+---
+
+## Errores del 2026-10-23 (PLCSIM Advanced y descarga por API)
+
+### `-48` / `0xffffffd0` (`SREC_COMMUNICATION_INTERFACE_NOT_AVAILABLE`) en `set-network-mode`
+
+**Síntoma:** el adaptador `tia-claude-plcsim-adapter.exe --transport tcpip-local` registra la instancia pero falla al fijar el modo:
+`{"status":"failed","stage":"set-network-mode","modeReadCode":"0x0","modeSetCode":"0xffffffd0","modeVerifyCode":"0x0"}`.
+`GetNetworkMode` responde `0x0`, así que el runtime está vivo; lo que no existe es la **interfaz de comunicación TCP/IP**.
+
+**Lo que se descartó con evidencia (2026-10-23):**
+
+| Hipótesis | Comprobación | Resultado |
+|---|---|---|
+| Falta de permisos | misma sonda con `RunAs` | `-48` idéntico (`50-elevated-probe.log`) |
+| IP del adaptador no publicada | `IPAddress=192.168.0.100` escrito en la clave de clase del driver + `Restart-NetAdapter` | sigue `-48` |
+| Driver o binding ausentes | `sc query plcsimlwf` = RUNNING (v102, 2024); `Get-NetAdapterBinding` = enabled en `Ethernet 2` | correctos |
+| Componente de red no registrado | `netcfg -l oem100.inf -c s -i plcsim_ndislwf` → exit 0; `netcfg -q` → "está instalado" | correcto (`55-netcfg-repair.log`) |
+
+**Causa raíz (aislada):** `Siemens.Simatic.PlcSim.Advanced.AdapterConfigurator.exe` (la herramienta que escribe `CommAdapter` y activa el switch) **aborta con `-999999`** incluso lanzada normal y elevada, sin ventana y sin salida (`54-adapter-configurator-probe.log`). Es decir: la configuración del conmutador virtual no se puede regenerar, y por eso el runtime no encuentra interfaz de comunicación. `CommAdapter` sigue vacío en `HKLM\SYSTEM\CurrentControlSet\Services\plcsimlwf\Parameters`.
+
+**La reparación por MSI no es viable:** `msiexec /fa C:\WINDOWS\Installer\60f89.msi` (Driver64, en caché) **se cuelga indefinidamente en la acción `ADSStartup`** (log congelado, CPU 0; `52-msi-driver64.log`). Abortarla no deja daño: Driver64 sigue registrado, `plcsimlwf.sys` intacto y sin reinicio pendiente. `netcfg -i` con la sintaxis equivocada devuelve el texto de ayuda y exit `-1` (la clase correcta para un `NetService` es `-c s`, no `-c net`).
+
+**Arreglo:** reinstalar **PLCSIM Advanced V7 desde su instalador original** (no está en el equipo: en Descargas solo hay el ISO de WinCC Unified RT V20). Los MSI cacheados no sirven para reparar.
+
+**Evidencia:** `70-runs/2026-10-23-simulacion-advanced/` → `50-elevated-probe.log`, `51-adapter-elevated.jsonl`, `52-repair-advanced.log`, `52-msi-driver64.log`, `53-adapter-configurator.log`, `54-adapter-configurator-probe.log`, `55-netcfg-repair.log`, `55-adapter-after-netcfg.jsonl`.
+
+---
+
+### `Connect to module PLC_1 failed` con ruta `PLCSIM [no IP]`: no es un fallo de la instancia
+
+**Síntoma:** idéntico error con **tres** orígenes distintos de instancia:
+
+1. Instancia clásica creada por CDP (`Instance_1`).
+2. Instancia clásica tras **reiniciar TIA** (guardar, cerrar, reabrir) y `CheckDownloadReadiness.ready=true`.
+3. Instancia **PLCSIM Advanced creada desde su Panel de Control por UI Automation** (como exige el manual), encendida y con `192.168.0.1`.
+
+`CheckDownloadReadiness` devuelve siempre `downloadRouteCount: 1` con `pgPcInterface: "PLCSIM"`, `pgPcAddresses: ""`, `targetAddresses: ""`. Forzar la IP destino tampoco sirve: `DownloadToPlc(..., targetIpAddress="192.168.0.1")` → **`No download route reaches target IP '192.168.0.1'`**.
+
+**Causa:** el Softbus **no es una ruta de red para el `DownloadProvider` de Openness**. Es una limitación de diseño, no un estado roto: la descarga por API solo es posible con **PLCSIM Advanced en TCP/IP**, que es justo lo que devuelve `-48`.
+
+**Corrección a la entrada del 2026-10-22:** aquella decía que reiniciar la máquina arreglaba el `[no IP]`. **Hoy no se cumple**: tras el reinicio de las 07:09:34 la clave de clase sigue publicando la IP, pero `CheckDownloadReadiness` continúa devolviendo `pgPcAddresses: ""` (`46-download-panel-instance-result.json`). El reinicio no es un arreglo fiable.
+
+**Evidencia:** `45-download-ui-result.json`, `46-download-panel-instance-result.json`, `47-download-with-targetip-result.json`.
+
+---
+
+### Receta: crear y encender una instancia de PLCSIM Advanced por UI Automation (sin ratón)
+
+El Panel de Control es **WPF y sí expone UIA** (TIA no: su shell WinForms devuelve 0 botones). Identificadores verificados:
+
+| Elemento | AutomationId | Patrón |
+|---|---|---|
+| Desplegar "Start Simulated PLC Instance" | `HeaderSite` | **Toggle** (no Invoke) |
+| Nombre de instancia | `UIAutPLCSIMAdv_InstanceInfoName` | Value |
+| Familia PLC | `UIAutPLCSIMAdv_InstanceInfoPLCTypeComboBox` | ExpandCollapse (queda **deshabilitado** hasta fijar nombre) |
+| Crear | `UIAutPLCSIMAdv_InstanceInfoStartButton` | Invoke (se habilita al escribir el nombre) |
+| Encender/apagar | `UIAutPLCSIMAdv_RunningInstancesPowerOnOffButton` | **Toggle** |
+| Desregistrar | `UIAutPLCSIMAdv_RunningInstancesUnregisterButton` | Invoke |
+
+**Trampa:** la instancia recién creada ya nace con `ToggleState = On`. Si se hace `Toggle()` "para encenderla" se **apaga**. Comprobar el estado antes de togglear.
+
+**Efecto:** instancia `PLC_1` registrada, `192.168.0.1`, `Runtime.Instance.x64` vivo. No arregla la descarga por sí sola (ver arriba), pero sirve para cualquier prueba que necesite instancia sin tocar el ratón.
+
+**Evidencia:** `46-download-panel-instance.json` (secuencia MCP posterior).
+
+---
+
+### LogDevice `PLCSIM.Local.xml` apunta a `plcsimscp64.dll`, que no existe en disco
+
+**Síntoma:** el LogDevice de OAM en `C:\ProgramData\Siemens\Automation\Simatic OAM\data\LogDevices\PLCSIM.Local.xml` declara `<Unit>plcsimscp64.dll</Unit>`, y ese DLL **no está en ningún directorio** (ni System32, ni SysWOW64, ni Siemens).
+
+**Causa:** es el LogDevice **legado de S7-PLCSIM V5.4** (también instalado: `SIMATIC S7-PLCSIM V5.4 + SP8 + Upd3`), no el transporte de PLCSIM V20 ni de Advanced.
+
+**Conclusión:** **no es la causa** del fallo de descarga. El runtime V20 usa `plcsimscputil64.dll` + `VplcHost64`, y Advanced usa su propio driver LWF. No perseguir este DLL.
+
+**Evidencia:** `Get-ChildItem` sobre `Program Files*`, `System32`, `SysWOW64` → 0 resultados; entrada de desinstalación de PLCSIM V5.4 presente.
+
+---
+
+## Errores del 2026-10-26 (compilación de hardware en rojo, DEMO-Cinta01)
+
+### `PLC_1` en rojo, Description vacía, y el aviso de la pantalla de la CPU
+
+**Síntoma.** `CompileSoftware` termina en `Success`, 0 errores y 0 avisos
+(«No block was compiled. All blocks are up-to-date.»), pero **Compile → Hardware
+(rebuild all)** deja `Rail_0` y `PLC_1` en rojo con 1 error y 1 aviso. La columna
+Description de esas dos filas está vacía. El único texto de la rejilla es el aviso
+hijo `The S7-1500 CPU display does not contain any password protection.` en
+`CPU display_1`, y esa fila marca **0 errores** y 1 aviso. El Load preview dice
+`Compile before downloading to device` y `Loading will not be executed.` Refresh
+no lo quita. Volver a compilar el hardware, sin cambiar la CPU, repite el mismo
+resultado. `Rail_0` solo suma lo que ya cuenta `PLC_1`: no es un segundo error.
+
+**No es el aviso de la pantalla.** Siemens lo documenta como aviso. No bloquea la
+descarga y no se quita poniéndole contraseña al display.
+
+**No es la protección de datos confidenciales.** Ese otro fallo tiene texto propio:
+`The PLC communication certificate cannot be configured without the password for
+confidential PLC configuration data. Enter the password.` Corresponde a
+`MasterSecretConfiguration=WithoutPassword` (la casilla «Protect confidential PLC
+configuration data» marcada y sin contraseña). El arreglo es `Unprotect()` sin
+argumentos, solo en copia aislada, y está en
+[R17](../20-recetas/R17-aceptacion-plcsim.md). No se inventa contraseña y no se
+llama `Reset()`. En DEMO-Cinta01, el 2026-10-26, esa casilla ya estaba quitada y
+el hardware seguía en rojo.
+
+**Causa.** El nivel de acceso de la CPU no era `Full access (no protection)`. En
+una S7-1500 el valor por defecto es `No access (complete protection)`. Si el nivel
+es cualquier otro distinto de `Full access (no protection)` —o de `Full access
+including fail-safe` en una F-CPU— y no hay contraseña de acceso completo, la
+compilación de hardware falla. Openness lo enuncia como `Password must not be
+empty`. En la rejilla de TIA esa frase puede no salir: la fila del PLC cuenta 1
+error y deja Description vacía.
+
+**Arreglo.** CPU estándar, no F, firmware hasta V3.0:
+
+1. `PLC_1` → Device configuration. Clic en la CPU, no en el display.
+2. Properties → Protection & Security → **Access control**.
+3. En la primera columna de la tabla, marcar **Full access (no protection)**.
+4. Dejar las contraseñas vacías. No inventar una.
+5. Compile → Hardware (rebuild all). La fila de `PLC_1` tiene que quedar con 0
+   errores. El aviso de la pantalla, si reaparece, no vuelve a ponerla en rojo.
+
+**Verificado** el 2026-10-26 en `DEMO-Cinta01` (CPU 1513-1 PN, TIA V20). A las
+15:07 la rejilla pasó a `Compiling finished (errors: 0; warnings: 0)`, con `PLC_1`
+en 0 errores y 0 avisos. Evidencia:
+`70-runs/2026-10-26-hmi-runtime/ui/tia-20261026-150750.png`. La frase `Password
+must not be empty` no llegó a leerse en la rejilla; lo que se verificó es que
+cambiar el nivel de acceso quitó el error.
+
+**Firmware posterior a V3.0.** No existe esa tabla: el nivel vive en la
+administración local de usuarios y roles. Parar y leer esa página. No rellenar
+contraseñas a ciegas.
+
+**No hacer.** Activar «Protect confidential PLC configuration data», poner
+contraseña al display, llamar `Reset()` en `PlcMasterSecretConfigurator`, ni
+pulsar Load mientras la fila Compile del Load preview siga en rojo.
+
+Fuentes: [niveles de acceso S7-1500, STEP 7 V20](https://docs.tia.siemens.cloud/r/en-us/v20/functional-description-of-s7-1500-cpus-s7-1500/setting-the-operating-behavior-s7-1500/protection-security-s7-1500/settings-for-access-levels-s7-1500/configuring-access-levels-s7-1500)
+y [Access level setting, Openness V20](https://docs.tia.siemens.cloud/r/en-us/v20/tia-portal-openness-api-for-automation-of-engineering-workflows/tia-portal-openness-api/functions-for-accessing-the-data-of-a-plc-device/functions-for-accessing-plc-service/access-level-setting).
 
