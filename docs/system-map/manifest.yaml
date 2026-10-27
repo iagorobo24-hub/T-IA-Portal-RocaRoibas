@@ -1,0 +1,24 @@
+psm:
+  psm_version: "0.3.0-alpha"
+  spec_version: "0.1.4-alpha"
+  map_version: "0.1.0"
+  map_created_at: "2026-10-27"
+  map_last_updated: "2026-10-27"
+  profile: "lite"
+  status: "draft"
+  source:
+    repository: "https://github.com/iagorobo24-hub/T-IA-Portal-RocaRoibas"
+    ref: "master"
+    commit: "9636de28a02f7edcad8f7fba8da3fa3ee9ef9ab2"
+    audit_mode: "remote"
+    worktree: "n_a"
+  canonical_docs:
+    readme_md: "README.md"
+    agents_md: "AGENTS.md"
+    claude_md: "CLAUDE.md"
+  coverage:
+    domains: "unknown"
+    flows: "unknown"
+    boundaries: "unknown"
+    invariants: "unknown"
+domains: []
