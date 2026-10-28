@@ -1127,6 +1127,17 @@ int RunLocalAcceptanceInstance(ISimulationRuntimeManager* manager, int argc, wch
     const bool useSoftbus = transport == L"softbus";
     if (!useSoftbus && transport != L"tcpip-local")
     { PrintProtocolFailure(L"validate-transport", L"Transport must be softbus or tcpip-local."); return 1; }
+    // Softbus does not select a Windows adapter; --interface belongs to tcpip-local only.
+    // Reject the contradiction before any network-mode change or instance registration so
+    // a mistyped acceptance call cannot start a CPU that was never meant to run.
+    if (useSoftbus && HasArgument(argc, argv, L"--interface"))
+    {
+        std::wcout << L"{\"status\":\"failed\",\"stage\":\"unsupported-interface-argument\",\"requested\":";
+        PrintJsonString(interfaceNeedle);
+        std::wcout << L",\"reason\":\"Softbus does not select a Windows network adapter; omit --interface or use --transport tcpip-local.\"}\n";
+        std::wcout.flush();
+        return 1;
+    }
     const ENetworkMode requestedMode = useSoftbus ? ENetworkMode::SOFTBUS : ENetworkMode::TCPIP_SINGLE_ADAPTER;
     ENetworkMode modeBefore = ENetworkMode::UNKNOWN_STATE;
     const ERuntimeErrorCode modeReadCode = manager->GetNetworkMode(&modeBefore);

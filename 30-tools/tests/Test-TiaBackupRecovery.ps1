@@ -4,6 +4,20 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+function Resolve-RecordedPath([string]$Path) {
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $null }
+    $candidate = [IO.Path]::GetFullPath($Path)
+    if (Test-Path -LiteralPath $candidate) { return $candidate }
+    # Archived evidence can retain the machine root it was produced under. Rebase only
+    # paths under this workspace's durable 70-runs tree, never arbitrary locations.
+    $normalized = $Path.Replace('/', '\')
+    $marker = '\' + (Split-Path -Leaf $WorkspaceRoot) + '\70-runs\'
+    $index = $normalized.LastIndexOf($marker, [StringComparison]::OrdinalIgnoreCase)
+    if ($index -lt 0) { return $null }
+    $rebased = Join-Path $WorkspaceRoot ('70-runs\' + $normalized.Substring($index + $marker.Length))
+    if (Test-Path -LiteralPath $rebased) { return [IO.Path]::GetFullPath($rebased) }
+    return $null
+}
 $restore = Join-Path $WorkspaceRoot '30-tools\scripts\Restore-TiaBackup.ps1'
 if (-not (Test-Path -LiteralPath $restore -PathType Leaf)) {
     throw 'Restore-TiaBackup.ps1 is missing.'
@@ -17,7 +31,8 @@ $latestReport = Get-ChildItem (Join-Path $WorkspaceRoot '70-runs\e2e') -Recurse 
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if ($null -eq $latestReport) { throw 'Run the write E2E first; no report.json is available.' }
 $report = Get-Content -Raw -LiteralPath $latestReport.FullName | ConvertFrom-Json
-$knownBackup = [string]$report.backup.path
+$knownBackup = Resolve-RecordedPath ([string]$report.backup.path)
+if (-not $knownBackup) { throw "Recorded backup path is missing or cannot be rebased from its archived root: $($report.backup.path)" }
 $knownProject = Get-ChildItem -LiteralPath $knownBackup -Filter '*.ap20' -File | Select-Object -First 1
 if ($null -eq $knownProject) { throw "No .ap20 exists in $knownBackup" }
 
