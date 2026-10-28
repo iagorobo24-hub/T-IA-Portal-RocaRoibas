@@ -104,6 +104,7 @@ Marcar todo antes del Paso 6. `[A]` = agente, `[H]` = humano.
 | 11 | Licencia OK (sin aviso) | observar TIA | sin mensaje de licencia | H |
 | 12 | El usuario autoriza la mutación sobre la copia | confirmación explícita | "sí, aplica sobre la copia" | H |
 | 13 | `AttachProjectName` exacto | `DEMO-Cinta01` | coincide con el título | A+H |
+| 14 | Preflight automatizado READY | Paso 4.5 | `status=READY`, exit 0 | A |
 
 ---
 
@@ -221,6 +222,23 @@ hashes, ruta de proyecto, SCL y top-level antes de implicar a TIA.
 4. Confirmar que no hay otra instancia de TIA abierta.
 
 No continuar hasta que 1–4 estén confirmados.
+
+### Paso 4.5 — Preflight automatizado (solo lectura)
+
+```powershell
+pwsh -NoProfile -File 30-tools/scripts/Test-TiaAttachedRoutePreflight.ps1 `
+  -ProposalPath $proposal `
+  -ProjectFile $copyProject `
+  -AttachProjectName 'DEMO-Cinta01' `
+  -BackupProjectFile (Join-Path $fixture 'pristine\DEMO-Cinta01.ap20') `
+  -OutputPath (Join-Path $fixture 'preflight.json')
+```
+
+Esperado: `"status": "READY"` y exit 0. Si devuelve `BLOCKED`, corregir el check señalado
+(`tia-process`, `tia-create-binary`, `project-file`, `backup-copy`, `proposal-*`) y repetir;
+no lanzar los Pasos 5–6. El script no abre MCP: no verifica roster ni identidad real, eso lo
+decide el runner en la sesión live. También puede ejecutarse antes de abrir TIA para validar
+copia y propuesta: entonces bloqueará solo en `tia-process`, que es lo esperado.
 
 ### Paso 5 — Gate negativo opcional (seguro, sin mutación)
 

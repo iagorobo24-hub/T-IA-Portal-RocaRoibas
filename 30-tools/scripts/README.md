@@ -250,6 +250,18 @@ con arnés mock (`Test-TiaProposalApplyAttachedRoute.ps1`); los hitos individual
 verificados en vivo por ADR-015/R28, el flujo completo aún no se ha ejecutado contra TIA real
 (véase ADR-018).
 
+Preflight de solo lectura (no abre MCP) para comprobar proceso TIA visible, binario, copia
+desechable, backup y contrato de la propuesta:
+
+```powershell
+.\Test-TiaAttachedRoutePreflight.ps1 -ProposalPath "...\proposal.json" `
+  -ProjectFile "...\Demo_Copy\Proyecto.ap20" -AttachProjectName "Proyecto" `
+  -BackupProjectFile "...\pristine\Proyecto.ap20" -OutputPath "...\preflight.json"
+```
+
+Devuelve JSON con `status` `READY`/`BLOCKED` y exit 0/1. No sustituye al runner: el roster
+y la identidad real se comprueban dentro de la sesión MCP.
+
 ## `Invoke-TiaWorkflow.ps1`
 
 Punto de entrada semántico para snapshots y aplicación controlada:
