@@ -118,6 +118,118 @@ function Assert-TiaSclDeclarationMatchesBlock {
     }
 }
 
+function Assert-TiaCreateApplyCapability {
+    param(
+        [Parameter(Mandatory = $true)] [object]$ToolListPayload,
+        [Parameter(Mandatory = $true)] [string[]]$RequiredTools
+    )
+
+    foreach ($tool in $RequiredTools) {
+        Assert-TiaSclImportCapability -ToolListPayload $ToolListPayload -RequiredTool $tool
+    }
+}
+
+function Assert-TiaCreateAttachIdentity {
+    param(
+        [Parameter(Mandatory = $true)] [string]$AttachMessage,
+        [Parameter(Mandatory = $true)] [string]$ProjectTreeText,
+        [Parameter(Mandatory = $true)] [string]$ExpectedProjectName
+    )
+
+    if ([string]::IsNullOrWhiteSpace($ExpectedProjectName)) {
+        throw 'Attach route requires an explicit expected open project name.'
+    }
+    if ($AttachMessage -notmatch [regex]::Escape("Attached to open project '$ExpectedProjectName'")) {
+        throw "AttachToOpenProject did not confirm the expected project: '$AttachMessage'."
+    }
+    $firstLine = @(($ProjectTreeText -replace "`r", "").Split("`n") | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) | Select-Object -First 1
+    if ([string]$firstLine -cne $ExpectedProjectName) {
+        throw "Project tree root '$firstLine' does not match the attached project '$ExpectedProjectName'."
+    }
+}
+
+function Assert-TiaCreateBlockWritable {
+    param(
+        [Parameter(Mandatory = $true)] [object]$BlocksPayload,
+        [Parameter(Mandatory = $true)] [string]$BlockName,
+        [Parameter(Mandatory = $true)] [string]$DeclarationKind
+    )
+
+    if (Test-TiaSclHasProperty -InputObject $BlocksPayload -Name 'meta') {
+        if (-not (Test-TiaSclHasProperty -InputObject $BlocksPayload.meta -Name 'success') -or $BlocksPayload.meta.success -ne $true) {
+            throw 'tia-create GetBlocks did not report a successful read.'
+        }
+    }
+    if (-not (Test-TiaSclHasProperty -InputObject $BlocksPayload -Name 'items') -or $null -eq $BlocksPayload.items) {
+        throw 'tia-create GetBlocks response is missing its items collection.'
+    }
+    $items = @($BlocksPayload.items)
+    $matches = @($items | Where-Object { [string]$_.name -ieq $BlockName })
+    if ($matches.Count -ne 1) { throw "Expected exactly one live block named '$BlockName'; found $($matches.Count)." }
+    $block = $matches[0]
+
+    foreach ($property in @('name', 'typeName', 'programmingLanguage', 'isFailsafe', 'isKnowHowProtected', 'isConsistent')) {
+        if (-not (Test-TiaSclHasProperty -InputObject $block -Name $property)) {
+            throw "tia-create block '$BlockName' is missing safety classification '$property'."
+        }
+    }
+    if ([string]$block.name -cne $BlockName) { throw "Live block name '$($block.name)' differs from '$BlockName'." }
+    if ($block.programmingLanguage -isnot [string] -or [string]$block.programmingLanguage -cne 'SCL') {
+        throw "Block '$BlockName' is not explicitly classified as standard SCL."
+    }
+    if ($block.isFailsafe -isnot [bool] -or $block.isFailsafe -ne $false) {
+        throw "Block '$BlockName' is F/Safety or its F classification is unknown."
+    }
+    if ($block.isKnowHowProtected -isnot [bool] -or $block.isKnowHowProtected -ne $false) {
+        throw "Block '$BlockName' is know-how protected or its protection status is unknown."
+    }
+    if ($block.isConsistent -isnot [bool] -or $block.isConsistent -ne $true) {
+        throw "Block '$BlockName' is inconsistent or its consistency status is unknown."
+    }
+
+    # typeName is a short Openness alias on tia-create (real evidence 2026-09-25:
+    # 'OB' for an ORGANIZATION_BLOCK and 'FB' for a FUNCTION_BLOCK). Only the
+    # evidenced mappings are accepted; anything else fails closed.
+    $expectedType = switch ($DeclarationKind.ToUpperInvariant()) {
+        'FUNCTION_BLOCK' { 'FB' }
+        'ORGANIZATION_BLOCK' { 'OB' }
+        default { throw "tia-create typeName mapping is not evidenced for declaration '$DeclarationKind'; block refused." }
+    }
+    if ([string]$block.typeName -cne $expectedType) {
+        throw "SCL declaration '$DeclarationKind' does not match live tia-create type '$($block.typeName)'."
+    }
+}
+
+function Assert-TiaCreateTagInventoryWritable {
+    param([Parameter(Mandatory = $true)] [object]$TagPayload)
+
+    if (-not (Test-TiaSclHasProperty -InputObject $TagPayload -Name 'meta') -or
+        -not (Test-TiaSclHasProperty -InputObject $TagPayload.meta -Name 'success') -or
+        $TagPayload.meta.success -ne $true) {
+        throw 'tia-create GetTags did not report a successful read.'
+    }
+    if (-not (Test-TiaSclHasProperty -InputObject $TagPayload.meta -Name 'complete') -or
+        $TagPayload.meta.complete -isnot [bool] -or $TagPayload.meta.complete -ne $true) {
+        throw 'tia-create GetTags did not explicitly report a complete read.'
+    }
+    if (-not (Test-TiaSclHasProperty -InputObject $TagPayload -Name 'items') -or $null -eq $TagPayload.items) {
+        throw 'tia-create GetTags response is missing its items collection.'
+    }
+    $tags = @($TagPayload.items)
+    $reportedCount = 0L
+    if (-not (Test-TiaSclHasProperty -InputObject $TagPayload.meta -Name 'count') -or
+        -not [long]::TryParse([string]$TagPayload.meta.count, [ref]$reportedCount) -or
+        $reportedCount -ne $tags.Count) {
+        throw "tia-create GetTags count mismatch: meta.count reports $([string]$TagPayload.meta.count), payload has $($tags.Count)."
+    }
+    foreach ($tag in $tags) {
+        if (-not (Test-TiaSclHasProperty -InputObject $tag -Name 'isSafety') -or $tag.isSafety -isnot [bool]) {
+            throw "Tag '$([string]$tag.name)' has no explicit Safety classification."
+        }
+        if ($tag.isSafety) { throw "PLC tag '$([string]$tag.name)' is Safety; attached-route apply is blocked." }
+    }
+}
+
 function ConvertTo-TiaComparableSource {
     param([Parameter(Mandatory = $true)] [AllowEmptyString()] [string]$Text)
     if ($Text.Length -gt 0 -and $Text[0] -eq [char]0xFEFF) { $Text = $Text.Substring(1) }

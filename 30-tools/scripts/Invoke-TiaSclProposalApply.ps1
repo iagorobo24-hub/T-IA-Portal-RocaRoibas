@@ -24,6 +24,13 @@ param(
     [string]$ReportRoot,
     [ValidateSet('read', 'write')]
     [string]$Profile = 'read',
+    [ValidateSet('isolated', 'attached')]
+    [string]$Route = 'isolated',
+    [string]$AttachProjectName,
+    # Inyección restringida a pruebas (mismo patrón que Invoke-TiaSimulationAcceptance):
+    # solo válida con -Route attached; la ruta aislada mantiene su binding exacto de fixture.
+    [string]$McpExecutablePath,
+    [string]$McpArguments,
     [switch]$Apply,
     [switch]$AcknowledgeWriteProfile,
     [switch]$Help
@@ -36,17 +43,26 @@ $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 if ($Help) {
     Write-Output @'
 Invoke-TiaSclProposalApply.ps1: valida y aplica propuestas SCL con gates de seguridad.
-Sin -Apply: preview local, sin TIA. Con -Apply: requiere -Profile write y -AcknowledgeWriteProfile;
-fixture manifest, aislado, backup, lectura, preview, tools/list, importador registrado,
-compile limpio, save, export y readback. Si no existe el importador, informa BLOCKED sin mutar.
-Nunca descarga hardware.
+Sin -Apply: preview local, sin TIA. Con -Apply: requiere -Profile write y -AcknowledgeWriteProfile.
+
+-Route isolated (por defecto): fixture manifest, aislado, backup, lectura, preview, tools/list,
+importador registrado, compile limpio, save, export y readback. Si no existe el importador,
+informa BLOCKED sin mutar. Nunca descarga hardware.
+
+-Route attached: ruta con sesión adjunta al TIA Portal ya abierto vía tia-create --profile full
+(AttachToOpenProject). Requiere -AttachProjectName, ventana TIA visible, .scl (no .s7dcl),
+bloque en el nivel raíz (groupPath vacio, lounico verificado en vivo), gates F/Safety/protección
+completos por readback y compile 0/0 antes de SaveProject. No descarga hardware ni cambia el
+modo online de la CPU: GoOffline es un paso local de sesión de ingenieria, no un download.
+No copia .ap20: la restauración es reimportar la fuente original del proposal con el mismo runner.
 '@
     exit 0
 }
 
 $ProposalPath = [IO.Path]::GetFullPath($ProposalPath)
 $ProjectFile = [IO.Path]::GetFullPath($ProjectFile)
-$mcpArguments = $null
+$mcpServerArguments = $null
+$attachedRoute = ($Route -eq 'attached')
 if (-not $ReportRoot) { $ReportRoot = Join-Path $root '70-runs\e2e\proposal-apply' }
 $ReportRoot = [IO.Path]::GetFullPath($ReportRoot)
 $null = New-Item -ItemType Directory -Path $ReportRoot -Force
@@ -92,7 +108,12 @@ function Read-CallJson([object]$Call, [string]$Context) {
 
 function Invoke-Sequence([array]$Calls, [string]$Name) {
     $sequenceScript = Join-Path $root '30-tools\scripts\Invoke-McpToolSequence.ps1'
-    $exe = Join-Path $root '30-tools\mcp\tia-inspect\bin\v20\TiaMcpServer.exe'
+    if ($attachedRoute) {
+        $exe = if ($McpExecutablePath) { [IO.Path]::GetFullPath($McpExecutablePath) } else { Join-Path $root '30-tools\mcp\tia-create\bin\v20\TiaMcpServer.exe' }
+    }
+    else {
+        $exe = Join-Path $root '30-tools\mcp\tia-inspect\bin\v20\TiaMcpServer.exe'
+    }
     $sequencePath = Join-Path $runDirectory ("sequence-$Name.json")
     if (-not (Test-Path -LiteralPath $sequenceScript -PathType Leaf)) { throw "Missing MCP sequence runner: $sequenceScript" }
     if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw "Missing tia-inspect V20 executable: $exe" }
@@ -102,8 +123,8 @@ function Invoke-Sequence([array]$Calls, [string]$Name) {
     # Windows PowerShell 5.1 elimina las comillas dobles y el MCP recibe un JSON corrupto.
     $callsPath = $sequencePath + '.calls.json'
     [IO.File]::WriteAllText($callsPath, ($Calls | ConvertTo-Json -Depth 30 -Compress), (New-Object Text.UTF8Encoding($false)))
-    if ([string]::IsNullOrWhiteSpace($mcpArguments)) { throw 'Isolated write server arguments have not been configured from a validated fixture manifest.' }
-    $output = (& $pwsh -NoProfile -NonInteractive -File $sequenceScript -ExecutablePath $exe -Arguments $mcpArguments -CallsJsonPath $callsPath -OutputPath $sequencePath -TimeoutSeconds 900 2>&1 | Out-String).Trim()
+    if ([string]::IsNullOrWhiteSpace($mcpServerArguments)) { throw 'Server arguments have not been configured from a validated fixture manifest.' }
+    $output = (& $pwsh -NoProfile -NonInteractive -File $sequenceScript -ExecutablePath $exe -Arguments $mcpServerArguments -CallsJsonPath $callsPath -OutputPath $sequencePath -TimeoutSeconds 900 2>&1 | Out-String).Trim()
     $exitCode = $LASTEXITCODE
     $sequence = if (Test-Path -LiteralPath $sequencePath -PathType Leaf) { Get-Content -Raw -LiteralPath $sequencePath | ConvertFrom-Json } else { $null }
     if (-not $sequence) { throw "$Name MCP sequence produced no report. $output" }
@@ -271,6 +292,10 @@ function Assert-TiaStagingPathContained([string]$Path, [string]$AllowedRoot, [st
 try {
     if ($Apply -and $Profile -ne 'write') { throw 'Apply requires -Profile write.' }
     if ($Apply -and -not $AcknowledgeWriteProfile) { throw 'Apply requires -AcknowledgeWriteProfile.' }
+    if (($McpExecutablePath -or $McpArguments) -and -not $attachedRoute) {
+        throw 'Executable/arguments overrides are only permitted with -Route attached (test harness injection).'
+    }
+    if ($attachedRoute) { $mcpServerArguments = if ($McpArguments) { $McpArguments } else { '--tia-major-version 20 --profile full' } }
     if (-not (Test-Path -LiteralPath $ProposalPath -PathType Leaf)) { throw "Proposal does not exist: $ProposalPath" }
     if (-not (Test-Path -LiteralPath $ProjectFile -PathType Leaf)) { throw "Project file does not exist: $ProjectFile" }
     $proposal = Get-Content -Raw -LiteralPath $ProposalPath | ConvertFrom-Json
@@ -379,6 +404,127 @@ try {
             $report.import.requiredTool = 'ImportFromDocuments'
             throw 'Apply blocked: .s7dcl import-result counts and exact object readback contract are not verified. Keep this input in local preview only.'
         }
+        if ($attachedRoute) {
+            if ([string]::IsNullOrWhiteSpace($AttachProjectName)) {
+                throw 'Attached route requires -AttachProjectName naming the exact open project.'
+            }
+            if (-not [string]::IsNullOrWhiteSpace($groupPath)) {
+                throw 'Attached route supports only top-level blocks: ImportPlcExternalSource con groupPath vacio es lo unico verificado en vivo (R28).'
+            }
+
+            # La ruta adjunta exige un TIA Portal ya abierto y visible; el runner nunca
+            # lanza, cierra ni reinicia una instancia.
+            $tiaProcesses = @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
+                $_.ProcessName -like 'Siemens.Automation.Portal*'
+            })
+            $windowPids = @($tiaProcesses | Where-Object { $_.MainWindowHandle -ne 0 } | ForEach-Object Id)
+            $report.sessionGuard.visiblePids = $windowPids
+            if ($tiaProcesses.Count -eq 0) {
+                $report.sessionGuard = [ordered]@{
+                    success = $false; status = 'no-tia-process'; visiblePids = @()
+                    message = 'La ruta adjunta exige un TIA Portal ya abierto con el proyecto; el runner no lanza ninguna instancia.'
+                }
+                throw 'Apply blocked: the attached route requires an already open TIA Portal process.'
+            }
+            if (@($windowPids).Count -eq 0) {
+                $report.sessionGuard = [ordered]@{
+                    success = $false; status = 'no-visible-tia-window'; visiblePids = @()
+                    processIds = @($tiaProcesses.Id)
+                    message = 'La ruta adjunta exige una ventana TIA visible para identificar el proyecto; ninguna instancia la expone.'
+                }
+                throw 'Apply blocked: no visible TIA Portal window to attach to.'
+            }
+            $report.sessionGuard = [ordered]@{ success = $true; status = 'open-tia-window'; visiblePids = $windowPids; processIds = @($tiaProcesses.Id) }
+
+            $report.fixture = [ordered]@{ success = $false; snapshotVerified = $false; skippedReason = 'attached-route-uses-open-project' }
+            if ($McpExecutablePath) { $report.mcp.executableOverride = [IO.Path]::GetFullPath($McpExecutablePath) }
+            $report.mcp = [ordered]@{ server = 'tia-create'; profile = 'full'; isolated = $false; writeEnabled = $true; arguments = $mcpServerArguments }
+
+            # El roster live debe registrar TODAS las herramientas del ciclo verificado;
+            # si falta una, se bloquea antes de tocar TIA.
+            $requiredTools = @('AttachToOpenProject', 'GetProjectTree', 'GetBlocks', 'GetTags', 'GoOffline',
+                'ImportPlcExternalSource', 'GenerateBlocksFromExternalSource', 'DeletePlcExternalSource',
+                'CompileSoftware', 'SaveProject')
+            $rosterSequence = Invoke-Sequence @(
+                @{ name = 'Bootstrap' },
+                @{ name = 'tools/list'; method = 'tools/list' }
+            ) 'attached-roster'
+            $report.import.capabilityChecked = $true
+            $report.import.requiredTool = ($requiredTools -join ',')
+            $rosterPayload = (Get-Call $rosterSequence 'tools/list').response
+            Assert-TiaCreateApplyCapability -ToolListPayload $rosterPayload -RequiredTools $requiredTools
+            $report.import.capabilityAvailable = $true
+
+            # Identidad del proyecto adjunto: mensaje de AttachToOpenProject y raiz
+            # del arbol, las dos evidencias en vivo del 2026-09-25.
+            $attachSequence = Invoke-Sequence @(
+                @{ name = 'Connect' },
+                @{ name = 'AttachToOpenProject'; args = @{ projectName = $AttachProjectName } },
+                @{ name = 'GetProjectTree' }
+            ) 'attach-identity'
+            $attachCall = Get-Call $attachSequence 'AttachToOpenProject'
+            $treePayload = Read-CallJson (Get-Call $attachSequence 'GetProjectTree') 'GetProjectTree'
+            Assert-TiaCreateAttachIdentity -AttachMessage ([string]$attachCall.text) -ProjectTreeText ([string]$treePayload.tree) -ExpectedProjectName $AttachProjectName
+            $report.attach = [ordered]@{ success = $true; projectName = $AttachProjectName }
+
+            $gateSequence = Invoke-Sequence @(
+                @{ name = 'Connect' },
+                @{ name = 'GetBlocks'; args = @{ softwarePath = $softwarePath } },
+                @{ name = 'GetTags'; args = @{ softwarePath = $softwarePath } }
+            ) 'attached-gates'
+            $blocksPayload = Read-CallJson (Get-Call $gateSequence 'GetBlocks') 'GetBlocks'
+            $existing = @($blocksPayload.items | Where-Object { [string]$_.name -ieq $blockName })[0]
+            Assert-TiaCreateBlockWritable -BlocksPayload $blocksPayload -BlockName $blockName -DeclarationKind $sourceDeclaration.kind
+            $tagsPayload = Read-CallJson (Get-Call $gateSequence 'GetTags') 'GetTags'
+            Assert-TiaCreateTagInventoryWritable -TagPayload $tagsPayload
+            $report.tagSafetyGate = [ordered]@{ success = $true; count = @($tagsPayload.items).Count; safetyTagCount = 0; mode = 'whole-plc-fail-closed'; source = 'tia-create' }
+
+            $externalSourceName = [IO.Path]::GetFileNameWithoutExtension($stagedDocument)
+            $report.preview = [ordered]@{
+                success = $true; kind = 'external-source'; tool = 'ImportPlcExternalSource'
+                block = $blockName; blockPath = $blockPath; groupPath = $groupPath
+                stagedSource = $stagedDocument; externalSourceName = $externalSourceName
+                response = [ordered]@{ exactBlock = $true; overwrite = $true; note = 'GenerateBlocksFromExternalSource actualiza el bloque existente, verificado en vivo (R28); el bloque lo protege el gate de nombre unico, SCL, no-F, no-protegido y consistente.' }
+                existing = [ordered]@{ name = [string]$existing.name; typeName = [string]$existing.typeName; language = [string]$existing.programmingLanguage }
+            }
+
+            $report.tiaMutation = $true
+            $report.readOnly = $false
+            $report.import = [ordered]@{ attempted = $true; success = $false; mode = 'external-source'; tool = 'ImportPlcExternalSource'; stagedDocument = $stagedDocument; externalSourceName = $externalSourceName }
+            # Ciclo verificado en vivo (ADR-015/R28): GoOffline -> fuente externa ->
+            # generacion -> limpieza de la fuente temporal -> compile -> readback -> save.
+            $mutationSequence = Invoke-Sequence @(
+                @{ name = 'Connect' },
+                @{ name = 'GoOffline'; args = @{ softwarePath = $softwarePath } },
+                @{ name = 'ImportPlcExternalSource'; args = @{ softwarePath = $softwarePath; groupPath = ''; filePath = $stagedDocument } },
+                @{ name = 'GenerateBlocksFromExternalSource'; args = @{ softwarePath = $softwarePath; externalSourceName = $externalSourceName } },
+                @{ name = 'DeletePlcExternalSource'; args = @{ softwarePath = $softwarePath; externalSourceName = $externalSourceName } },
+                @{ name = 'CompileSoftware'; args = @{ softwarePath = $softwarePath; password = '' } }
+            ) 'attached-mutation'
+            $report.import = [ordered]@{ attempted = $true; success = $true; mode = 'external-source'; tool = 'ImportPlcExternalSource'; stagedDocument = $stagedDocument; externalSourceName = $externalSourceName; response = Read-CallJson (Get-Call $mutationSequence 'GenerateBlocksFromExternalSource') 'GenerateBlocksFromExternalSource' }
+            $compilePayload = Read-CallJson (Get-Call $mutationSequence 'CompileSoftware') 'CompileSoftware'
+            $report.compile = [ordered]@{ attempted = $true; success = ($compilePayload.errorCount -eq 0 -and $compilePayload.warningCount -eq 0); state = $compilePayload.state; errorCount = [int]$compilePayload.errorCount; warningCount = [int]$compilePayload.warningCount; messages = @($compilePayload.messages) }
+            if (-not $report.compile.success) { throw "Compile gate failed: $($report.compile.errorCount) error(s), $($report.compile.warningCount) warning(s). Save was not attempted." }
+
+            $verifySequence = Invoke-Sequence @(
+                @{ name = 'Connect' },
+                @{ name = 'GetBlocks'; args = @{ softwarePath = $softwarePath } },
+                @{ name = 'SaveProject' },
+                @{ name = 'Disconnect' }
+            ) 'attached-persist'
+            $importedPayload = Read-CallJson (Get-Call $verifySequence 'GetBlocks') 'GetBlocks after import'
+            Assert-TiaCreateBlockWritable -BlocksPayload $importedPayload -BlockName $blockName -DeclarationKind $sourceDeclaration.kind
+            $report.save = [ordered]@{ attempted = $true; success = $true; response = Read-CallJson (Get-Call $verifySequence 'SaveProject') 'SaveProject' }
+            $report.export = [ordered]@{ attempted = $false; success = $false; reason = 'La ruta adjunta no incluye el export de arbol textual; ejecutar el ciclo R03 despues para exportar a src/.' }
+            $report.verification = [ordered]@{
+                success = $true; blockName = $blockName; blockPath = $blockPath
+                readback = $importedPayload
+                note = 'El readback reafirma SCL/no-F/no-protegido/consistente pero no compara el texto con la propuesta: tia-create no expone GetBlockSource. Comparar despues con el export R03.'
+            }
+            $report.applied = $true
+            $report.status = 'APPLIED_AND_VERIFIED'
+        }
+        else {
         $fixtureContext = Get-TiaFixtureContext -RootPath $FixtureRoot -ExpectedProjectFile $ProjectFile
         $FixtureRoot = $fixtureContext.root
         $report.fixture = [ordered]@{
@@ -387,10 +533,10 @@ try {
             backupProjectPath = $fixtureContext.backupProjectPath; sourceProjectPath = $fixtureContext.sourceProjectPath
             projectSnapshotSha256 = $fixtureContext.projectSnapshotSha256; backupSnapshotSha256 = $fixtureContext.backupSnapshotSha256
         }
-        $mcpArguments = "--tia-major-version 20 --isolated --fixture-root `"$FixtureRoot`" --allow-write"
+        $mcpServerArguments = "--tia-major-version 20 --isolated --fixture-root `"$FixtureRoot`" --allow-write"
         $report.mcp = [ordered]@{
             server = 'tia-inspect'; profile = 'write'; isolated = $true; writeEnabled = $true
-            fixtureRoot = $FixtureRoot; arguments = $mcpArguments
+            fixtureRoot = $FixtureRoot; arguments = $mcpServerArguments
         }
 
         $tiaProcesses = @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
@@ -570,12 +716,16 @@ try {
             ) 'cleanup'
             $report.cleanup = [ordered]@{ attempted = $true; success = $true; response = $cleanupSequence }
         }
+        }
     }
 }
 catch {
     $report.status = if (-not $report.tiaMutation) { 'BLOCKED' } else { 'FAILED' }
     $report.errors = @($report.errors + [string]$_.Exception.Message)
     if ($report.compile.attempted -and -not $report.compile.success) { $report.save = [ordered]@{ attempted = $false; success = $false; reason = 'compile-gate' } }
+    if ($attachedRoute -and $report.compile.attempted -and -not $report.compile.success) {
+        $report.postFailureInstruction = 'No guardes el proyecto abierto en TIA: cierralo sin guardar y restaura reimportando la fuente original del proposal (originalSha256) con este mismo runner.'
+    }
     throw
 }
 finally {
