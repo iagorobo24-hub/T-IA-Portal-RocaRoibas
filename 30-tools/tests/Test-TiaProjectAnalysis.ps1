@@ -88,6 +88,43 @@ END_FUNCTION_BLOCK
     if (-not (Test-Path -LiteralPath ([IO.Path]::ChangeExtension($outputPath, '.md')) -PathType Leaf)) { throw 'Analysis Markdown was not created.' }
     Write-Output 'PASS: project analysis creates a read-only dossier, source coverage and call references'
 
+    # Un inventario antiguo/plano deja path='' en bloques top-level. El analisis debe
+    # normalizarlo a path=name, deduplicar el mismo bloque presente en plcs[] y blocks[],
+    # y permitir que New-TiaSclProposal genere una propuesta aplicable.
+    $emptyPathInventoryPath = Join-Path $temp 'empty-path-inventory.json'
+    $emptyPathOutputPath = Join-Path $temp 'empty-path-analysis.json'
+    $emptyPath = Get-Content -Raw -LiteralPath $inventoryPath | ConvertFrom-Json
+    $emptyPath.plcs[0].blocks[1].path = ''
+    $emptyPath.plcs[0].blocks += [pscustomobject]@{
+        path = ''; name = 'FB_Valve'; typeName = 'FB'; programmingLanguage = 'SCL'
+        isConsistent = $true; isKnowHowProtected = $false; comment = $null
+    }
+    $emptyPath.blocks = @($emptyPath.plcs[0].blocks[1], $emptyPath.plcs[0].blocks[2])
+    $emptyPath | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $emptyPathInventoryPath -Encoding UTF8
+    & $script -InventoryPath $emptyPathInventoryPath -SourceRoot $sourceRoot -OutputPath $emptyPathOutputPath | Out-Null
+    $emptyPathReport = Get-Content -Raw -LiteralPath $emptyPathOutputPath | ConvertFrom-Json
+    $normalizedMotor = @($emptyPathReport.blocks | Where-Object name -eq 'FB_Motor')
+    $normalizedValve = @($emptyPathReport.blocks | Where-Object name -eq 'FB_Valve')
+    if ($normalizedMotor.Count -ne 1 -or $normalizedMotor[0].path -ne 'FB_Motor') {
+        throw "Empty path must normalize to the block name; got '$($normalizedMotor[0].path)'."
+    }
+    if ($normalizedValve.Count -ne 1 -or $normalizedValve[0].path -ne 'FB_Valve') {
+        throw 'A root-level duplicate with empty path must dedupe against the normalized PLC row.'
+    }
+    $normalizedMain = @($emptyPathReport.blocks | Where-Object name -eq 'Main')[0]
+    if ($normalizedMain.path -ne 'Main') { throw 'A non-empty block path must be preserved verbatim.' }
+
+    $normalizedProposal = Join-Path $temp 'normalized-proposal'
+    & (Join-Path $root '30-tools\scripts\New-TiaSclProposal.ps1') `
+        -AnalysisPath $emptyPathOutputPath -BlockName FB_Valve `
+        -FindText '#Open := #Command;' -ReplaceText '#Open := #Command; // normalized' `
+        -OutputDirectory $normalizedProposal | Out-Null
+    $normalizedProposalJson = Get-Content -Raw -LiteralPath (Join-Path $normalizedProposal 'proposal.json') | ConvertFrom-Json
+    if ($normalizedProposalJson.block.path -ne 'FB_Valve' -or $normalizedProposalJson.block.language -ne 'SCL') {
+        throw 'A normalized analysis must produce a proposal with a top-level SCL block path.'
+    }
+    Write-Output 'PASS: empty top-level paths normalize to the block name and remain proposal-ready'
+
     $blocked = Get-Content -Raw -LiteralPath $inventoryPath | ConvertFrom-Json
     $blocked.plcs[0].blocks[0].isKnowHowProtected = $true
     $blocked | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $blockedInventoryPath -Encoding UTF8

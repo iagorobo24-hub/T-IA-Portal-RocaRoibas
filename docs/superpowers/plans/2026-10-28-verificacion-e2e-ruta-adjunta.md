@@ -62,6 +62,8 @@ preview `PREVIEW` con `localValidation.success=true`, `groupPath=''` y
 > `plcs[].softwarePath` + `plcs[].blocks[]`. En el Paso 2 se construye un **dossier de fixture**
 > envolviendo esos mismos bloques bajo `PLC_1` y reescribiendo solo `projectPath` a la copia.
 > Es un artefacto de fixture, no evidencia live; los gates reales los decide el runner contra TIA.
+> El análisis (`Invoke-TiaProjectAnalysis.ps1`) normaliza `path` vacío a `path=name` en bloques
+> top-level, así que el dossier no necesita parchear bloque a bloque.
 
 ---
 
@@ -143,16 +145,8 @@ New-Item -ItemType Directory -Path (Join-Path $dossier 'src') -Force | Out-Null
 Copy-Item '40-projects\DEMO-Cinta01\src\*' (Join-Path $dossier 'src') -Recurse -Force
 
 # Fixture: envolver los bloques existentes bajo PLC_1 y apuntar projectPath a la COPIA.
-# El inventario del demo trae path='' para bloques top-level; un inventario real de
-# tia-inspect usa path=name (comprobado en 70-runs/standards/...). Se normaliza.
+# El analisis normaliza path='' (top-level) a path=name; no hay que parchear bloques.
 $inv = Get-Content '40-projects\DEMO-Cinta01\src\inventory.json' -Raw | ConvertFrom-Json
-$blocks = @($inv.blocks | ForEach-Object {
-    $b = $_
-    if ([string]::IsNullOrWhiteSpace([string]$b.path)) {
-        $b | Add-Member -NotePropertyName path -NotePropertyValue ([string]$b.name) -Force
-    }
-    $b
-})
 $fixtureInventory = [ordered]@{
     schemaVersion = 1
     readOnly      = $true
@@ -162,11 +156,11 @@ $fixtureInventory = [ordered]@{
     plcs          = @([ordered]@{
         name         = 'PLC_1'
         softwarePath = 'PLC_1'
-        blocks       = @($blocks)
+        blocks       = @($inv.blocks)
     })
-    # El analisis tambien recorre blocks[] de nivel raiz y no tolera un $null;
-    # se repiten los mismos bloques y el analisis los deduplica por path+name.
-    blocks        = @($blocks)
+    # El analisis tambien recorre blocks[] de nivel raiz; se repiten los mismos
+    # bloques y los deduplica por path+name ya normalizados.
+    blocks        = @($inv.blocks)
 }
 $fixtureInventory | ConvertTo-Json -Depth 30 | Set-Content (Join-Path $dossier 'inventory.json') -Encoding UTF8
 

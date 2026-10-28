@@ -99,6 +99,19 @@ function Get-RelativePath([string]$Path, [string]$Base) {
     return $Path
 }
 
+# tia-inspect inventories name top-level blocks with path=name; some older/flat
+# exports leave path empty. An empty path is the top-level convention, so
+# normalize it to the block name instead of emitting a proposal that the applier
+# must reject later. A non-empty path is always preserved verbatim.
+function Get-EffectiveBlockPath([object]$Block) {
+    $path = [string]$Block.path
+    $name = [string]$Block.name
+    if ([string]::IsNullOrWhiteSpace($path) -and -not [string]::IsNullOrWhiteSpace($name)) {
+        return $name
+    }
+    return $path
+}
+
 $sourceFiles = @(Get-ChildItem -LiteralPath $SourceRoot -Recurse -File |
     Where-Object { $_.Extension -in @('.s7dcl', '.scl', '.s7res', '.xml') } | Sort-Object FullName)
 $xmlCommentMetadata = @{}
@@ -150,6 +163,7 @@ foreach ($file in $sourceFiles) {
 $inventoryBlocks = [System.Collections.Generic.List[object]]::new()
 foreach ($plc in @($inventory.plcs)) {
     foreach ($block in @($plc.blocks)) {
+        if ($null -eq $block) { continue }
         $comment = $null
         $commentEvidence = 'not-collected'
         $commentEncodingStatus = 'unknown'
@@ -168,7 +182,7 @@ foreach ($plc in @($inventory.plcs)) {
         }
         $inventoryBlocks.Add([ordered]@{
             softwarePath = [string]$plc.softwarePath
-            path = [string]$block.path
+            path = Get-EffectiveBlockPath $block
             name = [string]$block.name
             typeName = [string]$block.typeName
             programmingLanguage = [string]$block.programmingLanguage
@@ -181,7 +195,9 @@ foreach ($plc in @($inventory.plcs)) {
     }
 }
 foreach ($block in @($inventory.blocks)) {
-    if (-not (@($inventoryBlocks | Where-Object { $_.path -eq [string]$block.path -and $_.name -eq [string]$block.name }).Count)) {
+    if ($null -eq $block) { continue }
+    $effectivePath = Get-EffectiveBlockPath $block
+    if (-not (@($inventoryBlocks | Where-Object { $_.path -eq $effectivePath -and $_.name -eq [string]$block.name }).Count)) {
         $comment = $null
         $commentEvidence = 'not-collected'
         $commentEncodingStatus = 'unknown'
@@ -200,7 +216,7 @@ foreach ($block in @($inventory.blocks)) {
         }
         $inventoryBlocks.Add([ordered]@{
             softwarePath = [string]$block.softwarePath
-            path = [string]$block.path
+            path = Get-EffectiveBlockPath $block
             name = [string]$block.name
             typeName = [string]$block.typeName
             programmingLanguage = [string]$block.programmingLanguage
