@@ -232,7 +232,23 @@ advertencias, guardado, exportación y lectura posterior. Las fuentes `.s7dcl` u
   -ProposalPath "...\proposal.json" `
   -ProjectFile "...\Proyecto_V20.ap20" `
   -Apply
+
+# Ruta adjunta: bloque .scl top-level sobre el TIA Portal ya abierto (tia-create full).
+# Requiere -AttachProjectName, ventana TIA visible y perfil de escritura reconocido.
+.\Invoke-TiaSclProposalApply.ps1 `
+  -ProposalPath "...\proposal.json" `
+  -ProjectFile "...\Proyecto_V20.ap20" `
+  -ReportRoot "...\70-runs\proposal-apply" `
+  -Route attached -Profile write -AcknowledgeWriteProfile -Apply `
+  -AttachProjectName "MiProyecto"
 ```
+
+En `-Route attached` el runner nunca cierra el proyecto ni el proceso TIA del usuario y no
+captura el `.ap20`: la sesión es de ingeniería (GoOffline es local, no un download), la
+restauración es reimportar la fuente original del proposal. Estado: implementada y verificada
+con arnés mock (`Test-TiaProposalApplyAttachedRoute.ps1`); los hitos individuales están
+verificados en vivo por ADR-015/R28, el flujo completo aún no se ha ejecutado contra TIA real
+(véase ADR-018).
 
 ## `Invoke-TiaWorkflow.ps1`
 

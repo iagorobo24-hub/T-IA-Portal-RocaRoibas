@@ -242,6 +242,20 @@ eludir este bloqueo con `ImportSources` o `ImportFromDocuments` directos. Cuando
 el runner registrará backup, rutas exactas, importación, compilación, guardado, exportación y lectura
 posterior; si la compilación no queda en 0 errores y 0 advertencias, no guarda.
 
+Para bloques `.scl` del nivel raíz (groupPath vacío) existe además `-Route attached`, implementada
+y verificada con arnés mock en `Test-TiaProposalApplyAttachedRoute.ps1` (el flujo completo aún no
+se ha ejecutado contra TIA real en sesión de usuario; véase ADR-018). La ruta usa el `tia-create
+--profile full` ya instalado adjuntado al TIA abierto en lugar de capturar el proyecto: exige
+`-AttachProjectName`, ventana TIA visible, identidad del proyecto confirmada por el mensaje de
+`AttachToOpenProject` y la raíz de `GetProjectTree`, roster completo en `tools/list`, gates
+F/Safety/protección/consistencia completos por readback y consulta íntegra de `GetTags`, y la
+mutación es por ActiveGateway `GoOffline → ImportPlcExternalSource → GenerateBlocksFromExternalSource
+→ DeletePlcExternalSource → CompileSoftware(0/0) → GetBlocks → SaveProject`. El orden no es
+cambiable, no descarga hardware ni cambia el modo online de la CPU, y no copia el `.ap20`: la
+restauración es reimportar la fuente original con el mismo runner. Cada segmento de esta cadena
+por separado está verificado en vivo por ADR-015/R28; la cadena completa con gates permanece
+pendiente de esa verificación end-to-end.
+
 Los pasos 8 y 9 **no son opcionales**. Un `.ap20` es binario: sin el export en `src/` nadie —
 tú incluido, dentro de tres meses — puede ver qué tocó el agente.
 
