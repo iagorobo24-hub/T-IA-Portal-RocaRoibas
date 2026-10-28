@@ -139,10 +139,26 @@ function Assert-TiaCreateAttachIdentity {
     if ([string]::IsNullOrWhiteSpace($ExpectedProjectName)) {
         throw 'Attach route requires an explicit expected open project name.'
     }
-    if ($AttachMessage -notmatch [regex]::Escape("Attached to open project '$ExpectedProjectName'")) {
+    # tia-create serializes with System.Text.Json, which escapes apostrophes as \u0027.
+    # Parse the payload when possible so the comparison is against the decoded message.
+    $attachText = $AttachMessage
+    try {
+        $attachPayload = $AttachMessage | ConvertFrom-Json
+        if ($attachPayload -and $attachPayload.PSObject.Properties['message']) {
+            $attachText = [string]$attachPayload.message
+        }
+    }
+    catch {
+        # A non-JSON message cannot confirm the project; the match below rejects it.
+    }
+    if ($attachText -notmatch [regex]::Escape("Attached to open project '$ExpectedProjectName'")) {
         throw "AttachToOpenProject did not confirm the expected project: '$AttachMessage'."
     }
-    $firstLine = @(($ProjectTreeText -replace "`r", "").Split("`n") | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) | Select-Object -First 1
+    # tia-create devuelve el arbol dentro de una valla Markdown (```); la raiz real es
+    # la primera linea que no sea valla ni este vacia.
+    $firstLine = @(($ProjectTreeText -replace "`r", "").Split("`n") |
+        ForEach-Object { $_.Trim() } |
+        Where-Object { $_ -and $_ -notmatch '^```' }) | Select-Object -First 1
     if ([string]$firstLine -cne $ExpectedProjectName) {
         throw "Project tree root '$firstLine' does not match the attached project '$ExpectedProjectName'."
     }

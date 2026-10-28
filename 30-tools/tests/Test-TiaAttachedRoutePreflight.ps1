@@ -19,10 +19,11 @@ function Invoke-Preflight {
         [string]$Project = $script:projectFile,
         [string]$Attach = 'Mock Project',
         [string]$Binary = $script:dummyBinary,
-        [string]$Backup = $script:backupFile
+        [string]$Backup = $script:backupFile,
+        [string]$Expected = ''
     )
     $raw = (& $script -ProposalPath $Proposal -ProjectFile $Project -AttachProjectName $Attach `
-        -TiaCreateExecutable $Binary -BackupProjectFile $Backup -WorkspaceRoot $root 2>&1 | Out-String)
+        -TiaCreateExecutable $Binary -BackupProjectFile $Backup -ExpectedProjectSha256 $Expected -WorkspaceRoot $root 2>&1 | Out-String)
     $code = $LASTEXITCODE
     $json = $null
     try { $json = $raw | ConvertFrom-Json } catch { throw "Preflight did not return JSON: $raw" }
@@ -76,6 +77,19 @@ END_FUNCTION_BLOCK
     }
     if ((Get-PreflightCheck $ready.json 'tia-process').details.visiblePids.Count -ne 1) { throw 'READY must record exactly one visible TIA pid.' }
     Write-Output 'PASS: preflight returns READY with a visible TIA, copy, backup and valid proposal'
+
+    # 1b. TIA mantiene el .ap20 bloqueado: el hash registrado antes de abrir permite
+    # seguir validando el backup sin dar un falso BLOCKED.
+    $projectHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $projectFile).Hash.ToLowerInvariant()
+    $lock = [IO.File]::Open($projectFile, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None)
+    try {
+        $locked = Invoke-Preflight -Expected $projectHash
+    }
+    finally { $lock.Dispose() }
+    if ($locked.code -ne 0 -or $locked.json.status -ne 'READY') { throw "Expected READY while the project is locked; got $($locked.json.status)/$($locked.code): $($locked.raw)" }
+    if ((Get-PreflightCheck $locked.json 'project-file').details.hashLocked -ne $true) { throw 'A locked project must be reported with hashLocked=true.' }
+    if ((Get-PreflightCheck $locked.json 'backup-copy').status -ne 'PASS') { throw 'The backup must validate against the expected hash while the project is locked.' }
+    Write-Output 'PASS: preflight tolerates a TIA-locked .ap20 using the hash recorded before opening'
 
     # 2. Sin proceso TIA.
     $global:mockTiaProcesses = @()

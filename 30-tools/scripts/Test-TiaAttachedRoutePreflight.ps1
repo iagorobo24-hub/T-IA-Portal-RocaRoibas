@@ -47,6 +47,9 @@ param(
     [string]$WorkspaceRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path,
     [string]$TiaCreateExecutable,
     [string]$BackupProjectFile,
+    # TIA bloquea el .ap20 mientras esta abierto; el hash de la copia debe registrarse
+    # antes de abrirlo y pasarse aqui para validar el backup pristino sin leer el lock.
+    [string]$ExpectedProjectSha256,
     [string]$OutputPath,
     [switch]$Help
 )
@@ -149,7 +152,15 @@ if (-not (Test-Path -LiteralPath $ProjectFile -PathType Leaf)) {
 }
 else {
     $projectItem = Get-Item -LiteralPath $ProjectFile
-    $projectHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $projectFile).Hash.ToLowerInvariant()
+    $hashLocked = $false
+    try {
+        $projectHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $projectFile).Hash.ToLowerInvariant()
+    }
+    catch {
+        # TIA abre el .ap20 en exclusiva; no es un fallo del preflight.
+        $hashLocked = $true
+        $projectHash = $null
+    }
     $insideOriginalRoot = $false
     foreach ($originalRootName in @('40-projects', '50-examples')) {
         $guard = [IO.Path]::GetFullPath((Join-Path $WorkspaceRoot $originalRootName)).TrimEnd('\')
@@ -158,6 +169,12 @@ else {
     if ($insideOriginalRoot) {
         Add-PreflightCheck 'project-file' 'BLOCKED' 'El .ap20 esta bajo 40-projects/50-examples: abre una copia desechable, no el original.' @{
             projectFile = $projectFile; projectSha256 = $projectHash
+        }
+    }
+    elseif ($hashLocked) {
+        Add-PreflightCheck 'project-file' 'PASS' 'Proyecto copia presente y fuera de los arboles originales; el hash no se puede leer porque TIA lo tiene abierto (usar el registrado antes de abrir).' @{
+            projectFile = $projectFile; bytes = $projectItem.Length; hashLocked = $true
+            expectedProjectSha256 = $ExpectedProjectSha256
         }
     }
     else {
@@ -174,19 +191,23 @@ if (-not $BackupProjectFile) {
 elseif (-not (Test-Path -LiteralPath $BackupProjectFile -PathType Leaf)) {
     Add-PreflightCheck 'backup-copy' 'BLOCKED' "No existe el backup indicado: $BackupProjectFile" @{}
 }
-elseif (-not $projectHash) {
-    Add-PreflightCheck 'backup-copy' 'BLOCKED' 'No se pudo calcular el hash del proyecto; no se puede validar el backup.' @{}
-}
 else {
-    $backupHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $BackupProjectFile).Hash.ToLowerInvariant()
-    if ($backupHash -ne $projectHash) {
+    $referenceHash = if ($projectHash) { $projectHash } elseif (-not [string]::IsNullOrWhiteSpace($ExpectedProjectSha256)) { $ExpectedProjectSha256.ToLowerInvariant() } else { $null }
+    if (-not $referenceHash) {
+        Add-PreflightCheck 'backup-copy' 'WARN' 'No hay hash de referencia (proyecto bloqueado por TIA y sin -ExpectedProjectSha256); backup no verificable ahora.' @{}
+        $backupHash = $null
+    }
+    else {
+        $backupHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $BackupProjectFile).Hash.ToLowerInvariant()
+    }
+    if ($referenceHash -and $backupHash -ne $referenceHash) {
         Add-PreflightCheck 'backup-copy' 'BLOCKED' 'El hash del backup no coincide con la copia de trabajo; el backup no es pristino.' @{
             backupSha256 = $backupHash; projectSha256 = $projectHash
         }
     }
-    else {
-        Add-PreflightCheck 'backup-copy' 'PASS' 'Backup pristino coincide byte a byte con la copia de trabajo.' @{
-            backupSha256 = $backupHash
+    elseif ($referenceHash) {
+        Add-PreflightCheck 'backup-copy' 'PASS' 'Backup pristino coincide con el hash de la copia de trabajo.' @{
+            backupSha256 = $backupHash; referenceSha256 = $referenceHash; reference = if ($projectHash) { 'working-copy' } else { 'expected-input' }
         }
     }
 }

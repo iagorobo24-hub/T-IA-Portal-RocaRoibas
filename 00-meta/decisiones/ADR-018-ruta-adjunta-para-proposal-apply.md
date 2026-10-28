@@ -68,6 +68,20 @@ en PASS completo como prueba de no regresión.
   sobre la copia de trabajo o fixture desechable antes de considerar el estado `verificado`.
   Procedimiento preparado y checklist: [`docs/superpowers/plans/2026-10-28-verificacion-e2e-ruta-adjunta.md`](../../docs/superpowers/plans/2026-10-28-verificacion-e2e-ruta-adjunta.md).
 
+## Bloqueo tras la ejecución E2E del 2026-10-28
+
+El E2E se ejecutó hasta `APPLIED_AND_VERIFIED` (attach, gates, orden de mutación, compile 0/0,
+save) sobre `C:\TIA-E2E\r-20261028-131155\`, pero **el paso 8 (export + diff) falló**: el fichero
+estagiado llevaba `VERSION : 0.2` (hash `d348a47b…`) y el proyecto reabierto regenera
+`VERSION : 0.1` (`HeaderVersion=0.1`). La propuesta solo cambiaba esa línea, así que su efecto
+observable en el proyecto es nulo.
+
+Por eso el estado **no** pasa a `verificado`: la verificación de la ruta adjunta reafirma solo
+metadatos (tia-create no expone `GetBlockSource`) y un cambio sin efecto declararía éxito igual.
+Falta una puerta de delta de contenido en la ruta adjunta antes de emitir `APPLIED_AND_VERIFIED`.
+Registro completo: runbook §8. Restauración completada desde `pristine/` (fingerprint idéntico);
+el original del repo está intacto.
+
 ## Nota de corrección incluida
 
 Durante la implantación se detectó que en el binding del runner existía una colisión

@@ -8,6 +8,7 @@ param()
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $script = Join-Path $root '30-tools\scripts\Invoke-TiaSclProposalApply.ps1'
+. (Join-Path $root '30-tools\scripts\TiaSclSafety.ps1')
 $temp = Join-Path ([IO.Path]::GetTempPath()) ('tia-claude-apply-attached-test-' + [guid]::NewGuid().ToString('N'))
 $projectFile = Join-Path $temp 'Target_V20.ap20'
 $mockProjectName = 'Mock Project'
@@ -246,7 +247,15 @@ END_FUNCTION_BLOCK
     # 5. Identidad del proyecto adjunto: mensaje y raiz del arbol.
     $env:TIA_ATTACH_FIXTURE_ATTACH = 'mismatch'
     try { Invoke-ApplyCase 'attach-mismatch' | Out-Null } finally { Remove-Item Env:\TIA_ATTACH_FIXTURE_ATTACH -ErrorAction SilentlyContinue }
+    # System.Text.Json (tia-create) escapa los apostrofos como \u0027; el mensaje JSON
+    # debe decodificarse antes de comparar. Un mock de PowerShell no lo reproduce.
+    $escapedIdentity = '{"message":"Attached to open project \u0027Mock Project\u0027","meta":{"success":true}}'
+    Assert-TiaCreateAttachIdentity -AttachMessage $escapedIdentity -ProjectTreeText "Mock Project`r`n+-- PLC_1" -ExpectedProjectName 'Mock Project'
+    $fence = [string]::new([char]0x60, 3)
+    $fencedTree = $fence + "text`r`nMock Project`r`n+-- PLC_1`r`n" + $fence
+    Assert-TiaCreateAttachIdentity -AttachMessage $escapedIdentity -ProjectTreeText $fencedTree -ExpectedProjectName 'Mock Project'
     Write-Output 'PASS: attached project identity is verified against the attach message and the tree root'
+    Write-Output 'PASS: identity accepts System.Text.Json-escaped apostrophes'
 
     # 6. Roster incompleto: falta DeletePlcExternalSource y se bloquea antes de mutar.
     $env:TIA_ATTACH_FIXTURE_ROSTER = 'missing-delete'

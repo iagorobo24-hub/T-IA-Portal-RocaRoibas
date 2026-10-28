@@ -1,7 +1,9 @@
 # Verificación E2E de `-Route attached` contra un TIA Portal real abierto
 
-> **Estado:** preparado, **no ejecutado**. La ruta adjunta está implementada y verificada con
-> arnés mock (ADR-018). Este documento es el procedimiento para cerrar la verificación live.
+> **Estado:** **ejecutado el 2026-10-28**. Pasos 0–7 **PASS** (informe `APPLIED_AND_VERIFIED`);
+> **paso 8 FAIL**: el cambio propuesto no quedó reflejado en el proyecto reabierto
+> (`VERSION : 0.1` en vivo, `0.2` estagiado). ADR-018 **no** pasa a `verificado`; bloqueo exacto
+> en el ADR y registro completo en §8.
 > **Fecha:** 2026-10-28 · **Ámbito:** TIA Portal V20 + `tia-create --profile full` +
 > `Invoke-TiaSclProposalApply.ps1 -Route attached`.
 > **Requiere presencia humana:** abrir/cerrar TIA, confirmar el proyecto y decidir la parada.
@@ -342,5 +344,66 @@ exacto y no cambiar el estado. No declarar aceptación humana: eso lo firma el u
 - Intervención humana: abrir copia (~2 min), confirmar checklist (~3 min), cerrar copia (~1 min).
 - Aplicación: 1–3 min de runner (10 llamadas MCP serializadas).
 - Export/diff/restauración: ~10–15 min según R03.
+
+---
+
+## 8. Registro de ejecución — 2026-10-28
+
+**Fixture:** `C:\TIA-E2E\r-20261028-131155\` (raíz corta).
+
+> **Hallazgo operativo (raíz del path largo):** el primer intento situó la copia bajo el árbol
+> largo del repositorio y **TIA no abrió el proyecto por ruta demasiado larga**. Se recreó la
+> fixture en `C:\TIA-E2E\...` (56 caracteres) y la copia abrió a la primera. Mantener las
+> copias desechables fuera del árbol profundo del repo.
+
+| Paso | Resultado | Evidencia |
+|---|---|---|
+| 0 — base congelada | PASS | `git status` conocido; checks previos en verde |
+| 1–3 — copia, análisis, propuesta, preview | PASS | `fixture.json`, `dossier/`, `previewStatus=PREVIEW` |
+| 4 — copia abierta en TIA | PASS (humano/agent) | título `C:\TIA-E2E\...\Demo_Copy\DEMO-Cinta01` |
+| 4.5 — preflight | PASS `READY` | `preflight-before-open.json` (tras abrir TIA: `-ExpectedProjectSha256` porque TIA bloquea el `.ap20`, `Get-FileHash` no lo lee abierto) |
+| 5 — gate negativo | **no ejecutado** | pendiente |
+| 6 — aplicación real | PASS | `apply-reports/20261028-131815-078-3844f967…/apply-report.json` |
+| 7 — informe | PASS | `status=APPLIED_AND_VERIFIED`, `applied=true`, `tiaMutation=true`, attach `DEMO-Cinta01`, roster 10/10, tags 10 sin Safety, import `Blocks generated from external source 'FB_Motor'`, compile **0/0**, `save.success=true` |
+| 8 — export R03 + diff | **FAIL** | ver abajo |
+| 9 — restauración | PASS | `Demo_Copy` rehecha desde `pristine/`: fingerprint `0b30cd0d…` idéntico, `.ap20` = `bf3332f4…` = original del repo (intacto) |
+| 10 — evidencia | PASS | este documento + ADR-018 (bloqueo, sin cambiar estado) |
+
+### Paso 8 — el fallo exacto
+
+La ruta adjunta no exporta (`export.attempted=false`), y `tia-inspect.OpenProject` está
+restringido al fixture aislado (manifiesto `.tia-agent-fixture.json` con snapshots idénticos,
+imposible tras mutar la copia), así que el export se hizo **en modo attach** con la copia abierta:
+`Connect → GenerateSources(PLC_1) → Disconnect`.
+
+- Fichero estagiado para el import (hash del informe `d348a47b…`): **`VERSION : 0.2`** ✅
+- Fuente regenerada desde el proyecto **reabierto**: **`VERSION : 0.1`** ❌
+- Atributo live `HeaderVersion` = **`0.1`** ❌ (tras cierre y reapertura: estado en disco).
+- El import **sí tocó el bloque** (`InterfaceModifiedDate`/`CodeModifiedDate` 12:18:4x), así que
+  el fallo es específico: **la cabecera `VERSION` de la fuente estagiada no se aplicó**.
+- La propuesta solo cambiaba esa línea (`0.1 → 0.2`), de modo que el efecto observable de la
+  propuesta en el proyecto es **nulo**.
+
+`ExportPlcAsSourceTree` no sirve para comprobarlo: omite los FB/OB SCL (limitación ya
+registrada; solo exportó `iDB_M01.s7dcl` + tablas XML). `GenerateSources` sí los emite.
+
+### Lectura honesta
+
+El informe `APPLIED_AND_VERIFIED` es veraz sobre la **mecánica** (attach, gates, orden de
+mutación, compile 0/0, guardado), pero **no prueba que el cambio propuesto haya quedado**: la
+verificación de la ruta adjunta solo reafirma metadatos (SCL/no-F/no-protegido/consistente) porque
+`tia-create` no expone `GetBlockSource` — el propio informe lo advierte y remite a este paso 8.
+Resultado: un cambio sin efecto declararía igualmente éxito. **ADR-018 sigue `pendiente
+verificación end-to-end`**; el bloqueo está escrito en el ADR.
+
+**Para desbloquear (orden propuesto):** (1) añadir al runner una **puerta de delta de contenido**
+en ruta adjunta — readback con `tia-inspect` en attach (`GenerateSources`/`GetBlockSource`,
+comparación normalizada contra la propuesta) antes de emitir `APPLIED_AND_VERIFIED`;
+(2) investigar/documentar si Openness V20 ignora las cabeceras SCL (`VERSION`/`AUTHOR`/`FAMILY`)
+en `GenerateBlocksFromExternalSource` y, si es así, vetar propuestas cuyo único cambio sea la
+cabecera; (3) reejecutar este runbook completo.
+
+**Estado final de la sesión:** TIA cerrada por el agente (su propia instancia, 0 procesos
+`Siemens.Automation.Portal`), copia restaurada, original del repositorio intacto.
 
 Paradas obligatorias: Pasos 4, 6 (autorización), 8 (cierre) y 9 (decisión de restauración).
