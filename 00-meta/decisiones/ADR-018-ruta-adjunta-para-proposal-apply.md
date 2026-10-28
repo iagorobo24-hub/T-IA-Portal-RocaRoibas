@@ -66,6 +66,7 @@ en PASS completo como prueba de no regresión.
 - **No verificado todavía:** `-Route attached` contra un proyecto de usuario abierto con la
   ventana visible. Debe pasar con el permiso del usuario y lectura previa; hay que ejecutarlo
   sobre la copia de trabajo o fixture desechable antes de considerar el estado `verificado`.
+  Procedimiento preparado y checklist: [`docs/superpowers/plans/2026-10-28-verificacion-e2e-ruta-adjunta.md`](../../docs/superpowers/plans/2026-10-28-verificacion-e2e-ruta-adjunta.md).
 
 ## Nota de corrección incluida
 
