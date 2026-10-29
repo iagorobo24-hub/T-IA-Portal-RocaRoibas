@@ -28,7 +28,7 @@
 | **Bloques anidados** | PV | PV | PV | PD | Ruta adjunta los rechaza (`groupPath` no verificado); ruta aislada solo los estagia |
 | **UDT / PLC data types** | PV | PV | PV | PD | `ImportType`/`BuildPlcUdtXml` existen; falta proyecto con UDTs y verificación |
 | **Tags - solo lectura + gates** | PV | PV | PV | SO | `GetTags`/`ExportPlcTagTable` + veto Safety global |
-| **Tags - escritura/edición** | PV | PV | PV | PD | Herramientas auditadas (`ImportPlcTagTable`, `CreateTag`, `UpdateTag`); sin runner |
+| **Tags - escritura/edición** | PV | PV | PV | PA | Runner `Invoke-TiaTagProposalApply.ps1` + 69 aserciones de arnés; E2E live pendiente (ADR-019) |
 | **Librerías globales/proyecto** | PV | PV | PV | PD | Sin proyecto de prueba con librerías |
 | **Multi-instancia / referencias cruzadas** | PV | PV | PV | PD | Solo lectura prevista; sin fixture |
 | **HMI Unified** | PV | PV | PV | PA | PLC verificado; HMI exige runtime de la misma versión (ADR-017) |

@@ -1,6 +1,6 @@
-# ADR-019 — Contrato para escritura de tags PLC (diseño, sin implementar)
+# ADR-019 — Contrato para escritura de tags PLC
 
-> Estado: **diseño aprobado; implementación pendiente** · Fecha: 2026-10-29 · Ámbito: TIA Portal V20, Openness, `tia-inspect --isolated --allow-write` y `tia-create`
+> Estado: **implementado y verificado con arnés mock; E2E live pendiente** · Fecha: 2026-10-29 · Ámbito: TIA Portal V20, Openness, `tia-inspect --isolated --allow-write` y `tia-create`
 
 ## Contexto
 
@@ -105,6 +105,38 @@ previa no se escribe.
 - El E2E real exige un fixture desechable con al menos una tabla de tags no default y TIA abierto
   en modo aislado; no se puede hacer en una sesión sin TIA.
 - Si `GetTagInfo` no existe en un build futuro, la ruta queda `BLOCKED` por diseño, no degradada.
+
+## Implementación (2026-10-29)
+
+- Runner: `30-tools/scripts/Invoke-TiaTagProposalApply.ps1`.
+- Gates reutilizables: `Assert-TiaTagApplyCapability`, `Assert-TiaTagTableInventoryReadable`,
+  `Assert-TiaTagTableInfoMatches` y `Assert-TiaTagMatchesExpected` en `TiaSclSafety.ps1`.
+- Arnés: `30-tools/tests/Test-TiaTagProposalApply.ps1` (**69 aserciones PASS**, sin TIA).
+- Estados añadidos al contrato original: `APPLIED_EXPORT_FAILED` (guardado sin export) y
+  `APPLIED_VERIFICATION_FAILED` (guardado, pero el readback post-guardado no coincide).
+- El runner exige además un **readback post-guardado** en un proceso nuevo que reabre el `.ap20`
+  y comprueba que el directorio del proyecto cambió respecto al snapshot del manifiesto. Esto
+  prueba persistencia, no solo el estado en memoria.
+- `update` sin ningún campo distinto de `before` se bloquea en validación local (no-op).
+
+### Enmienda a la puerta de tabla exacta (gate 4)
+
+La evidencia del 2026-09-23 (`70-runs/e2e/mcp-tagtable-lifecycle-20260923-1600.json`) muestra que
+`GetTagTables` devolvió `items=[]`, `totalTagTables=0` en una sesión en la que `GetTags` ya leía dos
+tags de la tabla `Agent_Signals` y `GetSoftwareTree` listaba esa tabla. La enumeración no es una
+prueba fiable de existencia en ese build.
+
+Por eso la implementación mantiene el gate 4 pero lo hace con dos comprobaciones:
+
+1. `GetTagTables` debe responder `meta.success=true` y `meta.totalTagTables` coherente con `items`
+   (fail-closed si el inventario de tablas es incoherente).
+2. La existencia y la ruta exacta de la tabla se prueban con `GetTagTableInfo`, que hace una
+   búsqueda directa por `tagTablePath` y devuelve `path`, `name` e `isDefault`.
+
+Si `GetTagTables` no enumera la tabla pero `GetTagTableInfo` la confirma, el informe registra
+`table.listedInGetTagTables=false` y una nota; no se bloquea. No es una relajación de seguridad:
+la mutación sigue apuntando a una ruta exacta que Openness confirma, y una tabla inexistente
+bloquea en `GetTagTableInfo`. El E2E de FASE 4.3 debe confirmar si la enumeración sigue vacía.
 
 ## Lo que no se ha verificado
 

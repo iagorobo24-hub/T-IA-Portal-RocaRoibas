@@ -23,7 +23,10 @@ Un PASS de mock **nunca** se cuenta como Soportado.
   `-Route attached`. Toda la cadena está implementada y el arnés cubre 13 casos, pero el E2E con
   la puerta de readback sigue pendiente en TIA real.
 - **No soportado hoy:** bloques anidados en la ruta adjunta, `DATA_BLOCK` por generación externa,
-  UDT por el flujo SCL, escritura de tags (solo auditoría de herramientas).
+  UDT por el flujo SCL.
+- **Parcial (nuevo):** escritura de tags mediante `Invoke-TiaTagProposalApply.ps1`. El runner y
+  69 aserciones de arnés cubren create/update/delete, Safety, tabla/tag exactos, backup, readback,
+  compile, save, export y verificación post-guardado; falta el E2E live.
 - **Excluido por diseño:** descarga a hardware físico, cambios online, edición de F-blocks,
   bloques con know-how protection.
 
@@ -48,7 +51,7 @@ Un PASS de mock **nunca** se cuenta como Soportado.
 | Bloques anidados (ruta aislada) | **Parcial** | `Test-TiaSclProposalApply.ps1` (staging anidado) | El staging soporta grupos; la mutación sigue bloqueada por roster |
 | UDT / PLC data types | **No soportado** | `20260924-find-db-udt-import-tools-expanded.json` | Herramientas existen (`ImportType`, `BuildPlcUdtXml`) pero no se ha verificado con un proyecto con UDTs |
 | Tags: lectura + clasificación Safety | **Soportado** | `GetTags`/`ExportPlcTagTable`; ADR-013 | El veto es global y conservador |
-| Tags: escritura | **No soportado** | Roster auditado (FASE 4.1) | `ImportPlcTagTable`, `CreateTag`, `UpdateTag` existen; no hay runner ni E2E |
+| Tags: escritura | **Parcial** | `Invoke-TiaTagProposalApply.ps1`; `Test-TiaTagProposalApply.ps1` (69 aserciones PASS); ADR-019 | Ruta aislada, mutación única y readback post-guardado; E2E live pendiente |
 | Librerías globales/proyecto | **No soportado** | FASE 5.1 | DEMO-Cinta01 no tiene librerías; no se ha probado resolución |
 | Multi-instancia / referencias cruzadas | **No soportado** | FASE 5.2 | Solo lectura prevista; sin proyecto de prueba |
 | F-blocks / Safety | **Excluido por diseño** | `Assert-TiaSclBlockWritable`, `Assert-TiaCreateBlockWritable` | Se bloquean, no se editan |
@@ -71,6 +74,10 @@ Un PASS de mock **nunca** se cuenta como Soportado.
 7. **Readback de contenido:** texto vivo comparado con la propuesta antes de `SaveProject`; si
    difiere, `APPLIED_CONTENT_MISMATCH` y no se guarda.
 8. **Veto de cabeceras:** un delta solo-`VERSION` se rechaza antes de abrir MCP.
+9. **Tags (ADR-019):** manifiesto de fixture válido, `GetTags` completo sin Safety, tabla exacta
+   por `GetTagTableInfo`, tag exacto por `GetTagInfo` (o ausencia probada en `create`), backup
+   `ExportTagTable`, **una sola** mutación, readback con `assertJson`, compile 0/0, save, export y
+   reapertura del `.ap20` para verificar persistencia. Nunca `ImportPlcTagTable` para un tag.
 
 ## Lo que falta para subir de clase
 
@@ -78,7 +85,7 @@ Un PASS de mock **nunca** se cuenta como Soportado.
 |---|---|---|---|
 | FB/FC/OB Parcial | Soportado | E2E con readback sobre copia desechable y TIA visible | TIA cerrado en esta sesión |
 | Anidados No soportado | Parcial/Soportado | Verificar `ImportPlcExternalSource` con `groupPath` y readback por ruta anidada | Requiere evidencia live |
-| Tags No soportado | Parcial | Runner de propuesta de tags con gates + E2E de una tabla | Requiere diseño y copia |
+| Tags Parcial | Soportado | E2E live de una tabla sobre copia desechable con TIA abierto | Requiere fixture y TIA |
 | UDT No soportado | Parcial | Proyecto con UDT + `ImportType` + readback | Requiere fixture con UDTs |
 | Librerías No soportado | Parcial | Proyecto con librería + `GetCrossReferences` | Requiere fixture |
 

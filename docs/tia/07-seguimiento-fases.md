@@ -24,7 +24,7 @@ posible. El trabajo hecho es de arnés, gates y documentación.
 - [ ] **FASE 1** - Ampliar tipos de bloque (FC/OB/DB) — implementación y arnés DONE; E2E FC/OB PENDIENTE
 - [ ] **FASE 2** - Bloques anidados — política endurecida y probada; E2E anidado PENDIENTE
 - [ ] **FASE 3** - UDT / PLC data types — viabilidad evaluada por roster; sin proyecto con UDTs
-- [ ] **FASE 4** - Tags escritura — herramientas auditadas; runner de escritura PENDIENTE
+- [ ] **FASE 4** - Tags escritura — runner implementado y verificado en arnés; E2E live PENDIENTE
 - [ ] **FASE 5** - Librerías / multi-instancia / robustez — parcial
 - [ ] **FASE 6** - Cobertura por versión y cierre — arnés ampliado e informe final hechos
 
@@ -85,7 +85,7 @@ aislada, que sí transporta `groupPath`, pero sigue bloqueada por el roster de i
 | ID | Tarea | Estado | Evidencia |
 |---|---|---|---|
 | 4.1 | Auditar herramientas de tags | **DONE** | `tia-create` lite (55 tools): `GetPlcTagTables`, `ImportPlcTagTable(softwarePath, folderPath, importPath)`. `tia-inspect` write (84 tools): `CreateTag`, `UpdateTag`, `DeleteTag`, `CreateTagTable`, `RenameTagTable`, `DeleteTagTable`, `ExportTagTable`, `GetTagInfo`. Evidencia: `70-runs/acceptance/plcsim-tia-attach-capability-20260924.json`, `70-runs/acceptance/plcsim-inspect-write-tools-20260925.json` |
-| 4.2 | Implementar propuesta de tags mínima | **IN_PROGRESS** | Contrato cerrado en `00-meta/decisiones/ADR-019-escritura-tags-plc.md`: propuesta JSON, ruta aislada, `UpdateTag`/`CreateTag`/`DeleteTag` granulares, backup por `ExportTagTable`, readback por `GetTagInfo`, compile 0/0 y save. Código pendiente |
+| 4.2 | Implementar propuesta de tags mínima | **DONE (arnés)** | `30-tools/scripts/Invoke-TiaTagProposalApply.ps1` + gates en `TiaSclSafety.ps1` según ADR-019. Arnés `Test-TiaTagProposalApply.ps1`: **69 aserciones PASS** sin TIA (create/update/delete, Safety, inventario incoherente, tabla/tag exactos, readback, compile, save, export, verificación post-guardado y fixture manipulado). Registrado en `Run-WorkspaceChecks.ps1` y `-CiSafe`. E2E live pendiente |
 | 4.3 | E2E tags mínima | **PENDIENTE** | Requiere copia desechable y TIA abierto |
 
 ## FASE 5: Librerías / multi-instancia / robustez

@@ -271,6 +271,98 @@ function Assert-TiaCreateTagInventoryWritable {
     }
 }
 
+function Assert-TiaTagApplyCapability {
+    param(
+        [Parameter(Mandatory = $true)] [object]$ToolListPayload,
+        [Parameter(Mandatory = $true)] [string[]]$RequiredTools
+    )
+
+    if (-not (Test-TiaSclHasProperty -InputObject $ToolListPayload -Name 'tools') -or $null -eq $ToolListPayload.tools) {
+        throw 'The active MCP profile did not return a tools collection; tag write capability is unknown.'
+    }
+    $available = @($ToolListPayload.tools | ForEach-Object { [string]$_.name })
+    $missing = @($RequiredTools | Where-Object { $available -notcontains $_ })
+    if ($missing.Count -gt 0) {
+        throw "Tag apply is blocked: the active MCP profile does not register required tool(s): $($missing -join ', ')."
+    }
+}
+
+function Assert-TiaTagTableInventoryReadable {
+    param([Parameter(Mandatory = $true)] [object]$TablePayload)
+
+    if (-not (Test-TiaSclHasProperty -InputObject $TablePayload -Name 'meta') -or
+        -not (Test-TiaSclHasProperty -InputObject $TablePayload.meta -Name 'success') -or
+        $TablePayload.meta.success -ne $true) {
+        throw 'Live PLC tag table inventory did not report a successful read.'
+    }
+    if (-not (Test-TiaSclHasProperty -InputObject $TablePayload -Name 'items') -or $null -eq $TablePayload.items) {
+        throw 'Live PLC tag table inventory is missing its items collection.'
+    }
+    if (-not (Test-TiaSclHasProperty -InputObject $TablePayload.meta -Name 'totalTagTables')) {
+        throw 'Live PLC tag table inventory is missing totalTagTables.'
+    }
+    $reportedTableCount = 0L
+    if (-not [long]::TryParse([string]$TablePayload.meta.totalTagTables, [ref]$reportedTableCount) -or $reportedTableCount -lt 0) {
+        throw 'Live PLC tag table inventory has an invalid totalTagTables count.'
+    }
+    $tables = @($TablePayload.items)
+    if ($tables.Count -ne $reportedTableCount) {
+        throw "Live PLC tag table inventory is incomplete: payload has $($tables.Count), meta.totalTagTables reports $reportedTableCount."
+    }
+}
+
+function Assert-TiaTagTableInfoMatches {
+    param(
+        [Parameter(Mandatory = $true)] [object]$TableInfo,
+        [Parameter(Mandatory = $true)] [string]$ExpectedPath
+    )
+
+    foreach ($property in @('path', 'name', 'isDefault')) {
+        if (-not (Test-TiaSclHasProperty -InputObject $TableInfo -Name $property)) {
+            throw "Tag table info is incomplete: missing '$property'."
+        }
+    }
+    if ([string]$TableInfo.path -cne $ExpectedPath) {
+        throw "Live tag table path '$($TableInfo.path)' differs from '$ExpectedPath'."
+    }
+    $leaf = $ExpectedPath.Substring($ExpectedPath.LastIndexOf('/') + 1)
+    if ([string]$TableInfo.name -cne $leaf) {
+        throw "Live tag table name '$($TableInfo.name)' differs from '$leaf'."
+    }
+    if ($TableInfo.isDefault -isnot [bool]) {
+        throw 'Tag table info has no explicit isDefault classification.'
+    }
+}
+
+function Assert-TiaTagMatchesExpected {
+    param(
+        [Parameter(Mandatory = $true)] [object]$Tag,
+        [Parameter(Mandatory = $true)] [object]$Expected,
+        [Parameter(Mandatory = $true)] [string]$Context
+    )
+
+    $properties = @($Expected.PSObject.Properties)
+    if ($properties.Count -eq 0) { throw "$Context has no expected properties." }
+    foreach ($property in $properties) {
+        $name = [string]$property.Name
+        $expectedValue = $property.Value
+        if ($null -eq $expectedValue) { continue }
+        if (-not (Test-TiaSclHasProperty -InputObject $Tag -Name $name)) {
+            throw "$Context is missing '$name'."
+        }
+        $actualValue = $Tag.$name
+        if ($actualValue -is [bool] -or $expectedValue -is [bool]) {
+            if ([bool]$actualValue -ne [bool]$expectedValue) {
+                throw "$Context field '$name' is '$actualValue', expected '$expectedValue'."
+            }
+            continue
+        }
+        if ([string]$actualValue -ine [string]$expectedValue) {
+            throw "$Context field '$name' is '$actualValue', expected '$expectedValue'."
+        }
+    }
+}
+
 function Get-TiaSourceLineDelta {
     param(
         [Parameter(Mandatory = $true)] [AllowEmptyString()] [string]$OriginalText,

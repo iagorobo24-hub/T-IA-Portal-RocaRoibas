@@ -18,7 +18,7 @@ $ciSafeCheckNames = @(
     'semantic-workflow', 'check-tia-standards', 'eval-freshness', 'tia-block-metadata',
     'agent-demo-scaffold-source', 'fixture-manifest', 'scl-safety-gate', 'block-type-coverage', 'example-secrets',
     'simulation-acceptance-runner', 'simulation-acceptance-safety', 'scl-proposal-apply-attached',
-    'attached-route-preflight'
+    'attached-route-preflight', 'tag-proposal-apply'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -65,6 +65,7 @@ $definitions = @(
     @{ name = 'scl-proposal'; path = '30-tools/tests/Test-TiaSclProposal.ps1' },
     @{ name = 'scl-proposal-apply'; path = '30-tools/tests/Test-TiaSclProposalApply.ps1' },
     @{ name = 'scl-proposal-apply-attached'; path = '30-tools/tests/Test-TiaProposalApplyAttachedRoute.ps1' },
+    @{ name = 'tag-proposal-apply'; path = '30-tools/tests/Test-TiaTagProposalApply.ps1' },
     @{ name = 'attached-route-preflight'; path = '30-tools/tests/Test-TiaAttachedRoutePreflight.ps1' },
     @{ name = 'io-list'; path = '30-tools/tests/Test-TiaIoList.ps1' },
     @{ name = 'functional-description'; path = '30-tools/tests/Test-TiaFunctionalDescription.ps1' },
