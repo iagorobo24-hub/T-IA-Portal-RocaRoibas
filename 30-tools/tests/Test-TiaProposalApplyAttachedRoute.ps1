@@ -440,6 +440,9 @@ END_FUNCTION_BLOCK
         -not $mismatchReport.postFailureInstruction) {
         throw "A readback mismatch must be APPLIED_CONTENT_MISMATCH, mutated, with SaveProject blocked by the content gate; got status=$($mismatchReport.status) save=(attempted=$($mismatchReport.save.attempted), reason=$($mismatchReport.save.reason))."
     }
+    if ($mismatchReport.readback.liveText -notmatch 'Changed') {
+        throw 'A readback mismatch must capture the live block text as evidence.'
+    }
     Write-Output 'PASS: content mismatch blocks SaveProject and reports APPLIED_CONTENT_MISMATCH'
 
     # 12. Readback degradado (fallo de infraestructura): no se guarda y el estado es explicito.

@@ -92,7 +92,10 @@ niveles independientes:
    V20 el 2026-10-28), el runner bloquea `BLOCKED` sin mutar.
    `TiaSclSafety.ps1`: `Get-TiaSourceLineDelta` (delta simétrico con conteo por línea)
    + `Assert-TiaProposalNotHeaderOnly` (solo `VERSION`; el resto no se veta por falta de
-   evidencia). El resumen del delta queda en el informe (`proposalClaims.sourceDelta`).
+   evidencia).   El resumen del delta queda en el informe (`proposalClaims.sourceDelta`). También el
+   readback guarda el texto vivo completo en `readback.liveText`, incluso en un
+   `APPLIED_CONTENT_MISMATCH`: es la evidencia de qué regenera Openness y qué ignoró
+   (base de las sondas de persistencia de cabeceras, 2026-10-29).
 2. **Readback adjuntado (antes de `SaveProject`):** tras la mutación y la compilación 0/0, el
    runner abre una sesión de SOLO LECTURA con `tia-inspect` adjuntado a la MISMA instancia
    visible (`Connect → GetState → GetBlockSource`, orden exigido), verifica identidad por
@@ -125,3 +128,16 @@ inconsistente entre el parámetro `McpArguments` y el interno `mcpArguments` (lo
 variable de PowerShell no distinguen mayúsculas): el valor inyectado se descartaba y el runner
 usaba argumentos por defecto. Se renombró la interna a `mcpServerArguments`; sin ello la prueba
 del caso roster no podía pasar.
+
+## Sondas de persistencia de cabeceras en TIA real (2026-10-29)
+
+Ejecutadas con `Investigate-TiaSclHeaderPersistence.ps1` sobre copia desechable `C:\TIA-E2E\r-20261028-131155\Demo_Copy\DEMO-Cinta01.ap20` con TIA V20 abierto y visible, autorizadas por el usuario.
+
+| Atributo | Delta | Estado | `liveText` contiene valor propuesto | `SaveProject` | Observación |
+|---|---|---|---|---|---|
+| `VERSION` | `0.1 → 0.99` | `BLOCKED` | - | No | Veto local ya existente. |
+| `AUTHOR` | `JMellid → E2EProbe` | `APPLIED_CONTENT_MISMATCH` | False | No | Openness ignora `AUTHOR`. Gate bloquea guardado. |
+| `FAMILY` | `Drives → E2EProbe` | `APPLIED_CONTENT_MISMATCH` | False | No | Openness ignora `FAMILY`. Gate bloquea guardado. |
+| `TITLE` | Añadido (`TITLE : E2EProbe`) | `APPLIED_CONTENT_MISMATCH` | False | No | Openness ignora `TITLE`. Gate bloquea guardado. |
+
+**Conclusión:** `GenerateBlocksFromExternalSource` en Openness V20 ignora los atributos de cabecera `VERSION`, `AUTHOR`, `FAMILY` y `TITLE`. El mecanismo fail-closed (readback vivo + bloqueo de `SaveProject` ante `APPLIED_CONTENT_MISMATCH`) funciona correctamente. El veto local debe ampliarse conceptualmente a "atributos de cabecera ignorados" (actualmente solo `VERSION` por evidencia previa; las sondas confirman el patrón). La copia fue restaurada byte a byte desde `pristine/` tras las sondas. Evidencia JSON: `C:\TIA-E2E\r-20261028-131155\header-probe-evidence-20261029-101222.json`.

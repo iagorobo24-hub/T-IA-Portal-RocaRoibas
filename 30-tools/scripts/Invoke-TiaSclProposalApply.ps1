@@ -555,6 +555,9 @@ try {
                     throw 'Post-mutation block source is truncated, empty, or lacks an explicit complete-read result.'
                 }
                 if ([string]$postSaveSource.path -cne $blockPath) { throw "Post-mutation source path '$($postSaveSource.path)' differs from '$blockPath'." }
+                # Evidencia permanente: el texto vivo generado por Openness queda en el informe,
+                # sobre todo si el mimo rechaza cambiaciones de cabecera (APPLIED_CONTENT_MISMATCH).
+                $report.readback.liveText = [string]$postSaveSource.text
                 if (-not [string]::Equals(
                     (ConvertTo-TiaComparableSource ([string]$postSaveSource.text)),
                     (ConvertTo-TiaComparableSource ([string]$proposedText)),
