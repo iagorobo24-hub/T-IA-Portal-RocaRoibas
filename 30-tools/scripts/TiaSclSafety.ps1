@@ -168,7 +168,8 @@ function Assert-TiaCreateBlockWritable {
     param(
         [Parameter(Mandatory = $true)] [object]$BlocksPayload,
         [Parameter(Mandatory = $true)] [string]$BlockName,
-        [Parameter(Mandatory = $true)] [string]$DeclarationKind
+        [Parameter(Mandatory = $true)] [string]$DeclarationKind,
+        [string]$BlockPath = ''
     )
 
     if (Test-TiaSclHasProperty -InputObject $BlocksPayload -Name 'meta') {
@@ -190,6 +191,14 @@ function Assert-TiaCreateBlockWritable {
         }
     }
     if ([string]$block.name -cne $BlockName) { throw "Live block name '$($block.name)' differs from '$BlockName'." }
+    # Hardening FASE 6.3: si el payload live expone 'path', debe coincidir con la ruta de la
+    # propuesta. No se exige la propiedad (algunos perfiles no la devuelven), pero si viene y
+    # discrepa, el bloque no es el objetivo. Con nombres duplicados el conteo ya bloquea.
+    if (-not [string]::IsNullOrWhiteSpace($BlockPath) -and
+        (Test-TiaSclHasProperty -InputObject $block -Name 'path') -and
+        [string]$block.path -cne $BlockPath) {
+        throw "Live block path '$($block.path)' differs from proposal path '$BlockPath'."
+    }
     if ($block.programmingLanguage -isnot [string] -or [string]$block.programmingLanguage -cne 'SCL') {
         throw "Block '$BlockName' is not explicitly classified as standard SCL."
     }
@@ -214,6 +223,21 @@ function Assert-TiaCreateBlockWritable {
     }
     if ([string]$block.typeName -cne $expectedType) {
         throw "SCL declaration '$DeclarationKind' does not match live tia-create type '$($block.typeName)'."
+    }
+}
+
+function Assert-TiaAttachedRouteTopLevelBlock {
+    param(
+        [Parameter(Mandatory = $true)] [AllowEmptyString()] [string]$GroupPath,
+        [Parameter(Mandatory = $true)] [string]$BlockPath
+    )
+
+    # ADR-015/R28: la unica mutacion de bloque verificada en vivo sobre la ruta adjunta
+    # usa ImportPlcExternalSource con groupPath vacio. Un bloque anidado exige pasar su
+    # grupo a esa herramienta, y ese camino no esta verificado. Se bloquea aqui, en una
+    # unica funcion, para que el mensaje y la politica no diverjan entre llamadas.
+    if (-not [string]::IsNullOrWhiteSpace($GroupPath)) {
+        throw "Attached route supports only top-level blocks: block path '$BlockPath' resolves to groupPath '$GroupPath'. ImportPlcExternalSource with a non-empty groupPath is not verified live (R28), so no TIA mutation was attempted. Apply the block at the PLC root, or use the isolated fixture route once its import contract is verified."
     }
 }
 

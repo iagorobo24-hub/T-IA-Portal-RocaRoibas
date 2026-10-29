@@ -16,7 +16,7 @@ param(
 $ciSafeCheckNames = @(
     'knowledge', 'public-boundary', 'runtime-media-discovery', 'tag-export-converter',
     'semantic-workflow', 'check-tia-standards', 'eval-freshness', 'tia-block-metadata',
-    'agent-demo-scaffold-source', 'fixture-manifest', 'scl-safety-gate', 'example-secrets',
+    'agent-demo-scaffold-source', 'fixture-manifest', 'scl-safety-gate', 'block-type-coverage', 'example-secrets',
     'simulation-acceptance-runner', 'simulation-acceptance-safety', 'scl-proposal-apply-attached',
     'attached-route-preflight'
 )
@@ -58,6 +58,7 @@ $definitions = @(
     @{ name = 'agent-demo-scaffold-source'; path = '30-tools/tests/Test-AgentDemoScaffold.ps1' },
     @{ name = 'fixture-manifest'; path = '30-tools/tests/Test-TiaFixtureManifest.ps1' },
     @{ name = 'scl-safety-gate'; path = '30-tools/tests/Test-TiaSclSafetyGate.ps1' },
+    @{ name = 'block-type-coverage'; path = '30-tools/tests/Test-TiaBlockTypeCoverage.ps1' },
     @{ name = 'example-secrets'; path = '30-tools/tests/Test-TiaExampleSecrets.ps1' },
     @{ name = 'portable-install-relocation'; path = 'TIA-Claude_Portable/tests/Test-PortableInstallRelocation.ps1' },
     @{ name = 'project-analysis'; path = '30-tools/tests/Test-TiaProjectAnalysis.ps1' },

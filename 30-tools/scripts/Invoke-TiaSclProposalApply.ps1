@@ -433,9 +433,7 @@ try {
             if ([string]::IsNullOrWhiteSpace($AttachProjectName)) {
                 throw 'Attached route requires -AttachProjectName naming the exact open project.'
             }
-            if (-not [string]::IsNullOrWhiteSpace($groupPath)) {
-                throw 'Attached route supports only top-level blocks: ImportPlcExternalSource con groupPath vacio es lo unico verificado en vivo (R28).'
-            }
+            Assert-TiaAttachedRouteTopLevelBlock -GroupPath $groupPath -BlockPath $blockPath
 
             # La ruta adjunta exige un TIA Portal ya abierto y visible; el runner nunca
             # lanza, cierra ni reinicia una instancia.
@@ -499,7 +497,7 @@ try {
             ) 'attached-gates'
             $blocksPayload = Read-CallJson (Get-Call $gateSequence 'GetBlocks') 'GetBlocks'
             $existing = @($blocksPayload.items | Where-Object { [string]$_.name -ieq $blockName })[0]
-            Assert-TiaCreateBlockWritable -BlocksPayload $blocksPayload -BlockName $blockName -DeclarationKind $sourceDeclaration.kind
+            Assert-TiaCreateBlockWritable -BlocksPayload $blocksPayload -BlockName $blockName -DeclarationKind $sourceDeclaration.kind -BlockPath $blockPath
             $tagsPayload = Read-CallJson (Get-Call $gateSequence 'GetTags') 'GetTags'
             Assert-TiaCreateTagInventoryWritable -TagPayload $tagsPayload
             $report.tagSafetyGate = [ordered]@{ success = $true; count = @($tagsPayload.items).Count; safetyTagCount = 0; mode = 'whole-plc-fail-closed'; source = 'tia-create' }
@@ -585,7 +583,7 @@ try {
                 @{ name = 'Disconnect' }
             ) 'attached-persist'
             $importedPayload = Read-CallJson (Get-Call $verifySequence 'GetBlocks') 'GetBlocks after import'
-            Assert-TiaCreateBlockWritable -BlocksPayload $importedPayload -BlockName $blockName -DeclarationKind $sourceDeclaration.kind
+            Assert-TiaCreateBlockWritable -BlocksPayload $importedPayload -BlockName $blockName -DeclarationKind $sourceDeclaration.kind -BlockPath $blockPath
             $report.save = [ordered]@{ attempted = $true; success = $true; response = Read-CallJson (Get-Call $verifySequence 'SaveProject') 'SaveProject' }
             $report.export = [ordered]@{ attempted = $false; success = $false; reason = 'La ruta adjunta no incluye el export de arbol textual; ejecutar el ciclo R03 despues para exportar a src/.' }
             $report.verification = [ordered]@{
