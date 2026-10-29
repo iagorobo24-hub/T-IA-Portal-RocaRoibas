@@ -246,6 +246,69 @@ function Assert-TiaCreateTagInventoryWritable {
     }
 }
 
+function Get-TiaSourceLineDelta {
+    param(
+        [Parameter(Mandatory = $true)] [AllowEmptyString()] [string]$OriginalText,
+        [Parameter(Mandatory = $true)] [AllowEmptyString()] [string]$ProposedText
+    )
+
+    # Delta simetrico por linea (trim final, saltos normalizados). Con conteo por
+    # linea: duplicar una linea y borrar otra distinta es un cambio real, no ruido.
+    $originalCounts = @{}
+    foreach ($line in @((ConvertTo-TiaComparableSource $OriginalText).Split("`n"))) {
+        $key = $line.TrimEnd()
+        $originalCounts[$key] = 1 + [int](Get-TiaSourceLineDeltaDictionaryValue $originalCounts $key)
+    }
+    $proposedCounts = @{}
+    foreach ($line in @((ConvertTo-TiaComparableSource $ProposedText).Split("`n"))) {
+        $key = $line.TrimEnd()
+        $proposedCounts[$key] = 1 + [int](Get-TiaSourceLineDeltaDictionaryValue $proposedCounts $key)
+    }
+    $keys = @($originalCounts.Keys + $proposedCounts.Keys | Sort-Object -Unique)
+    $added = @(); $removed = @()
+    foreach ($key in $keys) {
+        $originalCount = [int](Get-TiaSourceLineDeltaDictionaryValue $originalCounts $key)
+        $proposedCount = [int](Get-TiaSourceLineDeltaDictionaryValue $proposedCounts $key)
+        if ($proposedCount -gt $originalCount) { $added += $key }
+        elseif ($originalCount -gt $proposedCount) { $removed += $key }
+    }
+    return [pscustomobject]@{
+        added = $added
+        removed = $removed
+        changedCount = ($added.Count + $removed.Count)
+    }
+}
+
+function Get-TiaSourceLineDeltaDictionaryValue($Hashtable, $Key) {
+    if ($Hashtable.ContainsKey($Key)) { return $Hashtable[$Key] }
+    return 0
+}
+
+function Assert-TiaProposalNotHeaderOnly {
+    param(
+        [Parameter(Mandatory = $true)] [object]$SourceDelta,
+        [Parameter(Mandatory = $true)] [string]$BlockName
+    )
+
+    # Evidencia en vivo 2026-10-28 (runbook paso 8): Openness V20 ignora la cabecera
+    # VERSION de la fuente estagiada en GenerateBlocksFromExternalSource; el proyecto
+    # regenera 'VERSION : 0.1' aunque el import recibiera 'VERSION : 0.2'. Una propuesta
+    # cuyo delta completo sean atributos VERSION no produce efecto observable y antes de
+    # la puerta de readback declaraba exito igual. Se veto en la validacion local, antes
+    # de abrir cualquier sesion MCP. Solo VERSION esta demostrado; otros atributos no se
+    # vetan por falta de evidencia (falsos positivos).
+    $sourceDelta = $SourceDelta
+    if (-not $sourceDelta -or (Test-TiaSclHasProperty -InputObject $sourceDelta -Name 'added') -eq $false) {
+        throw 'Header-only veto requires a Get-TiaSourceLineDelta result.'
+    }
+    if ($sourceDelta.changedCount -eq 0) { return }
+    $versionPattern = '(?i)^\s*VERSION\s*:'
+    $nonVersionLines = @(@($sourceDelta.added) + @($sourceDelta.removed) | Where-Object { $_ -notmatch $versionPattern })
+    if ($nonVersionLines.Count -eq 0) {
+        throw "Proposal '$BlockName' changes only VERSION header attributes; Openness V20 ignores them on block regeneration (evidence 2026-10-28). Refuse this proposal: version the block via TIA Portal or propose a real code/interface change."
+    }
+}
+
 function ConvertTo-TiaComparableSource {
     param([Parameter(Mandatory = $true)] [AllowEmptyString()] [string]$Text)
     if ($Text.Length -gt 0 -and $Text[0] -eq [char]0xFEFF) { $Text = $Text.Substring(1) }

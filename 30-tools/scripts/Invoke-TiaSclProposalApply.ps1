@@ -31,6 +31,11 @@ param(
     # solo válida con -Route attached; la ruta aislada mantiene su binding exacto de fixture.
     [string]$McpExecutablePath,
     [string]$McpArguments,
+    # Inyección del readback (puerta de delta de contenido ADR-018): tia-create no expone
+    # GetBlockSource, por lo que la verificación final de texto se hace con tia-inspect
+    # adjuntado a la misma instancia visible. Solo válida con -Route attached -Apply.
+    [string]$ReadbackExecutablePath,
+    [string]$ReadbackMcpArguments,
     [switch]$Apply,
     [switch]$AcknowledgeWriteProfile,
     [switch]$Help
@@ -52,9 +57,13 @@ informa BLOCKED sin mutar. Nunca descarga hardware.
 -Route attached: ruta con sesión adjunta al TIA Portal ya abierto vía tia-create --profile full
 (AttachToOpenProject). Requiere -AttachProjectName, ventana TIA visible, .scl (no .s7dcl),
 bloque en el nivel raíz (groupPath vacio, lounico verificado en vivo), gates F/Safety/protección
-completos por readback y compile 0/0 antes de SaveProject. No descarga hardware ni cambia el
-modo online de la CPU: GoOffline es un paso local de sesión de ingenieria, no un download.
-No copia .ap20: la restauración es reimportar la fuente original del proposal con el mismo runner.
+completos por readback y compile 0/0 antes de SaveProject. Tras guardar, compara el texto vivo
+con tia-inspect (GetBlockSource adjuntado) contra la propuesta: solo entonces emite
+APPLIED_AND_VERIFIED; en mismatch emite APPLIED_CONTENT_MISMATCH y si el readback no puede
+ejecutarse APPLIED_READBACK_FAILED (ambos salen con exit 1 y ordenan restaurar). No descarga
+hardware ni cambia el modo online de la CPU: GoOffline es un paso local de sesión de
+ingenieria, no un download. No copia .ap20: la restauración es reimportar la fuente original
+del proposal con el mismo runner.
 '@
     exit 0
 }
@@ -92,6 +101,7 @@ $report = [ordered]@{
     compile = [ordered]@{ attempted = $false; success = $false; errorCount = $null; warningCount = $null }
     save = [ordered]@{ attempted = $false; success = $false }
     export = [ordered]@{ attempted = $false; success = $false }
+    readback = [ordered]@{ attempted = $false; success = $false }
     verification = [ordered]@{ success = $false }
     cleanup = [ordered]@{ attempted = $false; success = $false }
     errors = @()
@@ -106,25 +116,29 @@ function Read-CallJson([object]$Call, [string]$Context) {
     try { return ([string]$Call.text | ConvertFrom-Json) } catch { throw "$Context did not return JSON: $([string]$Call.text)" }
 }
 
-function Invoke-Sequence([array]$Calls, [string]$Name) {
+function Invoke-Sequence([array]$Calls, [string]$Name, [string]$ServerExecutable, [string]$ServerArguments) {
     $sequenceScript = Join-Path $root '30-tools\scripts\Invoke-McpToolSequence.ps1'
-    if ($attachedRoute) {
+    if ($ServerExecutable) { $exe = [IO.Path]::GetFullPath($ServerExecutable) }
+    elseif ($attachedRoute) {
         $exe = if ($McpExecutablePath) { [IO.Path]::GetFullPath($McpExecutablePath) } else { Join-Path $root '30-tools\mcp\tia-create\bin\v20\TiaMcpServer.exe' }
     }
     else {
         $exe = Join-Path $root '30-tools\mcp\tia-inspect\bin\v20\TiaMcpServer.exe'
     }
+    if (-not $ServerArguments) { $ServerArguments = $mcpServerArguments }
     $sequencePath = Join-Path $runDirectory ("sequence-$Name.json")
     if (-not (Test-Path -LiteralPath $sequenceScript -PathType Leaf)) { throw "Missing MCP sequence runner: $sequenceScript" }
-    if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw "Missing tia-inspect V20 executable: $exe" }
+    if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw "Missing MCP V20 executable: $exe" }
     $pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
     if (-not $pwsh) { $pwsh = (Get-Command powershell -ErrorAction Stop).Source }
     # El JSON va por FICHERO: pasado por la linea de comandos de un proceso nativo,
     # Windows PowerShell 5.1 elimina las comillas dobles y el MCP recibe un JSON corrupto.
     $callsPath = $sequencePath + '.calls.json'
     [IO.File]::WriteAllText($callsPath, ($Calls | ConvertTo-Json -Depth 30 -Compress), (New-Object Text.UTF8Encoding($false)))
-    if ([string]::IsNullOrWhiteSpace($mcpServerArguments)) { throw 'Server arguments have not been configured from a validated fixture manifest.' }
-    $output = (& $pwsh -NoProfile -NonInteractive -File $sequenceScript -ExecutablePath $exe -Arguments $mcpServerArguments -CallsJsonPath $callsPath -OutputPath $sequencePath -TimeoutSeconds 900 2>&1 | Out-String).Trim()
+    if ([string]::IsNullOrWhiteSpace($ServerArguments)) {
+        throw 'Server arguments have not been configured: neither injected nor validated from a fixture manifest.'
+    }
+    $output = (& $pwsh -NoProfile -NonInteractive -File $sequenceScript -ExecutablePath $exe -Arguments $ServerArguments -CallsJsonPath $callsPath -OutputPath $sequencePath -TimeoutSeconds 900 2>&1 | Out-String).Trim()
     $exitCode = $LASTEXITCODE
     $sequence = if (Test-Path -LiteralPath $sequencePath -PathType Leaf) { Get-Content -Raw -LiteralPath $sequencePath | ConvertFrom-Json } else { $null }
     if (-not $sequence) { throw "$Name MCP sequence produced no report. $output" }
@@ -296,6 +310,9 @@ try {
         throw 'Executable/arguments overrides are only permitted with -Route attached (test harness injection).'
     }
     if ($attachedRoute) { $mcpServerArguments = if ($McpArguments) { $McpArguments } else { '--tia-major-version 20 --profile full' } }
+    if (($ReadbackExecutablePath -or $ReadbackMcpArguments) -and -not ($attachedRoute -and $Apply)) {
+        throw 'Readback server overrides are only permitted with -Route attached -Apply (test harness injection).'
+    }
     if (-not (Test-Path -LiteralPath $ProposalPath -PathType Leaf)) { throw "Proposal does not exist: $ProposalPath" }
     if (-not (Test-Path -LiteralPath $ProjectFile -PathType Leaf)) { throw "Project file does not exist: $ProjectFile" }
     $proposal = Get-Content -Raw -LiteralPath $ProposalPath | ConvertFrom-Json
@@ -322,6 +339,14 @@ try {
     if ($originalHash -ne [string]$proposal.source.originalSha256) { throw 'Original source hash does not match proposal.json; the source changed after proposal generation.' }
     $proposedText = Get-Content -Raw -LiteralPath $proposedSource
     $sourceDeclaration = Assert-TiaSclSourceTarget -SourceText $proposedText -ExpectedName ([string]$proposal.block.name)
+    # Puerta de veto solo-cabecera (ADR-018, evidencia 2026-10-28): una propuesta cuyo
+    # delta completo sean atributos VERSION no produce efecto observable y antes de la
+    # puerta de readback declaraba exito igual. Se veta aqui, antes de abrir cualquier
+    # sesion MCP.
+    $originalText = Get-Content -Raw -LiteralPath $originalSource
+    $sourceDelta = Get-TiaSourceLineDelta -OriginalText $originalText -ProposedText $proposedText
+    Assert-TiaProposalNotHeaderOnly -SourceDelta $sourceDelta -BlockName ([string]$proposal.block.name)
+    $report.proposalClaims.sourceDelta = [ordered]@{ added = @($sourceDelta.added); removed = @($sourceDelta.removed); changedCount = [int]$sourceDelta.changedCount }
 
     $blockPath = [string]$proposal.block.path
     $separator = $blockPath.LastIndexOf('/')
@@ -506,6 +531,50 @@ try {
             $report.compile = [ordered]@{ attempted = $true; success = ($compilePayload.errorCount -eq 0 -and $compilePayload.warningCount -eq 0); state = $compilePayload.state; errorCount = [int]$compilePayload.errorCount; warningCount = [int]$compilePayload.warningCount; messages = @($compilePayload.messages) }
             if (-not $report.compile.success) { throw "Compile gate failed: $($report.compile.errorCount) error(s), $($report.compile.warningCount) warning(s). Save was not attempted." }
 
+            # Puerta de delta de contenido (ADR-018): tia-create no expone GetBlockSource, asi
+            # que el texto vivo se lee con tia-inspect adjuntado en modo de solo lectura a la
+            # MISMA instancia visible, ANTES de SaveProject: un mismatch no guarda la mutacion
+            # sin efecto.
+            $report.readback = [ordered]@{ attempted = $true; success = $false; server = 'tia-inspect'; mode = 'attach' }
+            $readbackExecutable = if ($ReadbackExecutablePath) { [IO.Path]::GetFullPath($ReadbackExecutablePath) } else { Join-Path $root '30-tools\mcp\tia-inspect\bin\v20\TiaMcpServer.exe' }
+            $readbackArguments = if ($ReadbackMcpArguments) { $ReadbackMcpArguments } else { '--tia-major-version 20' }
+            $readbackStatus = 'APPLIED_READBACK_FAILED'
+            $readbackError = $null
+            try {
+                $readbackSequence = Invoke-Sequence @(
+                    @{ name = 'Connect' },
+                    @{ name = 'GetState' },
+                    @{ name = 'GetBlockSource'; args = @{ softwarePath = $softwarePath; blockPath = $blockPath; format = 'document'; maxChars = 2147483647 } }
+                ) 'attached-readback' $readbackExecutable $readbackArguments
+                $readbackState = Read-CallJson (Get-Call $readbackSequence 'GetState') 'GetState before readback'
+                if ([string]$readbackState.project -cne $AttachProjectName) {
+                    throw "Readback GetState reports project '$($readbackState.project)', expected '$AttachProjectName'."
+                }
+                $postSaveSource = Read-CallJson (Get-Call $readbackSequence 'GetBlockSource') 'GetBlockSource after mutation'
+                if ($postSaveSource.truncated -ne $false -or [string]::IsNullOrWhiteSpace([string]$postSaveSource.text)) {
+                    throw 'Post-mutation block source is truncated, empty, or lacks an explicit complete-read result.'
+                }
+                if ([string]$postSaveSource.path -cne $blockPath) { throw "Post-mutation source path '$($postSaveSource.path)' differs from '$blockPath'." }
+                if (-not [string]::Equals(
+                    (ConvertTo-TiaComparableSource ([string]$postSaveSource.text)),
+                    (ConvertTo-TiaComparableSource ([string]$proposedText)),
+                    [StringComparison]::Ordinal
+                )) {
+                    $readbackStatus = 'APPLIED_CONTENT_MISMATCH'
+                    throw 'TIA readback differs from the proposed SCL source; the mutation has no observable effect as staged. Save is blocked.'
+                }
+            }
+            catch { $readbackError = [string]$_.Exception.Message }
+            if ($readbackError) {
+                $report.readback.success = $false
+                $report.readback.error = $readbackError
+                $report.status = $readbackStatus
+                $report.save = [ordered]@{ attempted = $false; success = $false; reason = 'readback-content-gate' }
+                $report.postFailureInstruction = 'La mutacion quedo en el proyecto SIN guardar. No guardes: cierra el proyecto sin guardar o restaura reimportando la fuente original del proposal (originalSha256) con este mismo runner antes de cualquier reintento.'
+                throw ("Readback content gate failed ($readbackStatus): $readbackError")
+            }
+            $report.readback.success = $true
+
             $verifySequence = Invoke-Sequence @(
                 @{ name = 'Connect' },
                 @{ name = 'GetBlocks'; args = @{ softwarePath = $softwarePath } },
@@ -519,7 +588,8 @@ try {
             $report.verification = [ordered]@{
                 success = $true; blockName = $blockName; blockPath = $blockPath
                 readback = $importedPayload
-                note = 'El readback reafirma SCL/no-F/no-protegido/consistente pero no compara el texto con la propuesta: tia-create no expone GetBlockSource. Comparar despues con el export R03.'
+                sourceCompared = $true
+                note = 'El readback tia-create reafirma SCL/no-F/no-protegido/consistente; el texto vivo se comparo contra la propuesta via tia-inspect adjuntado (puerta de delta de contenido ADR-018) antes de SaveProject.'
             }
             $report.applied = $true
             $report.status = 'APPLIED_AND_VERIFIED'
@@ -720,7 +790,11 @@ try {
     }
 }
 catch {
-    $report.status = if (-not $report.tiaMutation) { 'BLOCKED' } else { 'FAILED' }
+    # APPLIED_CONTENT_MISMATCH y APPLIED_READBACK_FAILED son estados post-mutacion
+    # explicitos: el catch generico no los debe reescribir como FAILED.
+    if (-not ($report.status -in @('APPLIED_CONTENT_MISMATCH', 'APPLIED_READBACK_FAILED'))) {
+        $report.status = if (-not $report.tiaMutation) { 'BLOCKED' } else { 'FAILED' }
+    }
     $report.errors = @($report.errors + [string]$_.Exception.Message)
     if ($report.compile.attempted -and -not $report.compile.success) { $report.save = [ordered]@{ attempted = $false; success = $false; reason = 'compile-gate' } }
     if ($attachedRoute -and $report.compile.attempted -and -not $report.compile.success) {

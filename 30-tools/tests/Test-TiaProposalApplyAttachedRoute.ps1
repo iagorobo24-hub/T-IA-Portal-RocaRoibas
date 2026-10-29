@@ -36,6 +36,12 @@ $expectedFullOrder = @(
     'Connect', 'GetBlocks', 'SaveProject', 'Disconnect'
 )
 
+# Puerta de delta de contenido (ADR-018): orden del readback de tia-inspect adjuntado.
+$expectedReadbackOrder = @('Connect', 'GetState', 'GetBlockSource')
+# Direccion y orden de los mocks:
+# - mock principal (tia-create): Bootstrap..SaveProject (mutacion + persist);
+# - mock de readback (tia-inspect): Connect/GetState/GetBlockSource ANTES del SaveProject del mock principal.
+
 function Get-PowerShellScriptArguments([string]$Path) {
     $command = "& '" + $Path.Replace("'", "''") + "'"
     $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
@@ -54,7 +60,8 @@ function Invoke-ApplyCase([string]$CaseName) {
     try {
         & $script -ProposalPath $script:attachedProposalPath -ProjectFile $projectFile -ReportRoot $reportRoot `
             -Route attached -Profile write -AcknowledgeWriteProfile -Apply -AttachProjectName $script:mockProjectName `
-            -McpExecutablePath $script:pwsh -McpArguments $script:mockArguments 2>&1 | Out-Null
+            -McpExecutablePath $script:pwsh -McpArguments $script:mockArguments `
+            -ReadbackExecutablePath $script:pwsh -ReadbackMcpArguments $script:readbackMockArguments 2>&1 | Out-Null
     }
     catch { $failed = $true }
     if (-not $failed -and $LASTEXITCODE -eq 0) { throw "Case '$CaseName' must fail with the fixture mode applied." }
@@ -147,6 +154,60 @@ while ($line = [Console]::In.ReadLine()) {
 }
 '@ | Set-Content -LiteralPath $mockServer -Encoding UTF8
     $script:mockArguments = Get-PowerShellScriptArguments $mockServer
+
+    # --- Servidor MCP simulado de READBACK (tia-inspect adjuntado, solo lectura) ---
+    $readbackServer = Join-Path $temp 'mock-tia-inspect-readback.ps1'
+    @'
+$ErrorActionPreference = 'Stop'
+$readbackOrderPath = $env:TIA_READBACK_FIXTURE_ORDER
+$readbackMode = if ($env:TIA_READBACK_FIXTURE_MODE) { $env:TIA_READBACK_FIXTURE_MODE } else { 'happy' }
+while ($line = [Console]::In.ReadLine()) {
+    if ([string]::IsNullOrWhiteSpace($line)) { continue }
+    $request = $line | ConvertFrom-Json
+    if ($request.method -eq 'notifications/initialized') { continue }
+    if ($request.method -eq 'initialize') {
+        $result = [ordered]@{ protocolVersion = '2025-06-18'; capabilities = @{}; serverInfo = @{ name = 'tia-claude-readback-fixture'; version = '1.0' } }
+    }
+    elseif ($request.method -eq 'tools/list') {
+        $result = [ordered]@{ tools = @(@{ name = 'Connect' }, @{ name = 'GetState' }, @{ name = 'GetBlockSource' }) }
+    }
+    elseif ($request.method -eq 'tools/call') {
+        $name = [string]$request.params.name
+        if ($readbackOrderPath) { Add-Content -LiteralPath $readbackOrderPath -Value $name -Encoding ASCII }
+        switch ($name) {
+            'Connect' { $payload = [ordered]@{ message = 'Connected to TIA-Portal'; meta = @{ success = $true } } }
+            'GetState' {
+                $stateProject = if ($readbackMode -eq 'wrong-project') { 'Other Project' } else { 'Mock Project' }
+                $payload = [ordered]@{ project = $stateProject; session = '-'; message = 'state'; meta = @{ success = $true } }
+            }
+            'GetBlockSource' {
+                if ($readbackMode -eq 'crash') {
+                    $payload = [ordered]@{ meta = @{ success = $false }; message = 'readback unavailable' }
+                }
+                elseif ($readbackMode -eq 'truncated') {
+                    $payload = [ordered]@{ path = 'FB_Valve'; text = "FUNCTION_BLOCK ""FB_Valve"""; truncated = $true; meta = @{ success = $true } }
+                }
+                elseif ($readbackMode -eq 'mismatch') {
+                    $payload = [ordered]@{ path = 'FB_Valve'; text = "FUNCTION_BLOCK ""FB_Valve""`r`n`r`nBEGIN`r`n   #Changed := TRUE;`r`nEND_FUNCTION_BLOCK"; truncated = $false; meta = @{ success = $true } }
+                }
+                else {
+                    # El texto vivo debe ser EXACTAMENTE el de la propuesta: la comparacion de
+                    # la puerta de delta es estricta por design.
+                    # El texto vivo debe ser IDENTICO al de la propuesta, incluido el CRLF final
+                    # con el que TIA devuelve la fuente (evidencia E2E 2026-10-28).
+                    $payload = [ordered]@{ path = 'FB_Valve'; text = "FUNCTION_BLOCK ""FB_Valve""`r`nBEGIN`r`n   #Open := TRUE;`r`nEND_FUNCTION_BLOCK`r`n"; truncated = $false; meta = @{ success = $true } }
+                }
+            }
+            default { $payload = [ordered]@{ success = $true; message = $name } }
+        }
+        $result = [ordered]@{ content = @(@{ type = 'text'; text = ($payload | ConvertTo-Json -Depth 20 -Compress) }) }
+    }
+    else { $result = [ordered]@{} }
+    [ordered]@{ jsonrpc = '2.0'; id = $request.id; result = $result } | ConvertTo-Json -Depth 30 -Compress | Write-Output
+}
+'@ | Set-Content -LiteralPath $readbackServer -Encoding UTF8
+    $script:readbackMockArguments = Get-PowerShellScriptArguments $readbackServer
+    $env:TIA_READBACK_FIXTURE_MODE = 'happy'
 
     # --- Propuesta .scl de bloque top-level ---------------------------------------
     $sourcePath = Join-Path $temp 'FB_Valve.scl'
@@ -293,7 +354,7 @@ END_FUNCTION_BLOCK
     $compileReportRoot = Join-Path $temp 'compile-failed-reports'
     $compileRunnerOutput = ''
     try {
-        $compileRunnerOutput = (& $script -ProposalPath $proposalPath -ProjectFile $projectFile -ReportRoot $compileReportRoot -Route attached -Profile write -AcknowledgeWriteProfile -Apply -AttachProjectName $mockProjectName -McpExecutablePath $pwsh -McpArguments $mockArguments 2>&1 | Out-String)
+        $compileRunnerOutput = (& $script -ProposalPath $proposalPath -ProjectFile $projectFile -ReportRoot $compileReportRoot -Route attached -Profile write -AcknowledgeWriteProfile -Apply -AttachProjectName $mockProjectName -McpExecutablePath $pwsh -McpArguments $mockArguments -ReadbackExecutablePath $pwsh -ReadbackMcpArguments $readbackMockArguments 2>&1 | Out-String)
     }
     catch { $compileFailed = $true }
     finally {
@@ -313,20 +374,31 @@ END_FUNCTION_BLOCK
 
     # 9. Camino feliz: orden de llamada exacto y estado APPLIED_AND_VERIFIED.
     $happyOrderPath = Join-Path $temp 'happy-order.txt'
+    $happyReadbackOrderPath = Join-Path $temp 'happy-readback-order.txt'
     $env:TIA_ATTACH_FIXTURE_ORDER = $happyOrderPath
+    $env:TIA_READBACK_FIXTURE_ORDER = $happyReadbackOrderPath
     $happyReportRoot = Join-Path $temp 'happy-reports'
     $happyFailed = $false
     try {
-        & $script -ProposalPath $proposalPath -ProjectFile $projectFile -ReportRoot $happyReportRoot -Route attached -Profile write -AcknowledgeWriteProfile -Apply -AttachProjectName $mockProjectName -McpExecutablePath $pwsh -McpArguments $mockArguments
+        & $script -ProposalPath $proposalPath -ProjectFile $projectFile -ReportRoot $happyReportRoot -Route attached -Profile write -AcknowledgeWriteProfile -Apply -AttachProjectName $mockProjectName -McpExecutablePath $pwsh -McpArguments $mockArguments -ReadbackExecutablePath $pwsh -ReadbackMcpArguments $readbackMockArguments
     }
     catch { $happyFailed = $true }
-    finally { Remove-Item Env:\TIA_ATTACH_FIXTURE_ORDER -ErrorAction SilentlyContinue }
+    finally {
+        Remove-Item Env:\TIA_ATTACH_FIXTURE_ORDER -ErrorAction SilentlyContinue
+        Remove-Item Env:\TIA_READBACK_FIXTURE_ORDER -ErrorAction SilentlyContinue
+    }
     if ($happyFailed -or $LASTEXITCODE -ne 0) { throw "Happy path apply failed: exit=$LASTEXITCODE." }
     $global:LASTEXITCODE = 0
     $happyReport = Read-LatestReport $happyReportRoot
     if ($happyReport.status -ne 'APPLIED_AND_VERIFIED' -or $happyReport.applied -ne $true -or
         $happyReport.tiaMutation -ne $true -or $happyReport.compile.errorCount -ne 0) {
         throw 'Happy path must be APPLIED_AND_VERIFIED with a clean compile.'
+    }
+    if ($happyReport.readback.success -ne $true -or $happyReport.readback.server -ne 'tia-inspect' -or $happyReport.readback.mode -ne 'attach') {
+        throw 'Happy path must record a successful attach readback (content delta gate).'
+    }
+    if ($happyReport.verification.sourceCompared -ne $true) {
+        throw 'Happy path verification must prove the source text was compared against the proposal.'
     }
     if ($happyReport.mcp.server -ne 'tia-create' -or $happyReport.mcp.profile -ne 'full' -or $happyReport.mcp.isolated -ne $false) {
         throw 'Happy path must record the attached tia-create full session.'
@@ -338,6 +410,101 @@ END_FUNCTION_BLOCK
     if (($recordedOrder -join '|') -ne ($expectedFullOrder -join '|')) {
         throw "Call order mismatch:`n recorded: $($recordedOrder -join ', ')`n expected: $($expectedFullOrder -join ', ')"
     }
+
+    # 10. Readback: el orden Connect/GetState/GetBlockSource quedo registrado y la
+    # propuesta falsa se comparo contra el texto si el modo no impone un mismatch.
+    $happyReadbackOrderPath = Join-Path $temp 'happy-readback-order.txt'
+    $recordedReadbackOrder = @(Get-Content -LiteralPath $happyReadbackOrderPath -ErrorAction SilentlyContinue | Where-Object { $_ })
+    if (($recordedReadbackOrder -join '|') -ne ($expectedReadbackOrder -join '|')) {
+        throw "Readback call order mismatch:`n recorded: $($recordedReadbackOrder -join ', ')`
+ expected: $($expectedReadbackOrder -join ', ')"
+    }
+    Write-Output 'PASS: happy path applied with the exact verified call order and the content delta readback'
+
+    # 11. Mismatch de contenido: el SaveProject NO se intenta y el estado es explicito.
+    # Ordem que debe respetarse: la mutacion ocurre (tiaMutation=true) pero no se guarda y
+    # no se declara exito.
+    $env:TIA_READBACK_FIXTURE_MODE = 'mismatch'
+    $mismatchReportRoot = Join-Path $temp 'readback-mismatch-reports'
+    $ismatchFailed = $false
+    try {
+        & $script -ProposalPath $proposalPath -ProjectFile $projectFile -ReportRoot $mismatchReportRoot -Route attached -Profile write -AcknowledgeWriteProfile -Apply -AttachProjectName $mockProjectName -McpExecutablePath $pwsh -McpArguments $mockArguments -ReadbackExecutablePath $pwsh -ReadbackMcpArguments $readbackMockArguments 2>&1 | Out-Null
+    }
+    catch { $mismatchFailed = $true }
+    finally { $env:TIA_READBACK_FIXTURE_MODE = 'happy' }
+    $global:LASTEXITCODE = 0
+    if (-not $mismatchFailed) { throw 'A readback mismatch must fail the runner with exit 1.' }
+    $mismatchReport = Read-LatestReport $mismatchReportRoot
+    if ($mismatchReport.status -ne 'APPLIED_CONTENT_MISMATCH' -or $mismatchReport.tiaMutation -ne $true -or
+        $mismatchReport.save.attempted -ne $false -or $mismatchReport.save.reason -ne 'readback-content-gate' -or
+        -not $mismatchReport.postFailureInstruction) {
+        throw "A readback mismatch must be APPLIED_CONTENT_MISMATCH, mutated, with SaveProject blocked by the content gate; got status=$($mismatchReport.status) save=(attempted=$($mismatchReport.save.attempted), reason=$($mismatchReport.save.reason))."
+    }
+    Write-Output 'PASS: content mismatch blocks SaveProject and reports APPLIED_CONTENT_MISMATCH'
+
+    # 12. Readback degradado (fallo de infraestructura): no se guarda y el estado es explicito.
+    foreach ($readbackFailureCase in @('crash', 'truncated', 'wrong-project')) {
+        $env:TIA_READBACK_FIXTURE_MODE = $readbackFailureCase
+        $failureReportRoot = Join-Path $temp ("readback-$readbackFailureCase-reports")
+        $failureFailed = $false
+        try {
+            & $script -ProposalPath $proposalPath -ProjectFile $projectFile -ReportRoot $failureReportRoot -Route attached -Profile write -AcknowledgeWriteProfile -Apply -AttachProjectName $mockProjectName -McpExecutablePath $pwsh -McpArguments $mockArguments -ReadbackExecutablePath $pwsh -ReadbackMcpArguments $readbackMockArguments 2>&1 | Out-Null
+        }
+        catch { $failureFailed = $true }
+        finally { $env:TIA_READBACK_FIXTURE_MODE = 'happy' }
+        $global:LASTEXITCODE = 0
+        if (-not $failureFailed) { throw "A readback infrastructure failure (mode '$readbackFailureCase') must fail the runner with exit 1." }
+        $failureReport = Read-LatestReport $failureReportRoot
+        if ($failureReport.status -ne 'APPLIED_READBACK_FAILED' -or $failureReport.tiaMutation -ne $true -or
+            $failureReport.save.attempted -ne $false -or $failureReport.save.reason -ne 'readback-content-gate') {
+            throw "Readback failure mode '$readbackFailureCase' must be APPLIED_READBACK_FAILED with SaveProject blocked; got status=$($failureReport.status)."
+        }
+    }
+    Write-Output 'PASS: failed or unverifiable readback blocks SaveProject and reports APPLIED_READBACK_FAILED'
+
+    # 13. Veto solo-cabecera (ADR-018, evidencia 2026-10-28): una propuesta cuyo unico
+    # delta sean atributos VERSION se rechaza antes de abrir cualquier sesion MCP.
+    $originalOnlyPath = Join-Path $temp 'FB_Valve_original.scl'
+    @'
+FUNCTION_BLOCK "FB_Valve"
+VERSION : 0.1
+BEGIN
+   #Open := TRUE;
+END_FUNCTION_BLOCK
+'@ | Set-Content -LiteralPath $originalOnlyPath -Encoding UTF8
+    $proposedOnlyPath = Join-Path $temp 'FB_Valve_version02.scl'
+    @'
+FUNCTION_BLOCK "FB_Valve"
+VERSION : 0.2
+BEGIN
+   #Open := TRUE;
+END_FUNCTION_BLOCK
+'@ | Set-Content -LiteralPath $proposedOnlyPath -Encoding UTF8
+    $vetoProposalPath = Join-Path $temp 'veto-proposal.json'
+    $vetoProposalOriginalHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $originalOnlyPath).Hash.ToLowerInvariant()
+    $vetoProposalProposedHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $proposedOnlyPath).Hash.ToLowerInvariant()
+    [ordered]@{
+        schemaVersion = 1; status = 'PROPOSED'; readOnly = $true; applied = $false; tiaMutation = $false
+        projectPath = $projectFile; sourceRoot = $temp; plc = 'PLC_1'
+        block = [ordered]@{ name = 'FB_Valve'; path = 'FB_Valve'; language = 'SCL' }
+        source = [ordered]@{ originalPath = $originalOnlyPath; proposedPath = $proposedOnlyPath; proposedSha256 = $vetoProposalProposedHash; originalSha256 = $vetoProposalOriginalHash; matchCount = 1; extension = '.scl' }
+        checks = [ordered]@{ exactBlockMatch = $true; sclOnly = $true; noBlockingFindings = $true; uniqueReplacement = $true; originalUntouched = $true }
+        findings = @()
+    } | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $vetoProposalPath -Encoding UTF8
+    $vetoReportRoot = Join-Path $temp 'veto-reports'
+    $vetoFailed = $false
+    try {
+        & $script -ProposalPath $vetoProposalPath -ProjectFile $projectFile -ReportRoot $vetoReportRoot -Route attached -Profile write -AcknowledgeWriteProfile -Apply -AttachProjectName $mockProjectName -McpExecutablePath $pwsh -McpArguments $mockArguments -ReadbackExecutablePath $pwsh -ReadbackMcpArguments $readbackMockArguments 2>&1 | Out-Null
+    }
+    catch { $vetoFailed = $true }
+    $global:LASTEXITCODE = 0
+    if (-not $vetoFailed) { throw 'A header-only proposal (VERSION-only delta) must be refused.' }
+    $vetoReport = Read-LatestReport $vetoReportRoot
+    if ($vetoReport.status -ne 'BLOCKED' -or $vetoReport.tiaMutation -ne $false -or
+        $vetoReport.errors[0] -notmatch 'VERSION header') {
+        throw "The header-only veto must block before MCP with a VERSION reason; got status=$($vetoReport.status) errors=$($vetoReport.errors -join ' | ')."
+    }
+    Write-Output 'PASS: header-only (VERSION-only) proposals are vetoed before any MCP access'
     if (Test-Path -LiteralPath $projectFile -PathType Leaf) {
         $fileHash = (Get-FileHash -LiteralPath $projectFile -Algorithm SHA256).Hash
         if ($fileHash -eq [string]::Empty) { throw 'Marker integrity check failed.' }
@@ -352,5 +519,7 @@ finally {
     Remove-Item Env:\TIA_ATTACH_FIXTURE_ATTACH -ErrorAction SilentlyContinue
     Remove-Item Env:\TIA_ATTACH_FIXTURE_COMPILE -ErrorAction SilentlyContinue
     Remove-Item Env:\TIA_ATTACH_FIXTURE_ORDER -ErrorAction SilentlyContinue
+    Remove-Item Env:\TIA_READBACK_FIXTURE_MODE -ErrorAction SilentlyContinue
+    Remove-Item Env:\TIA_READBACK_FIXTURE_ORDER -ErrorAction SilentlyContinue
     if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Recurse -Force }
 }

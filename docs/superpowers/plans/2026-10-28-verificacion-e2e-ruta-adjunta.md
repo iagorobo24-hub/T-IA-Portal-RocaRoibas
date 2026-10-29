@@ -396,12 +396,43 @@ verificación de la ruta adjunta solo reafirma metadatos (SCL/no-F/no-protegido/
 Resultado: un cambio sin efecto declararía igualmente éxito. **ADR-018 sigue `pendiente
 verificación end-to-end`**; el bloqueo está escrito en el ADR.
 
+> (Actualizado el 2026-10-29: el bloqueo ya tiene su puerta implementada; ver la sección
+> de desbloqueo al final de este documento. Falta reejecutar el runbook sobre TIA real con
+> la puerta activa.)
+
 **Para desbloquear (orden propuesto):** (1) añadir al runner una **puerta de delta de contenido**
 en ruta adjunta — readback con `tia-inspect` en attach (`GenerateSources`/`GetBlockSource`,
 comparación normalizada contra la propuesta) antes de emitir `APPLIED_AND_VERIFIED`;
 (2) investigar/documentar si Openness V20 ignora las cabeceras SCL (`VERSION`/`AUTHOR`/`FAMILY`)
 en `GenerateBlocksFromExternalSource` y, si es así, vetar propuestas cuyo único cambio sea la
 cabecera; (3) reejecutar este runbook completo.
+
+## Desbloqueo 2026-10-29: puerta de delta implementada (paso 1 y 2 del orden propuesto)
+
+Elementos (confer ADR-018, sección "Puerta de delta de contenido y veto solo-cabecera"):
+
+1. ✅ **Veto solo-cabecera local** `Assert-TiaProposalNotHeaderOnly` (`TiaSclSafety.ps1`): un
+   delta compuesto SOLO por atributos `VERSION` bloquea `BLOCKED` antes de cualquier sesión MCP
+   (lo único demostrado el 2026-10-28; el resto de cabeceras no se veta por falta de evidencia).
+2. ✅ **Readback adjuntado con `tia-inspect`** en el runner (-ReadbackExecutablePath /
+   -ReadbackMcpArguments solo válidos en `-Route attached -Apply`; por defecto el binario
+   `tia-inspect` V20 en modo attach de solo lectura): `Connect → GetState → GetBlockSource`,
+   identidad por `GetState.project`, y comparación estricta del texto contra la propuesta
+   ANTES de `SaveProject`. Coincidencia exacta → save → `APPLIED_AND_VERIFIED`. Mismatch →
+   `APPLIED_CONTENT_MISMATCH` con save NO intentado; readback degradado/identidad
+   divergente → `APPLIED_READBACK_FAILED` (ibid.). Instrucción de restaurar reimportando la
+   fuente original en ambos, y el catch genérico no reescribe esos estados.
+3. ❌ **Reejecución del runbook con la puerta (pendiente):** para que el estado pase a
+   `verificado` hay que repetir este E2E sobre copia desechable en TIA real con la puerta
+   activa y CAPTURAR el readback: el texto vivo del bloque en `GetBlockSource` contra la
+   fuente estagiada. Nota comparativa fria: la comparación es estricta (incluye el CRLF
+   final); si TIA devuelve el texto con salto final y la propuesta no lo lleva, la puerta
+   había de renormalizarse — no debilitarla.
+
+Cobertura de arnés (2026-10-29, PASS 13 casos): happy con orden exacto del readback,
+mismatch/crash/truncated/wrong-project (save bloqueado), y veto solo-cabecera.
+`Run-WorkspaceChecks.ps1` exit 0 y `Test-TiaSclProposalApply` PASS como no regresión de la
+ruta aislada.
 
 **Estado final de la sesión:** TIA cerrada por el agente (su propia instancia, 0 procesos
 `Siemens.Automation.Portal`), copia restaurada, original del repositorio intacto.

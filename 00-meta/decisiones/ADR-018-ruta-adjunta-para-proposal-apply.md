@@ -1,6 +1,6 @@
 # ADR-018 — Ruta adjunta para `Invoke-TiaSclProposalApply` mediante `tia-create` full
 
-> Estado: **implementado; verificado en arnés mock; pendiente verificación end-to-end en TIA real** · Fecha: **2026-10-28** · Ámbito: TIA Portal V20, Openness, `tia-create --profile full`
+> Estado: **implementado incluye puerta de delta de contenido; verificado en arnés mock; pendiente verificación end-to-end de la puerta en TIA real** · Fecha: **2026-10-28 (bloqueo) / 2026-10-29 (desbloqueo)** · Ámbito: TIA Portal V20, Openness, `tia-create --profile full` + readback `tia-inspect` adjuntado
 
 ## Contexto
 
@@ -48,7 +48,7 @@ Añadir `-Route attached` (por defecto `isolated`, que queda intacta) al runner,
 |---|---|---|
 | Aserciones de contrato de `tia-create` adjuntado | `30-tools/scripts/TiaSclSafety.ps1` (`Assert-TiaCreateAttachIdentity`, `Assert-TiaCreateBlockWritable`, `Assert-TiaCreateTagInventoryWritable`) | implementado |
 | Ruta adjunta fail-closed y mutación/supervivencia de informe | `30-tools/scripts/Invoke-TiaSclProposalApply.ps1` | implementado |
-| Arnés de 9 casos (identidad, roster, gates F/Safety, compile gate, orden exacto feliz) | `30-tools/tests/Test-TiaProposalApplyAttachedRoute.ps1` | PASS local |
+| Arnés de 13 casos (identidad, roster, gates F/Safety, compile gate, readback content gate, veto solo-cabecera, orden exacto feliz) | `30-tools/tests/Test-TiaProposalApplyAttachedRoute.ps1` | PASS local 2026-10-29 |
 | Check registrado (y CI-safe) | `30-tools/scripts/Run-WorkspaceChecks.ps1` | implementado |
 
 La ruta aislada se mantuvo sin cambios de comportamiento; `Test-TiaSclProposalApply.ps1` sigue
@@ -81,6 +81,42 @@ metadatos (tia-create no expone `GetBlockSource`) y un cambio sin efecto declara
 Falta una puerta de delta de contenido en la ruta adjunta antes de emitir `APPLIED_AND_VERIFIED`.
 Registro completo: runbook §8. Restauración completada desde `pristine/` (fingerprint idéntico);
 el original del repo está intacto.
+
+## Puerta de delta de contenido y veto solo-cabecera (desbloqueo, 2026-10-29)
+
+La puerta exige evidencia de efecto observable ANTES de declarar `APPLIED_AND_VERIFIED`, en dos
+niveles independientes:
+
+1. **Veto local (antes de abrir cualquier sesión MCP):** si el delta completo entre la fuente
+   original y la propuesta son atributos `VERSION` (lo único demostrado ignorado por Openness
+   V20 el 2026-10-28), el runner bloquea `BLOCKED` sin mutar.
+   `TiaSclSafety.ps1`: `Get-TiaSourceLineDelta` (delta simétrico con conteo por línea)
+   + `Assert-TiaProposalNotHeaderOnly` (solo `VERSION`; el resto no se veta por falta de
+   evidencia). El resumen del delta queda en el informe (`proposalClaims.sourceDelta`).
+2. **Readback adjuntado (antes de `SaveProject`):** tras la mutación y la compilación 0/0, el
+   runner abre una sesión de SOLO LECTURA con `tia-inspect` adjuntado a la MISMA instancia
+   visible (`Connect → GetState → GetBlockSource`, orden exigido), verifica identidad por
+   `GetState.project == -AttachProjectName`, y compara el texto vivo contra la propuesta con la
+   misma normalización (`ConvertTo-TiaComparableSource`). Solo con coincidencia exacta se
+   ejecuta `SaveProject` y se emite `APPLIED_AND_VERIFIED`. Estados nuevos:
+   - `APPLIED_CONTENT_MISMATCH`: la mutación está en el proyecto SIN guardar (no hay efecto
+     observable como estaba estagiado); `SaveProject` no se intenta; instrucción de no guardar
+     y restaurar reimportando la fuente original.
+   - `APPLIED_READBACK_FAILED`: readback imposible (infraestructura, identidad, truncado,
+     path divergente); mismo tratamiento fail-closed.
+   Los dos son exit 1 y el catch genérico no los reescribe como `FAILED`.
+
+**Cobertura:** arnés `Test-TiaProposalApplyAttachedRoute.ps1` ampliado a 13 casos,
+en PASS (2026-10-29): readback feliz con orden exacto, `mismatch`, `crash`, `truncated`,
+`wrong-project`, y veto solo-cabecera. Ruta aislada sin cambios de comportamiento
+(`Test-TiaSclProposalApply.ps1` PASS) y `Run-WorkspaceChecks.ps1` exit 0.
+
+**Todos los mocks del readback son de arnés; NADA de esto ha tocado TIA real.** El estado de la
+ruta adjunta sigue siendo *implementado; verificado en arnés; pendiente verificación E2E*:
+el E2E de 2026-10-28 validó attach+mutación+save, pero la puerta nueva —readback con texto vía
+`tia-inspect` adjuntado contra propuesta— debe ejecutarse sobre una copia desechable en TIA
+antes de declarar `verificado`. La comparación es estricta por diseño (incluida la línea final
+vacía): si TIA devuelve el texto con CRLF final, la propuesta debe regenerarse igual.
 
 ## Nota de corrección incluida
 
