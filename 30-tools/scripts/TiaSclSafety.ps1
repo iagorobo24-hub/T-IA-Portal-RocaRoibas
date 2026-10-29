@@ -204,11 +204,12 @@ function Assert-TiaCreateBlockWritable {
     }
 
     # typeName is a short Openness alias on tia-create (real evidence 2026-09-25:
-    # 'OB' for an ORGANIZATION_BLOCK and 'FB' for a FUNCTION_BLOCK). Only the
-    # evidenced mappings are accepted; anything else fails closed.
+    # 'OB' for an ORGANIZATION_BLOCK and 'FB' for a FUNCTION_BLOCK). Extend to
+    # FUNCTION (FC) as we validate in FASE 1; other types remain fail-closed.
     $expectedType = switch ($DeclarationKind.ToUpperInvariant()) {
         'FUNCTION_BLOCK' { 'FB' }
         'ORGANIZATION_BLOCK' { 'OB' }
+        'FUNCTION' { 'FC' }
         default { throw "tia-create typeName mapping is not evidenced for declaration '$DeclarationKind'; block refused." }
     }
     if ([string]$block.typeName -cne $expectedType) {
