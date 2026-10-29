@@ -95,6 +95,7 @@ $report = [ordered]@{
     backupExport = [ordered]@{ attempted = $false; success = $false }
     mutation = [ordered]@{ attempted = $false; success = $false }
     readback = [ordered]@{ attempted = $false; success = $false }
+    baselineCompile = [ordered]@{ attempted = $false; success = $false }
     compile = [ordered]@{ attempted = $false; success = $false; errorCount = $null; warningCount = $null }
     save = [ordered]@{ attempted = $false; success = $false }
     export = [ordered]@{ attempted = $false; success = $false }
@@ -104,6 +105,17 @@ $report = [ordered]@{
 
 function Get-Call([object]$Sequence, [string]$Name) {
     return @($Sequence.calls | Where-Object { [string]$_.name -eq $Name }) | Select-Object -Last 1
+}
+
+function Get-Calls([object]$Sequence, [string]$Name) {
+    return @($Sequence.calls | Where-Object { [string]$_.name -eq $Name })
+}
+
+# Firmas de diagnostico comparables entre dos compilaciones del mismo PLC.
+function Get-TiaDiagnosticSignatures([object]$Payload) {
+    return @(@($Payload.messages) |
+        Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_.description) } |
+        ForEach-Object { '[' + [string]$_.state + '] ' + [string]$_.description })
 }
 
 function Read-CallJson([object]$Call, [string]$Context) {
@@ -557,16 +569,38 @@ try {
         $report.tiaMutation = $true
         $report.readOnly = $false
         $report.mutation = [ordered]@{ attempted = $true; success = $false; tool = $mutationTool; args = $mutationArgs }
+        # La compilacion base se mide en la MISMA sesion antes de mutar: un proyecto ya roto no se
+        # toca, y un warning preexistente no se confunde con una regresion introducida por el cambio.
         $mutationCalls = @(
             @{ name = 'Connect' },
             @{ name = 'OpenProject'; args = @{ path = $ProjectFile } },
+            @{ name = 'CompileSoftware'; args = @{ softwarePath = $proposal.softwarePath; password = '' }; assertJson = [ordered]@{ errorCount = 0 } },
             @{ name = $mutationTool; args = $mutationArgs },
             $readbackCall,
-            @{ name = 'CompileSoftware'; args = @{ softwarePath = $proposal.softwarePath; password = '' }; assertJson = [ordered]@{ errorCount = 0; warningCount = 0 } },
+            @{ name = 'CompileSoftware'; args = @{ softwarePath = $proposal.softwarePath; password = '' }; assertJson = [ordered]@{ errorCount = 0 } },
             @{ name = 'SaveProject' },
             @{ name = 'ExportTagTable'; args = @{ softwarePath = $proposal.softwarePath; tagTablePath = $proposal.tablePath; exportPath = $srcTagsDirectory } }
         )
         $mutationSequence = Invoke-Sequence -Calls $mutationCalls -Name 'tag-mutation' -AllowFailure
+
+        $compileCalls = @(Get-Calls $mutationSequence 'CompileSoftware')
+        $baselineCompileCall = if ($compileCalls.Count -ge 1) { $compileCalls[0] } else { $null }
+        $compileCall = if ($compileCalls.Count -ge 2) { $compileCalls[1] } else { $null }
+        if (-not $baselineCompileCall -or $baselineCompileCall.success -ne $true -or $baselineCompileCall.assertionsPassed -eq $false) {
+            $report.tiaMutation = $false
+            $report.readOnly = $true
+            $detail = if ($baselineCompileCall) { ([string]$baselineCompileCall.text + ' ' + (@($baselineCompileCall.assertionErrors) -join '; ')).Trim() } else { 'The baseline CompileSoftware call was not reached.' }
+            $report.baselineCompile = [ordered]@{ attempted = $true; success = $false; error = $detail }
+            throw "Baseline compile did not succeed (0 errors required before mutating); no tag change was attempted. $detail"
+        }
+        $baselinePayload = Read-CallJson $baselineCompileCall 'CompileSoftware'
+        $baselineSignatures = @(Get-TiaDiagnosticSignatures $baselinePayload)
+        $report.baselineCompile = [ordered]@{
+            attempted = $true; success = $true
+            state = $baselinePayload.state; errorCount = [int]$baselinePayload.errorCount; warningCount = [int]$baselinePayload.warningCount
+            messages = @($baselinePayload.messages)
+        }
+
         $mutationCall = Get-Call $mutationSequence $mutationTool
         if (-not $mutationCall -or $mutationCall.success -ne $true) {
             $report.tiaMutation = $false
@@ -592,21 +626,26 @@ try {
             response = Read-CallJson $readbackResult $readbackName
         }
 
-        $compileCall = Get-Call $mutationSequence 'CompileSoftware'
         if (-not $compileCall -or $compileCall.success -ne $true) {
-            $report.compile = [ordered]@{ attempted = $true; success = $false; errorCount = $null; warningCount = $null; error = 'CompileSoftware did not run.' }
+            $report.compile = [ordered]@{ attempted = $true; success = $false; errorCount = $null; warningCount = $null; error = 'Post-mutation CompileSoftware did not run.' }
             $report.status = 'FAILED'
-            throw 'CompileSoftware did not run; Save was not attempted.'
+            throw 'Post-mutation CompileSoftware did not run; Save was not attempted.'
         }
         $compilePayload = Read-CallJson $compileCall 'CompileSoftware'
+        $postSignatures = @(Get-TiaDiagnosticSignatures $compilePayload)
+        $newSignatures = @($postSignatures | Where-Object { $baselineSignatures -notcontains $_ })
+        $warningRegression = ([int]$compilePayload.warningCount -gt [int]$baselinePayload.warningCount) -or ($newSignatures.Count -gt 0)
         $report.compile = [ordered]@{
-            attempted = $true; success = ($compilePayload.errorCount -eq 0 -and $compilePayload.warningCount -eq 0)
+            attempted = $true
+            success = ([int]$compilePayload.errorCount -eq 0 -and -not $warningRegression)
             state = $compilePayload.state; errorCount = [int]$compilePayload.errorCount; warningCount = [int]$compilePayload.warningCount
+            baselineWarningCount = [int]$baselinePayload.warningCount
+            newDiagnostics = $newSignatures
             messages = @($compilePayload.messages)
         }
         if (-not $report.compile.success -or $compileCall.assertionsPassed -eq $false) {
             $report.status = 'FAILED'
-            throw "Compile gate failed: $($report.compile.errorCount) error(s), $($report.compile.warningCount) warning(s). Save was not attempted."
+            throw "Compile gate failed: $($report.compile.errorCount) error(s), $($report.compile.warningCount) warning(s) vs baseline $($baselinePayload.warningCount). New diagnostics: $($newSignatures -join ' | '). Save was not attempted."
         }
 
         $saveCall = Get-Call $mutationSequence 'SaveProject'

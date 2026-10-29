@@ -85,8 +85,15 @@ aislada, que sí transporta `groupPath`, pero sigue bloqueada por el roster de i
 | ID | Tarea | Estado | Evidencia |
 |---|---|---|---|
 | 4.1 | Auditar herramientas de tags | **DONE** | `tia-create` lite (55 tools): `GetPlcTagTables`, `ImportPlcTagTable(softwarePath, folderPath, importPath)`. `tia-inspect` write (84 tools): `CreateTag`, `UpdateTag`, `DeleteTag`, `CreateTagTable`, `RenameTagTable`, `DeleteTagTable`, `ExportTagTable`, `GetTagInfo`. Evidencia: `70-runs/acceptance/plcsim-tia-attach-capability-20260924.json`, `70-runs/acceptance/plcsim-inspect-write-tools-20260925.json` |
-| 4.2 | Implementar propuesta de tags mínima | **DONE (arnés)** | `30-tools/scripts/Invoke-TiaTagProposalApply.ps1` + gates en `TiaSclSafety.ps1` según ADR-019. Arnés `Test-TiaTagProposalApply.ps1`: **69 aserciones PASS** sin TIA (create/update/delete, Safety, inventario incoherente, tabla/tag exactos, readback, compile, save, export, verificación post-guardado y fixture manipulado). Registrado en `Run-WorkspaceChecks.ps1` y `-CiSafe`. E2E live pendiente |
+| 4.2 | Implementar propuesta de tags mínima | **DONE (arnés)** | `30-tools/scripts/Invoke-TiaTagProposalApply.ps1` + gates en `TiaSclSafety.ps1` según ADR-019. Arnés `Test-TiaTagProposalApply.ps1`: **77 aserciones PASS** sin TIA (create/update/delete, Safety, inventario incoherente, tabla/tag exactos, baseline-compile + delta-warnings, readback, compile, save, export, verificación post-guardado y fixture manipulado). Registrado en `Run-WorkspaceChecks.ps1` y `-CiSafe`. E2E live pendiente |
 | 4.3 | E2E tags mínima | **PENDIENTE** | Requiere copia desechable y TIA abierto |
+
+Fixtures desechables preparadas (rutas cortas, fuera de `40-projects/`):
+- `C:\TIA-Claude\d1` — TrafficLight_V20, tabla `TrafficLightTags` (17 tags no-Safety), compila 0 errores / 0 warnings base. Para FASE 4.3 (tags, TIA cerrado, `--isolated`).
+- `C:\TIA-Claude\demo` — DEMO-Cinta01, FB_Motor + Main (OB), propuesta en `demo\proposal\`. Para FASE 1.4 (FB/OB, TIA abierto, `-Route attached`).
+- `C:\TIA-Claude\p2` — IOT2050_S7_CompleteProject_V20, FC `LGF_RandomInt` (SCL), compila 0/0. Para FASE 1.4 (FC, TIA abierto, `-Route attached`).
+
+Importante: FASE 1.4 (ruta attached) y FASE 4.3 (tags, ruta aislada) requieren estados opuestos de TIA: la ruta attached necesita TIA abierto con la copia; la ruta aislada se bloquea si hay cualquier proceso TIA en ejecución. No se pueden ejecutar en la misma sesión.
 
 ## FASE 5: Librerías / multi-instancia / robustez
 

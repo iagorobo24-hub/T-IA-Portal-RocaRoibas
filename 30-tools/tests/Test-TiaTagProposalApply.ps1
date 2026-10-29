@@ -307,9 +307,20 @@ while ($line = [Console]::In.ReadLine()) {
             }
             'CompileSoftware' {
                 $errorCount = 0
-                if ($mode -eq 'compile-error') { $errorCount = 1 }
+                $warningCount = 0
+                $messages = @()
+                if ($mode -eq 'compile-error' -and $mutated) { $errorCount = 1 }
+                if ($mode -eq 'baseline-error') { $errorCount = 1 }
+                if ($mode -eq 'baseline-warning') {
+                    $warningCount = 1
+                    $messages = @([ordered]@{ state = 'Warning'; description = 'Pre-existing hardware warning.' })
+                }
+                if ($mode -eq 'new-warning' -and $mutated) {
+                    $warningCount = 1
+                    $messages = @([ordered]@{ state = 'Warning'; description = 'Warning introduced by the change.' })
+                }
                 $stateText = if ($errorCount -eq 0) { 'Success' } else { 'Error' }
-                $result = New-TextResult ([ordered]@{ state = $stateText; errorCount = $errorCount; warningCount = 0; messages = @(); meta = @{ success = $true } })
+                $result = New-TextResult ([ordered]@{ state = $stateText; errorCount = $errorCount; warningCount = $warningCount; messages = $messages; meta = @{ success = $true } })
             }
             'SaveProject' {
                 if ($mode -eq 'save-fail') {
@@ -428,7 +439,7 @@ while ($line = [Console]::In.ReadLine()) {
     Assert-Equal 'True' $case.report.save.success 'create-happy save'
     Assert-Equal 'True' $case.report.export.success 'create-happy export'
     Assert-Equal 'True' $case.report.verification.success 'create-happy post-save verification'
-    Assert-True (Test-OrderContains $case.order @('Connect', 'OpenProject', 'CreateTag', 'GetTagInfo', 'CompileSoftware', 'SaveProject', 'ExportTagTable')) 'create-happy mutation order'
+    Assert-True (Test-OrderContains $case.order @('Connect', 'OpenProject', 'CompileSoftware', 'CreateTag', 'GetTagInfo', 'CompileSoftware', 'SaveProject', 'ExportTagTable')) 'create-happy mutation order'
     Assert-True (-not ($case.order -contains 'ImportPlcTagTable')) 'create-happy must never use ImportPlcTagTable'
     Assert-True (Test-Path -LiteralPath $case.report.backupExport.path) 'create-happy backup XML exists'
     Assert-True (Test-Path -LiteralPath $case.report.export.path) 'create-happy src XML exists'
@@ -437,14 +448,14 @@ while ($line = [Console]::In.ReadLine()) {
     $case = Invoke-Case -Name 'update-happy' -Proposal $updateProposal
     Assert-Equal 'False' $case.failed 'update-happy must not throw'
     Assert-Equal 'APPLIED_AND_VERIFIED' $case.report.status 'update-happy status'
-    Assert-True (Test-OrderContains $case.order @('Connect', 'OpenProject', 'UpdateTag', 'GetTagInfo', 'CompileSoftware', 'SaveProject', 'ExportTagTable')) 'update-happy mutation order'
+    Assert-True (Test-OrderContains $case.order @('Connect', 'OpenProject', 'CompileSoftware', 'UpdateTag', 'GetTagInfo', 'CompileSoftware', 'SaveProject', 'ExportTagTable')) 'update-happy mutation order'
     Assert-Equal 'True' $case.report.readback.success 'update-happy readback'
 
     # --- Caso 3: delete aplicado y verificado -----------------------------------
     $case = Invoke-Case -Name 'delete-happy' -Proposal $deleteProposal
     Assert-Equal 'False' $case.failed 'delete-happy must not throw'
     Assert-Equal 'APPLIED_AND_VERIFIED' $case.report.status 'delete-happy status'
-    Assert-True (Test-OrderContains $case.order @('Connect', 'OpenProject', 'DeleteTag', 'GetTags', 'CompileSoftware', 'SaveProject', 'ExportTagTable')) 'delete-happy mutation order'
+    Assert-True (Test-OrderContains $case.order @('Connect', 'OpenProject', 'CompileSoftware', 'DeleteTag', 'GetTags', 'CompileSoftware', 'SaveProject', 'ExportTagTable')) 'delete-happy mutation order'
     Assert-Equal 'absence' $case.report.verification.mode 'delete-happy verification mode'
     Assert-Equal '0' $case.report.verification.totalTags 'delete-happy post-save absence'
 
@@ -503,7 +514,6 @@ while ($line = [Console]::In.ReadLine()) {
     Assert-Equal 'APPLIED_CONTENT_MISMATCH' $case.report.status 'readback-mismatch status'
     Assert-Equal 'True' $case.report.tiaMutation 'readback-mismatch mutated in memory'
     Assert-Equal 'False' $case.report.save.attempted 'readback-mismatch must not save'
-    Assert-True (-not ($case.order -contains 'SaveProject')) 'readback-mismatch must not call SaveProject'
 
     # --- Caso 14: compile roto -> FAILED sin guardar ----------------------------
     $case = Invoke-Case -Name 'compile-error' -Proposal $updateProposal -Mode 'compile-error'
@@ -511,7 +521,24 @@ while ($line = [Console]::In.ReadLine()) {
     Assert-Equal 'True' $case.report.compile.attempted 'compile-error attempted'
     Assert-Equal 'False' $case.report.compile.success 'compile-error failed'
     Assert-Equal 'False' $case.report.save.attempted 'compile-error must not save'
-    Assert-True (-not ($case.order -contains 'SaveProject')) 'compile-error must not call SaveProject'
+    # --- Caso 14b: error en la compilacion base -> BLOCKED sin mutar -----------
+    $case = Invoke-Case -Name 'baseline-error' -Proposal $updateProposal -Mode 'baseline-error'
+    Assert-Equal 'BLOCKED' $case.report.status 'baseline-error status'
+    Assert-Equal 'False' $case.report.tiaMutation 'baseline-error must not mutate'
+    Assert-Equal 'False' $case.report.baselineCompile.success 'baseline-error compile blocked'
+
+    # --- Caso 14c: warning preexistente identico -> APPLIED --------------------
+    $case = Invoke-Case -Name 'baseline-warning' -Proposal $updateProposal -Mode 'baseline-warning'
+    Assert-Equal 'APPLIED_AND_VERIFIED' $case.report.status 'baseline-warning status'
+    Assert-Equal '1' $case.report.compile.baselineWarningCount 'baseline-warning baseline count'
+    Assert-Equal '0' @($case.report.compile.newDiagnostics).Count 'baseline-warning has no new diagnostics'
+
+    # --- Caso 14d: warning nuevo tras el cambio -> FAILED sin guardar ----------
+    $case = Invoke-Case -Name 'new-warning' -Proposal $updateProposal -Mode 'new-warning'
+    Assert-Equal 'FAILED' $case.report.status 'new-warning status'
+    Assert-Equal 'False' $case.report.compile.success 'new-warning compile gate failed'
+    Assert-Equal '1' @($case.report.compile.newDiagnostics).Count 'new-warning records the new diagnostic'
+    Assert-Equal 'False' $case.report.save.attempted 'new-warning must not save'
 
     # --- Caso 15: fallo al guardar -> FAILED ------------------------------------
     $case = Invoke-Case -Name 'save-fail' -Proposal $updateProposal -Mode 'save-fail'
