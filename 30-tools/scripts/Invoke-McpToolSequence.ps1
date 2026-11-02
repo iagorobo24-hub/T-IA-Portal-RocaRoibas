@@ -104,7 +104,16 @@ catch {
 
 $psi = [Diagnostics.ProcessStartInfo]::new()
 $psi.FileName = $ExecutablePath
-$psi.Arguments = $Arguments
+if ($fixtureRoot) {
+    $psi.ArgumentList.Add('--tia-major-version')
+    $psi.ArgumentList.Add('20')
+    $psi.ArgumentList.Add('--isolated')
+    $psi.ArgumentList.Add('--allow-write')
+    $psi.ArgumentList.Add('--fixture-root')
+    $psi.ArgumentList.Add($fixtureRoot)
+} else {
+    $psi.Arguments = $Arguments
+}
 $psi.WorkingDirectory = Split-Path -Parent $ExecutablePath
 $psi.UseShellExecute = $false
 $psi.CreateNoWindow = $true

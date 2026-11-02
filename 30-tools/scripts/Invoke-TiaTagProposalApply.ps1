@@ -136,14 +136,14 @@ function Invoke-Sequence {
     if (-not (Test-Path -LiteralPath $sequenceScript -PathType Leaf)) { throw "Missing MCP sequence runner: $sequenceScript" }
     $exe = if ($McpExecutablePath) { [IO.Path]::GetFullPath($McpExecutablePath) } else { Join-Path $root '30-tools\mcp\tia-inspect\bin\v20\TiaMcpServer.exe' }
     if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw "Missing MCP V20 executable: $exe" }
-    $serverArguments = if ($McpArguments) { $McpArguments } else { '--tia-major-version 20 --isolated --allow-write --fixture-root "' + $FixtureRoot + '"' }
+    $serverArguments = if ($McpArguments) { $McpArguments } else { '--tia-major-version 20 --isolated --allow-write' }
     if ([string]::IsNullOrWhiteSpace($serverArguments)) { throw 'Server arguments have not been configured.' }
     $pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
     if (-not $pwsh) { $pwsh = (Get-Command powershell -ErrorAction Stop).Source }
     $sequencePath = Join-Path $runDirectory ("sequence-$Name.json")
     $callsPath = $sequencePath + '.calls.json'
     [IO.File]::WriteAllText($callsPath, ($Calls | ConvertTo-Json -Depth 30 -Compress), (New-Object Text.UTF8Encoding($false)))
-    $pwshArgs = @('-NoProfile', '-NonInteractive', '-File', $sequenceScript, '-ExecutablePath', $exe, '-Arguments', $serverArguments, '-CallsJsonPath', $callsPath, '-OutputPath', $sequencePath, '-TimeoutSeconds', '900')
+    $pwshArgs = @('-NoProfile', '-NonInteractive', '-File', $sequenceScript, '-ExecutablePath', $exe, '-Arguments', $serverArguments, '-CallsJsonPath', $callsPath, '-OutputPath', $sequencePath, '-TimeoutSeconds', '900', '-FixtureRoot', $FixtureRoot)
     if ($SkipManifestValidation) { $pwshArgs += '-SkipManifestValidation' }
     $output = (& $pwsh @pwshArgs 2>&1 | Out-String).Trim()
     $exitCode = $LASTEXITCODE
@@ -378,6 +378,7 @@ try {
     else {
         if ([string]::IsNullOrWhiteSpace($FixtureRoot)) { throw 'Apply requires -FixtureRoot pointing to a disposable fixture run directory.' }
         $FixtureRoot = [IO.Path]::GetFullPath($FixtureRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+        $env:TIA_CLAUDE_FIXTURE_ROOT = $FixtureRoot
         $fixtureValidator = Join-Path $PSScriptRoot 'Assert-TiaFixtureManifest.ps1'
         if (-not (Test-Path -LiteralPath $fixtureValidator -PathType Leaf)) { throw "Missing fixture manifest validator: $fixtureValidator" }
         $fixture = & $fixtureValidator -FixtureRoot $FixtureRoot

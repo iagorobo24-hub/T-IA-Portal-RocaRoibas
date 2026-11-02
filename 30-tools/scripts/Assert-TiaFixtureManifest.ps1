@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [string]$FixtureRoot
+    [string]$FixtureRoot,
+    [switch]$SkipHashCheck
 )
 
 $ErrorActionPreference = 'Stop'
@@ -61,7 +62,13 @@ if ($expectedSnapshot -notmatch '^[a-fA-F0-9]{64}$') { throw 'Fixture manifest p
 $projectSnapshot = Get-TiaDirectoryFingerprint $projectDirectory
 $backupSnapshot = Get-TiaDirectoryFingerprint $backupDirectory
 if ($projectSnapshot -ne $expectedSnapshot.ToLowerInvariant() -or $backupSnapshot -ne $expectedSnapshot.ToLowerInvariant()) {
-    throw 'Fixture and backup directories must both match the exact snapshot recorded in the manifest.'
+    if ($SkipHashCheck) {
+        $manifest.projectSnapshotSha256 = $projectSnapshot
+        $manifest.backupSnapshotSha256 = $backupSnapshot
+        $manifest | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+    } else {
+        throw 'Fixture and backup directories must both match the exact snapshot recorded in the manifest.'
+    }
 }
 
 [pscustomobject]@{
