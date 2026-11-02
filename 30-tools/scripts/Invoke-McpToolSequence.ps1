@@ -16,6 +16,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$ExecutablePath,
     [string]$Arguments = '',
+    [string]$FixtureRoot = '',
     [Parameter()]
     [array]$Calls,
     [string]$CallsJson,
@@ -34,12 +35,23 @@ if (-not (Test-Path -LiteralPath $ExecutablePath -PathType Leaf)) { throw "Execu
 # the runner may close a project or a TIA Portal process on the way out. In attach mode the
 # visible TIA window belongs to the user and must never be closed by this script.
 $isIsolated = $false
-if ($Arguments -match '(?i)(?:^|\s)--isolated(?:\s|$)') {
+$fixtureRoot = $null
+if ([string]::IsNullOrWhiteSpace($FixtureRoot) -eq $false) {
+    $isIsolated = $true
+    $fixtureRoot = [IO.Path]::GetFullPath($FixtureRoot)
+}
+elseif ([string]::IsNullOrWhiteSpace($env:TIA_CLAUDE_FIXTURE_ROOT) -eq $false) {
+    $isIsolated = $true
+    $fixtureRoot = [IO.Path]::GetFullPath($env:TIA_CLAUDE_FIXTURE_ROOT)
+}
+elseif ($Arguments -match '(?i)(?:^|\s)--isolated(?:\s|$)') {
     $isIsolated = $true
     if ($Arguments -notmatch '(?i)(?:^|\s)--fixture-root\s+(?:"([^"]+)"|(\S+))') {
         throw 'An isolated MCP sequence requires --fixture-root with a valid disposable fixture manifest.'
     }
     $fixtureRoot = if ($Matches[1]) { $Matches[1] } else { $Matches[2] }
+}
+if ($isIsolated) {
     $manifestValidator = Join-Path $PSScriptRoot 'Assert-TiaFixtureManifest.ps1'
     if (-not (Test-Path -LiteralPath $manifestValidator -PathType Leaf)) { throw "Fixture manifest validator is missing: $manifestValidator" }
     $null = & $manifestValidator -FixtureRoot $fixtureRoot
@@ -89,7 +101,11 @@ catch {
 
 $psi = [Diagnostics.ProcessStartInfo]::new()
 $psi.FileName = $ExecutablePath
-$psi.Arguments = $Arguments
+$fullArgs = $Arguments
+if ($fixtureRoot) {
+    $fullArgs += ' --fixture-root "' + $fixtureRoot + '"'
+}
+$psi.Arguments = $fullArgs
 $psi.WorkingDirectory = Split-Path -Parent $ExecutablePath
 $psi.UseShellExecute = $false
 $psi.CreateNoWindow = $true

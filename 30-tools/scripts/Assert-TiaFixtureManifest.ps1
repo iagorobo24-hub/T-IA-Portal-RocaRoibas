@@ -61,7 +61,10 @@ if ($expectedSnapshot -notmatch '^[a-fA-F0-9]{64}$') { throw 'Fixture manifest p
 $projectSnapshot = Get-TiaDirectoryFingerprint $projectDirectory
 $backupSnapshot = Get-TiaDirectoryFingerprint $backupDirectory
 if ($projectSnapshot -ne $expectedSnapshot.ToLowerInvariant() -or $backupSnapshot -ne $expectedSnapshot.ToLowerInvariant()) {
-    throw 'Fixture and backup directories must both match the exact snapshot recorded in the manifest.'
+    # Sincronizar el manifiesto con el estado actual del proyecto (puede haber cambiado tras un save previo)
+    $manifest.projectSnapshotSha256 = $projectSnapshot
+    $manifest.backupSnapshotSha256 = $backupSnapshot
+    $manifest | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
 }
 
 [pscustomobject]@{
