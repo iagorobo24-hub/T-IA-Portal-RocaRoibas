@@ -128,22 +128,24 @@ function Invoke-Sequence {
         [Parameter(Mandatory = $true)] [array]$Calls,
         [Parameter(Mandatory = $true)] [string]$Name,
         [switch]$AllowFailure,
-        [string]$FixtureRoot = ''
+        [string]$FixtureRoot = '',
+        [switch]$SkipManifestValidation
     )
 
     $sequenceScript = Join-Path $root '30-tools\scripts\Invoke-McpToolSequence.ps1'
     if (-not (Test-Path -LiteralPath $sequenceScript -PathType Leaf)) { throw "Missing MCP sequence runner: $sequenceScript" }
     $exe = if ($McpExecutablePath) { [IO.Path]::GetFullPath($McpExecutablePath) } else { Join-Path $root '30-tools\mcp\tia-inspect\bin\v20\TiaMcpServer.exe' }
     if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw "Missing MCP V20 executable: $exe" }
-    $serverArguments = if ($McpArguments) { $McpArguments } else { '--tia-major-version 20 --isolated --allow-write' }
-    if ($FixtureRoot) { $env:TIA_CLAUDE_FIXTURE_ROOT = $FixtureRoot }
+    $serverArguments = if ($McpArguments) { $McpArguments } else { '--tia-major-version 20 --isolated --allow-write --fixture-root "' + $FixtureRoot + '"' }
     if ([string]::IsNullOrWhiteSpace($serverArguments)) { throw 'Server arguments have not been configured.' }
     $pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
     if (-not $pwsh) { $pwsh = (Get-Command powershell -ErrorAction Stop).Source }
     $sequencePath = Join-Path $runDirectory ("sequence-$Name.json")
     $callsPath = $sequencePath + '.calls.json'
     [IO.File]::WriteAllText($callsPath, ($Calls | ConvertTo-Json -Depth 30 -Compress), (New-Object Text.UTF8Encoding($false)))
-    $output = (& $pwsh -NoProfile -NonInteractive -File $sequenceScript -ExecutablePath $exe -Arguments $serverArguments -CallsJsonPath $callsPath -OutputPath $sequencePath -TimeoutSeconds 900 2>&1 | Out-String).Trim()
+    $pwshArgs = @('-NoProfile', '-NonInteractive', '-File', $sequenceScript, '-ExecutablePath', $exe, '-Arguments', $serverArguments, '-CallsJsonPath', $callsPath, '-OutputPath', $sequencePath, '-TimeoutSeconds', '900')
+    if ($SkipManifestValidation) { $pwshArgs += '-SkipManifestValidation' }
+    $output = (& $pwsh @pwshArgs 2>&1 | Out-String).Trim()
     $exitCode = $LASTEXITCODE
     $sequence = if (Test-Path -LiteralPath $sequencePath -PathType Leaf) { Get-Content -Raw -LiteralPath $sequencePath | ConvertFrom-Json } else { $null }
     if (-not $sequence) { throw "$Name MCP sequence produced no report. $output" }
@@ -376,16 +378,6 @@ try {
     else {
         if ([string]::IsNullOrWhiteSpace($FixtureRoot)) { throw 'Apply requires -FixtureRoot pointing to a disposable fixture run directory.' }
         $FixtureRoot = [IO.Path]::GetFullPath($FixtureRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
-        # Recomputar el hash del manifiesto desde el estado actual del proyecto, para que
-        # una ejecucion previa fallida (que dejo el manifiesto en estado post-save) no
-        # bloquee la preflight de esta ejecucion.
-        $projectDirectoryFixture = Split-Path -Parent $ProjectFile
-        $currentHash = Get-TiaDirectoryFingerprint $projectDirectoryFixture
-        $manifestPath = Join-Path $FixtureRoot '.tia-agent-fixture.json'
-        $manifestLive = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
-        $manifestLive.projectSnapshotSha256 = $currentHash
-        $manifestLive | Add-Member -NotePropertyName 'backupSnapshotSha256' -NotePropertyValue $currentHash -Force
-        $manifestLive | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
         $fixtureValidator = Join-Path $PSScriptRoot 'Assert-TiaFixtureManifest.ps1'
         if (-not (Test-Path -LiteralPath $fixtureValidator -PathType Leaf)) { throw "Missing fixture manifest validator: $fixtureValidator" }
         $fixture = & $fixtureValidator -FixtureRoot $FixtureRoot
@@ -679,16 +671,6 @@ try {
             response = Read-CallJson $exportCall 'ExportTagTable'
         }
 
-        # Actualizar el hash del manifiesto tras el save, para que la verificacion
-        # post-guardado pueda validar el fixture contra el estado modificado del proyecto.
-        $projectDirectory = Split-Path -Parent $ProjectFile
-        $postSaveHash = Get-TiaDirectoryFingerprint $projectDirectory
-        $manifestPath = Join-Path $FixtureRoot '.tia-agent-fixture.json'
-        $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
-        $manifest.projectSnapshotSha256 = $postSaveHash
-        $manifest.backupSnapshotSha256 = $postSaveHash
-        $manifest | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
-
         # Verificacion post-guardado: un proceso nuevo abre el .ap20 ya guardado y vuelve a leer.
         # Esto prueba persistencia; el readback anterior solo probaba el estado en memoria.
         if ($proposal.operation -eq 'delete') {
@@ -705,7 +687,7 @@ try {
                 @{ name = 'GetTagInfo'; args = @{ softwarePath = $proposal.softwarePath; tagPath = $proposal.readbackPath } }
             )
         }
-        $verifySequence = Invoke-Sequence -Calls $verifyCalls -Name 'tag-verify' -AllowFailure -FixtureRoot $FixtureRoot
+        $verifySequence = Invoke-Sequence -Calls $verifyCalls -Name 'tag-verify' -AllowFailure -FixtureRoot $FixtureRoot -SkipManifestValidation
         if ($proposal.operation -eq 'delete') {
             $verifyCall = Get-Call $verifySequence 'GetTags'
             if (-not $verifyCall -or $verifyCall.success -ne $true) {

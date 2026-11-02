@@ -25,7 +25,8 @@ param(
     [switch]$CaptureStderr,
     [int]$TimeoutSeconds = 120,
     [string]$LeaseName = 'Local\TIA-Claude-McpSession',
-    [int]$LeaseTimeoutSeconds = 60
+    [int]$LeaseTimeoutSeconds = 60,
+    [switch]$SkipManifestValidation
 )
 
 $ErrorActionPreference = 'Stop'
@@ -52,9 +53,11 @@ elseif ($Arguments -match '(?i)(?:^|\s)--isolated(?:\s|$)') {
     $fixtureRoot = if ($Matches[1]) { $Matches[1] } else { $Matches[2] }
 }
 if ($isIsolated) {
-    $manifestValidator = Join-Path $PSScriptRoot 'Assert-TiaFixtureManifest.ps1'
-    if (-not (Test-Path -LiteralPath $manifestValidator -PathType Leaf)) { throw "Fixture manifest validator is missing: $manifestValidator" }
-    $null = & $manifestValidator -FixtureRoot $fixtureRoot
+    if (-not $SkipManifestValidation) {
+        $manifestValidator = Join-Path $PSScriptRoot 'Assert-TiaFixtureManifest.ps1'
+        if (-not (Test-Path -LiteralPath $manifestValidator -PathType Leaf)) { throw "Fixture manifest validator is missing: $manifestValidator" }
+        $null = & $manifestValidator -FixtureRoot $fixtureRoot
+    }
 }
 # ConvertFrom-Json returns a JSON array as a single object, so wrapping the pipeline
 # inline would nest the whole call list as element 0. Flatten explicitly.
@@ -101,11 +104,7 @@ catch {
 
 $psi = [Diagnostics.ProcessStartInfo]::new()
 $psi.FileName = $ExecutablePath
-$fullArgs = $Arguments
-if ($fixtureRoot) {
-    $fullArgs += ' --fixture-root "' + $fixtureRoot + '"'
-}
-$psi.Arguments = $fullArgs
+$psi.Arguments = $Arguments
 $psi.WorkingDirectory = Split-Path -Parent $ExecutablePath
 $psi.UseShellExecute = $false
 $psi.CreateNoWindow = $true
